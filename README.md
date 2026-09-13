@@ -58,3 +58,16 @@ python scripts/check_docs.py --check
 [校验脚本](scripts/check_docs.py) 仅使用 Python 标准库，检查需求追溯、派生表一致性、冻结来源及规格夹具等内容。业务正文按文档索引中的维护规则更新，标记为 `GENERATED` 的内容由脚本生成。
 
 规格样例的输入、预期与证据状态见 [tests/fixtures/README.md](tests/fixtures/README.md)。上述命令执行文档与规格数据检查，交易功能验收按 07 测试与验收方案另行执行。
+
+## 开发检查与 CI
+
+使用 `uv` 在仓库根目录按 `.python-version` 和 `uv.lock` 准备环境，再运行统一检查：
+
+```powershell
+uv sync --locked --group dev
+uv run --no-sync python scripts/check_ci.py
+```
+
+[统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke 和只读文档校验。各项检查都会执行，任一子检查失败时整体返回非零退出码。入口复用当前 Python 解释器，并固定在仓库根目录执行，便于本地与 CI 使用同一套检查。
+
+[GitHub Actions 工作流](.github/workflows/ci.yml) 在推送、PR 更新或手动触发时，使用 Windows runner 和固定的 uv 0.8.4 安装锁定依赖，然后运行同一入口。工作流随提交推送到 GitHub 后生效，结果在仓库 Actions 页面查看。Python 版本沿用 `.python-version`，其 CTP 兼容性仍按 S0 清单核验。

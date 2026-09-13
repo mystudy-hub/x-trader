@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ast
+from importlib.util import resolve_name
 from pathlib import Path
 from typing import Dict, List, Set
 
@@ -18,42 +19,61 @@ def get_all_py_files() -> List[Path]:
     return [p for p in PACKAGE_ROOT.rglob("*.py") if p.is_file()]
 
 
-def parse_internal_imports(file_path: Path) -> Set[str]:
+def get_module_name(file_path: Path) -> str:
+    """将源码路径转换为模块名，包的 __init__.py 使用包名。"""
+    parts = file_path.relative_to(PACKAGE_ROOT).with_suffix("").parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(("qh_trader", *parts))
+
+
+def get_known_modules(files: List[Path]) -> Set[str]:
+    """收集模块及其父包，包含没有 __init__.py 的命名空间包。"""
+    modules: Set[str] = set()
+    for file_path in files:
+        parts = get_module_name(file_path).split(".")
+        modules.update(".".join(parts[:end]) for end in range(1, len(parts) + 1))
+    return modules
+
+
+def parse_internal_imports(file_path: Path, known_modules: Set[str] | None = None) -> Set[str]:
     """解析单个 Python 文件中对 qh_trader 内部包的依赖集合."""
     tree = ast.parse(file_path.read_text(encoding="utf-8"))
     imports: Set[str] = set()
+    if known_modules is None:
+        known_modules = get_known_modules(get_all_py_files())
+    current_module = get_module_name(file_path)
+    package_parts = file_path.relative_to(PACKAGE_ROOT).parts[:-1]
+    current_package = ".".join(("qh_trader", *package_parts))
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("qh_trader."):
+                if alias.name == "qh_trader" or alias.name.startswith("qh_trader."):
                     imports.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            if node.module and (node.module == "qh_trader" or node.module.startswith("qh_trader.")):
-                imports.add(node.module)
-            elif node.level and node.level > 0:
-                # 相对导入解析
-                rel_parts = file_path.relative_to(PACKAGE_ROOT).parts[:-1]
-                if node.level <= len(rel_parts) + 1:
-                    base_parts = rel_parts[: len(rel_parts) - (node.level - 1)]
-                    if node.module:
-                        target = "qh_trader." + ".".join((*base_parts, node.module))
-                    else:
-                        target = "qh_trader." + ".".join(base_parts)
-                    imports.add(target.rstrip("."))
+            target = node.module or ""
+            if node.level:
+                target = resolve_name("." * node.level + target, current_package)
+            if target != "qh_trader" and not target.startswith("qh_trader."):
+                continue
+
+            for alias in node.names:
+                submodule = target + "." + alias.name
+                if alias.name != "*" and submodule in known_modules:
+                    # 子模块是实际依赖；额外连向父包会给合法的包内导出制造循环。
+                    imports.add(submodule)
+                elif target != current_module:
+                    # 类、函数、常量及星号导入依赖提供该对象的模块。
+                    imports.add(target)
     return imports
 
 
 def get_dependency_graph() -> Dict[str, Set[str]]:
     """构建模块级依赖图: module_name -> set of imported module_names."""
-    graph: Dict[str, Set[str]] = {}
-    for p in get_all_py_files():
-        rel = p.relative_to(PACKAGE_ROOT).with_suffix("")
-        mod_name = "qh_trader." + ".".join(rel.parts)
-        if mod_name.endswith(".__init__"):
-            mod_name = mod_name[:-9]
-        graph[mod_name] = parse_internal_imports(p)
-    return graph
+    files = get_all_py_files()
+    known_modules = get_known_modules(files)
+    return {get_module_name(path): parse_internal_imports(path, known_modules) for path in files}
 
 
 def get_layer(module_name: str) -> str:
@@ -104,7 +124,10 @@ def test_domain_layer_isolation():
                 imp_layer = get_layer(imp)
                 assert (
                     imp_layer not in forbidden_layers
-                ), f"架构违规: Domain 领域内核 {mod} 违规直接依赖了适配器/外部层 {imp_layer} 的 {imp} (领域必须通过 Port 注入)"
+                ), (
+                    f"架构违规: Domain 领域内核 {mod} 违规直接依赖了适配器/外部层 "
+                    f"{imp_layer} 的 {imp} (领域必须通过 Port 注入)"
+                )
 
 
 def test_adapters_do_not_depend_on_engine():
