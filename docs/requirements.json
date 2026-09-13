@@ -3,17 +3,23 @@
   "baseline": {
     "version": "0.2",
     "date": "2026-09-13",
-    "source_file": "中国期货自动交易与回测工具构建规划.md",
+    "source_file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
     "source_sha256": "C802C02F6F2768B354351EF0A0E8CA9925A274F2BB9DFCFEEAE54D8115452D34",
     "changes_file": "docs/10_文档变更记录.md",
-    "execution_status": "not_executed"
+    "execution_status": "not_executed",
+    "document_moves": {
+      "中国期货自动交易与回测工具构建规划.md": "docs/sources/中国期货自动交易与回测工具构建规划.md",
+      "中国期货交易时间段与集合竞价机制详解.md": "docs/references/中国期货交易时间段与集合竞价机制详解.md",
+      "第二轮深度架构评审复核意见.md": "docs/reviews/第二轮深度架构评审复核意见.md",
+      "文档拆分独立复审意见.md": "docs/reviews/文档拆分独立复审意见.md"
+    }
   },
   "original_requirements": [
     {
       "id": "R-01",
       "text": "首版限定 Windows、单账户、普通期货、日线 / 小时级 Bar 事件驱动回测与 CLI 报告",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§1 末段",
         "anchors": [
           "chapter-1"
@@ -25,7 +31,7 @@
       "id": "R-02",
       "text": "阶段 0 须在运行配置中声明目标策略类别；未声明不得进入模拟盘或实盘",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§1.1",
         "anchors": [
           "section-1-1"
@@ -37,7 +43,7 @@
       "id": "R-03",
       "text": "三类策略（低频 CTA / 分钟级日内 / Tick 级）分别定义首版必需、可推迟与须上调优先级的能力",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§1.1 表",
         "anchors": [
           "section-1-1"
@@ -49,7 +55,7 @@
       "id": "R-04",
       "text": "尚未实现的规则在运行配置中明确禁用",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§1 末段",
         "anchors": [
           "chapter-1"
@@ -61,7 +67,7 @@
       "id": "R-05",
       "text": "区分研究模式（显式假设、报告标注）与精确核算模式（缺项中止）",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.3、§2.6、§4.4.2",
         "anchors": [
           "chapter-2",
@@ -74,7 +80,7 @@
       "id": "R-06",
       "text": "先验证 Python 3.12 与 CTP 封装在目标 Windows 架构上的全链路可用，再锁定版本；`uv` 管理依赖并记录 DLL 哈希",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.1",
         "anchors": [
           "chapter-2"
@@ -86,7 +92,7 @@
       "id": "R-07",
       "text": "终端采集组件按平台 / API 版本匹配，采集与认证失败阻止进入可交易状态，载荷与原始终端标识不落日志 / 快照",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.2、A27",
         "anchors": [
           "chapter-2"
@@ -98,7 +104,7 @@
       "id": "R-08",
       "text": "凭证通过本地秘密配置加载，不进入仓库、日志或实验快照",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.2",
         "anchors": [
           "chapter-2"
@@ -110,7 +116,7 @@
       "id": "R-09",
       "text": "模拟 / 仿真环境使用独立配置，其交易日与撮合规则不默认继承实盘",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.2、§4.2",
         "anchors": [
           "chapter-2",
@@ -123,7 +129,7 @@
       "id": "R-10",
       "text": "建立能力表：按 `exchange + product + broker_profile + ctp_version + effective_from` 记录开平映射、报单类型、报撤权限、预埋、查询限制、费用、保证金、交割限制及测试证据；未知能力禁止实盘",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.2、§4.1.1",
         "anchors": [
           "chapter-2",
@@ -136,7 +142,7 @@
       "id": "R-11",
       "text": "下载前建立数据覆盖清单；执行价格覆盖按执行策略单独校验，缺失时该执行策略不可运行且不借用其他时段价格",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.3",
         "anchors": [
           "chapter-2"
@@ -148,7 +154,7 @@
       "id": "R-12",
       "text": "工程验收样本与策略研究数据集分开采购管理；低频 CTA 研究集须覆盖 8—10 年、20+ 品种、两个牛熊周期",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.4",
         "anchors": [
           "chapter-2"
@@ -160,7 +166,7 @@
       "id": "R-13",
       "text": "测试品种组合覆盖 SHFE 夜盘、CZCE 跨所、DCE 市价与跨期、无夜盘、凌晨收盘品种",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.4",
         "anchors": [
           "chapter-2"
@@ -172,7 +178,7 @@
       "id": "R-14",
       "text": "历史规则公告表作为阶段 0 独立交付物，含发布 / 生效日期、来源、哈希、核验状态；不得用当前费率回填历史",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.5",
         "anchors": [
           "chapter-2"
@@ -184,7 +190,7 @@
       "id": "R-15",
       "text": "研究模式默认成本假设（滑点、手续费、保证金、参与率）显式声明并在报告标注，进入模拟盘前必须替换",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§2.6",
         "anchors": [
           "chapter-2"
@@ -196,7 +202,7 @@
       "id": "R-16",
       "text": "回测与实盘共享订单状态机、平仓路由、持仓、账本、规则、风控、移仓逻辑；禁止各自维护资金或持仓算法",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -208,7 +214,7 @@
       "id": "R-17",
       "text": "实盘由独立执行服务独占账户 CTP 交易连接；策略、移仓、看门狗、人工命令均经该服务",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4、§4.5.5",
         "anchors": [
           "section-3-4",
@@ -221,7 +227,7 @@
       "id": "R-18",
       "text": "同一账户的订单、持仓、账本与风控状态由一个执行序列更新；CTP 回调只转换和入队",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -233,7 +239,7 @@
       "id": "R-19",
       "text": "行情录制与分析使用独立队列，交易事件优先；队列有容量、积压指标和故障策略",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4、§5.1",
         "anchors": [
           "section-3-4",
@@ -246,7 +252,7 @@
       "id": "R-20",
       "text": "回测使用虚拟时钟，行情可见、订单到达、成交、回报分别建事件；同时间事件优先级固定并入运行清单",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -258,7 +264,7 @@
       "id": "R-21",
       "text": "策略只能查询 `available_at <= 当前策略时钟` 的数据，禁止直接读取数据湖",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -270,7 +276,7 @@
       "id": "R-22",
       "text": "策略以品种表达意图，内核按当时可见主力映射解析为实际合约开平子订单；可显式指定实际合约；多策略共用账户按归属分账、按净额路由",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -282,7 +288,7 @@
       "id": "R-23",
       "text": "回测模式交易事件库使用内存适配器，结束后导出规范事件；SQLite 交易事务日志服务模拟盘与实盘，元数据/规则库不受此限制",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -294,7 +300,7 @@
       "id": "R-24",
       "text": "价格可用整数 Tick，费用与盈亏用足够精度定点数，按规定环节舍入；性能优化不得改变舍入、顺序或语义",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4、§4.4.1",
         "anchors": [
           "section-3-4",
@@ -307,7 +313,7 @@
       "id": "R-25",
       "text": "模块依赖单向：`core/` 无环，`domain/`、`strategy/` 仅依赖 `core/`，`engine/` 依赖 `core/`、`domain/`，`scripts/` 唯一装配；依赖检查验证禁止边与循环",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.4",
         "anchors": [
           "section-3-4"
@@ -319,7 +325,7 @@
       "id": "R-26",
       "text": "内部订单用开仓 / 平今 / 平昨明确意图，由适配器按能力表映射；平仓顺序由账户规则和策略配置决定",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.1",
         "anchors": [
           "section-4-1"
@@ -331,7 +337,7 @@
       "id": "R-27",
       "text": "撤单标识、今昨仓查询口径、查询流控、前置维护四项须逐柜台核验，不作为通用事实",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.1",
         "anchors": [
           "section-4-1"
@@ -343,7 +349,7 @@
       "id": "R-28",
       "text": "按账户、合约、方向、投机 / 套保维护 `pos_yd/pos_td/frozen_yd/frozen_td`，冻结由逐单预占汇总，不变量 `0 <= frozen <= pos`",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.2",
         "anchors": [
           "section-4-1"
@@ -355,7 +361,7 @@
       "id": "R-29",
       "text": "SmartRouter 生成不改状态的子订单计划；执行序列在同一事务内记录意图、冻结持仓、预占保证金与费用",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.2、§4.5",
         "anchors": [
           "section-4-1",
@@ -368,7 +374,7 @@
       "id": "R-30",
       "text": "每笔去重成交只更新一次持仓、冻结与账本；撤单 / 拒单只释放已确认不会成交的部分；终态累计成交大于已入账时保留差额冻结",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.2",
         "anchors": [
           "section-4-1"
@@ -380,7 +386,7 @@
       "id": "R-31",
       "text": "订单状态含 `CREATED/SUBMITTING/ACCEPTED/PARTIALLY_FILLED/FILLED/CANCELED/REJECTED/EXPIRED/cancel_pending/UNKNOWN`；迟到状态不倒退、迟到成交仍入账",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.3",
         "anchors": [
           "section-4-1"
@@ -392,7 +398,7 @@
       "id": "R-32",
       "text": "网关覆盖本地返回、`OnRspOrderInsert`、`OnErrRtnOrderInsert`、`OnRtnOrder`、`OnRtnTrade` 及撤单错误，归一为领域事件；重复到达不重复计算",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.3",
         "anchors": [
           "section-4-1"
@@ -404,7 +410,7 @@
       "id": "R-33",
       "text": "成交先于报单回报时按已核验 `ExchangeID + OrderSysID` 或原会话映射绑定；无法归属的成交持久化为待关联占位，不猜配、不丢弃、不补开仓",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.3",
         "anchors": [
           "section-4-1"
@@ -416,7 +422,7 @@
       "id": "R-34",
       "text": "`send_state` 三态 `NOT_SENT/SENT_UNKNOWN/CONFIRMED_REMOTE` 与订单状态正交；`ReqOrderInsert` 返回 0 不代表受理",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.4",
         "anchors": [
           "section-4-1"
@@ -428,7 +434,7 @@
       "id": "R-35",
       "text": "重连后立即核对；超时、空查询、查无此单均不自动释放预占或重发；30 秒仅为测试参数",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.1.4",
         "anchors": [
           "section-4-1"
@@ -440,7 +446,7 @@
       "id": "R-36",
       "text": "交易时段表按交易所、品种、合约例外、生效区间版本化；交易日映射不用自然日加一天或下一工作日",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2.1—2",
         "anchors": [
           "section-4-2"
@@ -452,7 +458,7 @@
       "id": "R-37",
       "text": "保留 CTP `TradingDay/ActionDay` 原始字段并结合日历校验；模拟端点独立配置",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2.3",
         "anchors": [
           "section-4-2"
@@ -464,7 +470,7 @@
       "id": "R-38",
       "text": "`SessionClosed` 按合约时段生成，不写死 15:00；`SettlementReady` 经完整性检查生成，未就绪标 `SETTLEMENT_PENDING`，不用收盘价替代",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2.4—5",
         "anchors": [
           "section-4-2"
@@ -476,7 +482,7 @@
       "id": "R-39",
       "text": "今昨仓在已确认 `TradingDayAdvanced` 事件中一次性转换；晚到回报按原交易日处理；结算修订用差额更正事件",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2.6",
         "anchors": [
           "section-4-2"
@@ -488,7 +494,7 @@
       "id": "R-40",
       "text": "`MarketPhase` 按实际合约维护竞价申报 / 撮合 / 只撤不报 / 等待 / 连续 / 小节休市 / 停牌 / 收盘 / 未知；每阶段配置 `can_submit/can_cancel/can_match`；边界左闭右开",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2 交易小节",
         "anchors": [
           "section-4-2"
@@ -500,7 +506,7 @@
       "id": "R-41",
       "text": "各交易所时段基线（商品日盘、无夜盘开盘竞价、夜盘开盘、三所日盘再竞价、CZCE 只撤不报、CFFEX）按版本核验，历史调整不回填",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2 表",
         "anchors": [
           "section-4-2"
@@ -512,7 +518,7 @@
       "id": "R-42",
       "text": "夜盘残留单按有效期、交易日与阶段转换规则处理，不重建、不重复预占或计费、不自动清空",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2",
         "anchors": [
           "section-4-2"
@@ -524,7 +530,7 @@
       "id": "R-43",
       "text": "节前停夜盘与节后恢复依据交易所放假公告生成实际时段；节后首日竞价覆盖常规模板",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2",
         "anchors": [
           "section-4-2"
@@ -536,7 +542,7 @@
       "id": "R-44",
       "text": "日历与 `OnRtnInstrumentStatus` 共同确定实时权限；状态缺失 / 过期 / 冲突时保守门禁并告警",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2",
         "anchors": [
           "section-4-2"
@@ -548,7 +554,7 @@
       "id": "R-45",
       "text": "`DailyLifecycleManager` 维护 `PRE_OPEN/RUNNING/POST_CLOSE/SETTLEMENT_IN_PROGRESS/MAINTENANCE/RECONCILING`；半结算查询不覆盖最后一致快照；结算未完成禁止新增风险但不关闭风控；任务幂等",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.2 每日生命周期",
         "anchors": [
           "section-4-2"
@@ -560,7 +566,7 @@
       "id": "R-46",
       "text": "主力映射使用决策时点可用数据，默认 T+1 首个可交易时段生效；保存 `decision_time/effective_from`、候选、输入版本、规则",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.1",
         "anchors": [
           "section-4-3"
@@ -572,7 +578,7 @@
       "id": "R-47",
       "text": "实际合约使用含交易所与完整交割年月的稳定标识；郑商所短代码由 `ContractResolver` 按交易日与合约目录解析，歧义隔离报错",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.1、A29",
         "anchors": [
           "section-4-3"
@@ -584,7 +590,7 @@
       "id": "R-48",
       "text": "连续指标只用当时已生成的映射与复权因子；原始拼接价、连续指标价与收益率视图分别定义；切换日不产生拼接动量或账本盈利",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.2",
         "anchors": [
           "section-4-3"
@@ -596,7 +602,7 @@
       "id": "R-49",
       "text": "主力识别（`data/`）与账户移仓（`domain/rollover.py`）解耦；映射变化不自动改仓位",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.3",
         "anchors": [
           "section-4-3"
@@ -608,7 +614,7 @@
       "id": "R-50",
       "text": "移仓时点为策略参数（切换生效日 / 交叉后第 N 日 / 最晚平仓日前 N 日），允许分批；腿序可配置并计入临时敞口",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.3",
         "anchors": [
           "section-4-3"
@@ -620,7 +626,7 @@
       "id": "R-51",
       "text": "两腿移仓状态机 `PLANNED->LEG_1->LEG_2->DONE`，异常 `PAUSED/FAILED` 保留已成交事实",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.4",
         "anchors": [
           "section-4-3"
@@ -632,7 +638,7 @@
       "id": "R-52",
       "text": "移仓损益来自真实两腿成交，不额外固定扣双倍费用；报告分列价差、执行费用、持仓收益、展期归因",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.3.4",
         "anchors": [
           "section-4-3"
@@ -644,7 +650,7 @@
       "id": "R-53",
       "text": "账本由不可变成交、费用、划转、结算、更正事件推导；策略收益剔除外部现金流",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.1",
         "anchors": [
           "section-4-4"
@@ -656,7 +662,7 @@
       "id": "R-54",
       "text": "今仓计价基准为成交价、昨仓为上一结算价；日终对剩余持仓计提到结算价；已划入余额的结算盈亏不再计入动态权益",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.1",
         "anchors": [
           "section-4-4"
@@ -668,7 +674,7 @@
       "id": "R-55",
       "text": "共享一套事实生成 `mtm_close_pnl` 与 `trade_close_pnl` 两种视图；手工样例 +100 / −20 / +80，权益只增加 80",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.1",
         "anchors": [
           "section-4-4"
@@ -680,7 +686,7 @@
       "id": "R-56",
       "text": "区分 `broker_available`、`available_for_new_trades`、`margin_coverage_equity`；浮盈能否开仓按账户规则核验，两视图不相加",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.2",
         "anchors": [
           "section-4-4"
@@ -692,7 +698,7 @@
       "id": "R-57",
       "text": "单向大边 / 组合优惠按账户、品种、合约组合、方向、标志与生效规则决定；减仓前重算资金需求",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.2",
         "anchors": [
           "section-4-4"
@@ -704,7 +710,7 @@
       "id": "R-58",
       "text": "盘中 / 盘后保证金检查、追保期限、强平按期货公司规则建模；强平受时段、涨跌停、流动性约束",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.3",
         "anchors": [
           "section-4-4"
@@ -716,7 +722,7 @@
       "id": "R-59",
       "text": "期货公司结算单为权威口径；交付解析器每日自动比对，差异超误差禁止新增风险",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.4",
         "anchors": [
           "section-4-4"
@@ -728,7 +734,7 @@
       "id": "R-60",
       "text": "最新价过期、盘口缺失、涨跌停流动性不足时记录估值质量并使用保守风险估值",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.4.1",
         "anchors": [
           "section-4-4"
@@ -740,7 +746,7 @@
       "id": "R-61",
       "text": "风控是所有意图必经路径；控制权核验、风控校验、预占在账户执行序列串行完成，发送在本地事务提交后",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5",
         "anchors": [
           "section-4-5"
@@ -752,7 +758,7 @@
       "id": "R-62",
       "text": "交易所 / 监管、期货公司 / 柜台、内部偏好三类规则分别管理；计数随事件持久化，重启不清零；不设无来源生产默认值",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.1",
         "anchors": [
           "section-4-5"
@@ -764,7 +770,7 @@
       "id": "R-63",
       "text": "交易所硬约束（日内开仓限额、持仓限额、交割月最晚平仓、涨跌停幅度调整）在共享内核执行，回测阶段即可见",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.1、A19",
         "anchors": [
           "section-4-5"
@@ -776,7 +782,7 @@
       "id": "R-64",
       "text": "自成交检查含发送中、撤单未确认及未知状态委托；账户入口受控，无法识别的委托或持仓差异禁止新增风险",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.2",
         "anchors": [
           "section-4-5"
@@ -788,7 +794,7 @@
       "id": "R-65",
       "text": "熔断 `NORMAL->REDUCE_ONLY->CANCELING->FLATTENING->HALTED`；减仓不被开仓冷却阻断但仍守硬限制；发出清仓不等于仓位归零",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.3",
         "anchors": [
           "section-4-5"
@@ -800,7 +806,7 @@
       "id": "R-66",
       "text": "长假前按品种 / 策略配置减仓或降杠杆钩子，回测同样执行",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.4",
         "anchors": [
           "section-4-5"
@@ -812,7 +818,7 @@
       "id": "R-67",
       "text": "执行服务持久化 `controller_id` 与单调递增 `control_epoch`，所有交易命令接收与发送前校验；单实例约束",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.5",
         "anchors": [
           "section-4-5"
@@ -824,7 +830,7 @@
       "id": "R-68",
       "text": "独立看门狗检测心跳；超时默认告警等待人工或申请接管；接管顺序为停旧命令 → 持久化新代次 → 对账 → 允许撤单减仓；旧出口无法隔离时不另建连接",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.5",
         "anchors": [
           "section-4-5"
@@ -836,7 +842,7 @@
       "id": "R-69",
       "text": "部署独立于交易主机的存活告警；托管保护经能力表核验后仅作备份",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.5",
         "anchors": [
           "section-4-5"
@@ -848,7 +854,7 @@
       "id": "R-70",
       "text": "人工命令（暂停、撤单、减仓、查询、恢复）经当前控制者与唯一执行服务执行并留审计；每个时段开盘前执行检查清单",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.5.6",
         "anchors": [
           "section-4-5"
@@ -860,7 +866,7 @@
       "id": "R-71",
       "text": "交易事件库保存意图、父子关系、归属、代次、`send_state`、标识映射、待关联成交、预占、递增 `journal_seq`；回报脱敏原文落盘，载荷与凭证不落盘",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.6.1",
         "anchors": [
           "section-4-6"
@@ -872,7 +878,7 @@
       "id": "R-72",
       "text": "成交去重键由适配器按柜台编号真实唯一范围定义（账户、交易所、交易日、成交编号等），不单用 `OrderRef` 或 `TradeID`",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.6.1",
         "anchors": [
           "section-4-6"
@@ -884,7 +890,7 @@
       "id": "R-73",
       "text": "去重、账本更新、预占变更与游标在同一事务提交；快照保存 `journal_seq`，从游标重放",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.6.1",
         "anchors": [
           "section-4-6"
@@ -896,7 +902,7 @@
       "id": "R-74",
       "text": "启动流程 `DISCONNECTED->RECOVERING->RECONCILING->READY`，差异未解决保持禁止新增风险；`READY` 不自动解除熔断",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.6.2",
         "anchors": [
           "section-4-6"
@@ -908,7 +914,7 @@
       "id": "R-75",
       "text": "验收注入断线、重复乱序回报、部分成交后终止、查询中成交、磁盘写失败等故障；恢复成功以柜台与本地一致为准",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§4.6.2",
         "anchors": [
           "section-4-6"
@@ -920,7 +926,7 @@
       "id": "R-76",
       "text": "首版历史 Bar 直接写版本化 Parquet；实时行情用有界队列 → 完整分段 → 校验 → 原子重命名 → manifest 发布，不承诺 WAL",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.1",
         "anchors": [
           "section-5-1"
@@ -932,7 +938,7 @@
       "id": "R-77",
       "text": "Compaction 由已封闭分段与时段水位驱动，重复执行不重复纳入；规范文件新版本原子发布，不覆盖被实验引用的内容",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.1",
         "anchors": [
           "section-5-1"
@@ -944,7 +950,7 @@
       "id": "R-78",
       "text": "通用字段：`instrument_id/symbol/exchange`、UTC `event_time`、`receive_time`、`available_at`、`trading_day/session_id`、`source_seq/ingest_seq`、`schema_version/quality_flags`",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.2.1",
         "anchors": [
           "section-5-2"
@@ -956,7 +962,7 @@
       "id": "R-79",
       "text": "分别定义 Bar、ExecutionReference、Tick、Settlement、Instruments、Sessions、InstrumentStatus、DominantMapping、AccountSnapshot 数据集",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.2.2",
         "anchors": [
           "section-5-2"
@@ -968,7 +974,7 @@
       "id": "R-80",
       "text": "Tick 累计量转增量处理交易日重置、重复快照、断线、缺首笔，不简单负差取零",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.2.2",
         "anchors": [
           "section-5-2"
@@ -980,7 +986,7 @@
       "id": "R-81",
       "text": "DuckDB 只读分析已发布 Parquet；查询从 manifest 取文件，禁止通配多版本；联表带 `available_at` 条件；记录资源占用",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.3",
         "anchors": [
           "section-5-3"
@@ -992,7 +998,7 @@
       "id": "R-82",
       "text": "`meta/control.db` 与 `live/trading.db` 分职责；WAL + `synchronous=FULL` + 外键 + busy_timeout；备份用备份接口；意图持久化失败不发单",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.4.1",
         "anchors": [
           "section-5-4"
@@ -1004,7 +1010,7 @@
       "id": "R-83",
       "text": "`contracts_rules_history` 与 `commission_rules_history` 含生效区间、`available_at`、账户配置、来源、版本；手续费按开仓 / 平今 / 平昨分存",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.4.2",
         "anchors": [
           "section-5-4"
@@ -1016,7 +1022,7 @@
       "id": "R-84",
       "text": "手续费 `= 手数×每手费用 + 价格×乘数×手数×金额费率`，再按规则舍入；最低收费等显式扩展",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.4.2",
         "anchors": [
           "section-5-4"
@@ -1028,7 +1034,7 @@
       "id": "R-85",
       "text": "生效区间 `[from, to)`、支持日内调整；同一时点与账户下适用规则唯一；晚发布更正按更正事件入账",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.4.2",
         "anchors": [
           "section-5-4"
@@ -1040,7 +1046,7 @@
       "id": "R-86",
       "text": "每次回测生成不可变 `run_manifest.json`，覆盖数据哈希、代码、依赖、类别、执行策略、映射、撮合情景、Sessions、生命周期配置、种子与排序",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.5",
         "anchors": [
           "section-5-5"
@@ -1052,7 +1058,7 @@
       "id": "R-87",
       "text": "同环境同种子重跑得到相同订单、成交、账本；变更生成新实验标识",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§5.5",
         "anchors": [
           "section-5-5"
@@ -1064,7 +1070,7 @@
       "id": "R-88",
       "text": "完整 Bar T 收盘信号最早在下一可交易 Bar 撮合；此前生效订单可在 Bar T 内成交",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1",
         "anchors": [
           "section-6-1"
@@ -1076,7 +1082,7 @@
       "id": "R-89",
       "text": "按订单场景定义撮合条件与价格边界（主动、竞价 / 只撤、下一 Bar 开盘、限价买 / 卖、盘中触价、涨跌停）",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1.1",
         "anchors": [
           "section-6-1"
@@ -1088,7 +1094,7 @@
       "id": "R-90",
       "text": "`limit_liquidity_scenario` 至少提供方向保守（默认）与触板无成交（压力）两种情景，入运行清单",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1.1、A20",
         "anchors": [
           "section-6-1"
@@ -1100,7 +1106,7 @@
       "id": "R-91",
       "text": "`participation_rate` 限制同 Bar 可模拟成交量，多策略共享预算；本 Bar 成交结果在 Bar 处理完成后公开",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1.2",
         "anchors": [
           "section-6-1"
@@ -1112,7 +1118,7 @@
       "id": "R-92",
       "text": "同 Bar 互斥条件采用保守路径或更细数据，禁止按收益择优",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1.2",
         "anchors": [
           "section-6-1"
@@ -1124,7 +1130,7 @@
       "id": "R-93",
       "text": "执行时点由日历、信号 `available_at`、延迟与生效规则决定；四种执行策略各有数据要求；错过按配置顺延或取消",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.1.3",
         "anchors": [
           "section-6-1"
@@ -1136,7 +1142,7 @@
       "id": "R-94",
       "text": "Tick 撮合区分委托合法性、涨跌停成交、主动成交、被动排队、部分成交与不确定性；结果标注为排队估算",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.2",
         "anchors": [
           "section-6-2"
@@ -1148,7 +1154,7 @@
       "id": "R-95",
       "text": "报单、撤单、回报、行情延迟按时间事件独立建模；定时事件不依赖 Tick 推进；撤单到达不等于生效",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.3",
         "anchors": [
           "section-6-3"
@@ -1160,7 +1166,7 @@
       "id": "R-96",
       "text": "训练 / 验证 / 保留样本按时间划分，滚动验证满足可见性；对成本、滑点、参与率、延迟、换月做敏感性分析",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.4",
         "anchors": [
           "section-6-4"
@@ -1172,7 +1178,7 @@
       "id": "R-97",
       "text": "报告含扣费权益、回撤、换手、费用贡献、保证金峰值、未成交、未完成移仓、强平、数据降级，并分品种、日 / 夜盘、换月归因",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.4",
         "anchors": [
           "section-6-4"
@@ -1184,7 +1190,7 @@
       "id": "R-98",
       "text": "影子模式 → 最小手数并行 → 周报（实际滑点对假设、成交率）→ 偏差超范围标记不可外推；回放 / 注入不折抵运行时长",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.5",
         "anchors": [
           "section-6-5"
@@ -1196,7 +1202,7 @@
       "id": "R-99",
       "text": "`replay_market_data.py` 复用回测引擎做全链路回放，强制 `SimulatedGateway` 与隔离存储；不同倍速结果一致",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§6.6",
         "anchors": [
           "section-6-6"
@@ -1208,7 +1214,7 @@
       "id": "R-100",
       "text": "运维脚本清单（§8.1 共 21 个）各有明确职责与输出",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§8.1",
         "anchors": [
           "chapter-8"
@@ -1220,7 +1226,7 @@
       "id": "R-101",
       "text": "日志从基础阶段启用并关联账户别名、策略、代次、`client_order_id`、柜台标识、`journal_seq`、交易日、规则版本；脱敏",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§8.2",
         "anchors": [
           "chapter-8"
@@ -1232,7 +1238,7 @@
       "id": "R-102",
       "text": "指标覆盖行情年龄、队列积压、未知请求、待关联成交、对账差异、预占、阶段冲突、生命周期超时等；关键故障有告警与风险状态动作",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§8.2",
         "anchors": [
           "chapter-8"
@@ -1244,7 +1250,7 @@
       "id": "R-103",
       "text": "以代表性负载测量资源、吞吐、尾延迟与恢复耗时后确定容量预算",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§8.2",
         "anchors": [
           "chapter-8"
@@ -1256,7 +1262,7 @@
       "id": "R-104",
       "text": "分 S0—S7 八个阶段实施；依赖顺序与各阶段可验收交付按规划执行",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§9.1",
         "anchors": [
           "section-9-1"
@@ -1268,7 +1274,7 @@
       "id": "R-105",
       "text": "29 个验收案例（A01—A29）与 A25 七个子用例的预期结果独立计算，不由待测算法生成",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§9.2",
         "anchors": [
           "section-9-2"
@@ -1280,7 +1286,7 @@
       "id": "R-106",
       "text": "按数据类型校验字段、时间、价格与可见性；价格有效域区分实际合约、价差与复权序列，空盘口不补成可成交零价",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§8.2、§5.2",
         "anchors": [
           "chapter-8",
@@ -1293,7 +1299,7 @@
       "id": "R-107",
       "text": "向量化快速研究通道与事件驱动回测并存，共用当时可见映射、执行时点、价格来源和成本口径，S3 交付参数扫描",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§3.3、§9.1 阶段 3",
         "anchors": [
           "section-3-3",
@@ -1306,7 +1312,7 @@
       "id": "R-108",
       "text": "S5 实时连续仿真至少一个完整自然月，时长与场景分别记录；回放/注入不折抵时长，S6 影子与最小手数实盘另行计时",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "§9.1 阶段 5、§9.2 A18、§6.5",
         "anchors": [
           "section-9-1",
@@ -1323,7 +1329,7 @@
       "title": "首版范围",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §一、§1.1",
         "anchors": [
           "section-1-1",
@@ -1356,7 +1362,7 @@
       "title": "策略类别声明为前置条件",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §1.1",
         "anchors": [
           "section-1-1"
@@ -1387,7 +1393,7 @@
       "title": "三类策略分层要求",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §1.1",
         "anchors": [
           "section-1-1"
@@ -1424,7 +1430,7 @@
       "title": "未实现规则显式禁用",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §一、§9.3",
         "anchors": [
           "section-9-3",
@@ -1459,7 +1465,7 @@
       "title": "研究模式与精确核算模式",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.3、§二.6、§4.4.2",
         "anchors": [
           "section-4-4",
@@ -1515,7 +1521,7 @@
       "title": "通用标识与时间字段",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.2.1",
         "anchors": [
           "section-5-2"
@@ -1547,7 +1553,7 @@
       "title": "各数据集定义",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.2.2",
         "anchors": [
           "section-5-2"
@@ -1596,7 +1602,7 @@
       "title": "available_at 可见性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.4、§5.3、§5.4.2",
         "anchors": [
           "section-3-4",
@@ -1631,7 +1637,7 @@
       "title": "分段录制与原子发布",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.1",
         "anchors": [
           "section-5-1"
@@ -1670,7 +1676,7 @@
       "title": "Compaction 幂等",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.1",
         "anchors": [
           "section-5-1"
@@ -1702,7 +1708,7 @@
       "title": "DuckDB 只读边界",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.3",
         "anchors": [
           "section-5-3"
@@ -1734,7 +1740,7 @@
       "title": "SQLite 职责与耐久性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.4.1",
         "anchors": [
           "section-5-4"
@@ -1765,7 +1771,7 @@
       "title": "数据质量校验",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.2、§5.2",
         "anchors": [
           "section-5-2",
@@ -1797,7 +1803,7 @@
       "title": "累计量转增量",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.2.2",
         "anchors": [
           "section-5-2"
@@ -1828,7 +1834,7 @@
       "title": "数据覆盖清单与执行价格覆盖",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.3",
         "anchors": [
           "chapter-2"
@@ -1886,7 +1892,7 @@
       "title": "版本化时段表",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.1、§5.4.2",
         "anchors": [
           "section-4-2",
@@ -1921,7 +1927,7 @@
       "title": "交易日映射",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.2",
         "anchors": [
           "section-4-2"
@@ -1953,7 +1959,7 @@
       "title": "CTP TradingDay / ActionDay 校验",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.3",
         "anchors": [
           "section-4-2"
@@ -1990,7 +1996,7 @@
       "title": "SessionClosed",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.4、§4.2 每日生命周期",
         "anchors": [
           "section-4-2"
@@ -2027,7 +2033,7 @@
       "title": "SettlementReady / SETTLEMENT_PENDING",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.5",
         "anchors": [
           "section-4-2"
@@ -2068,7 +2074,7 @@
       "title": "TradingDayAdvanced 今昨转换",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2.6",
         "anchors": [
           "section-4-2"
@@ -2101,7 +2107,7 @@
       "title": "MarketPhase 与操作权限",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 交易小节",
         "anchors": [
           "section-4-2"
@@ -2140,7 +2146,7 @@
       "title": "各交易所时段基线",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 时段基线表",
         "anchors": [
           "section-4-2"
@@ -2178,7 +2184,7 @@
       "title": "夜盘残留单",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 交易小节",
         "anchors": [
           "section-4-2"
@@ -2210,7 +2216,7 @@
       "title": "节假日公告驱动",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 交易小节、§4.5.4",
         "anchors": [
           "section-4-2",
@@ -2245,7 +2251,7 @@
       "title": "InstrumentStatus 与日历共同门禁",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 交易小节",
         "anchors": [
           "section-4-2"
@@ -2277,7 +2283,7 @@
       "title": "DailyLifecycleManager 与半结算门禁",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.2 每日生命周期协调",
         "anchors": [
           "section-4-2"
@@ -2337,7 +2343,7 @@
       "title": "稳定标识与 ContractResolver",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.1",
         "anchors": [
           "section-4-3"
@@ -2368,7 +2374,7 @@
       "title": "当时可知主力映射",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.1",
         "anchors": [
           "section-4-3"
@@ -2399,7 +2405,7 @@
       "title": "连续序列与收益率视图",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.2",
         "anchors": [
           "section-4-3"
@@ -2430,7 +2436,7 @@
       "title": "主力识别与移仓解耦",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.3",
         "anchors": [
           "section-4-3"
@@ -2461,7 +2467,7 @@
       "title": "移仓时点与腿序",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.3",
         "anchors": [
           "section-4-3"
@@ -2492,7 +2498,7 @@
       "title": "两腿状态机",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.4",
         "anchors": [
           "section-4-3"
@@ -2523,7 +2529,7 @@
       "title": "移仓成本与归因",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.3.4",
         "anchors": [
           "section-4-3"
@@ -2577,7 +2583,7 @@
       "title": "开平意图能力映射",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §一、§4.1.1",
         "anchors": [
           "section-4-1",
@@ -2610,7 +2616,7 @@
       "title": "能力表核验项",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.1",
         "anchors": [
           "section-4-1"
@@ -2649,7 +2655,7 @@
       "title": "持仓四字段与逐单预占不变量",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.2",
         "anchors": [
           "section-4-1"
@@ -2684,7 +2690,7 @@
       "title": "订单状态与回报语义",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.3",
         "anchors": [
           "section-4-1"
@@ -2717,7 +2723,7 @@
       "title": "FeedbackNormalizer 与待关联成交",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.3",
         "anchors": [
           "section-4-1"
@@ -2755,7 +2761,7 @@
       "title": "send_state 三态",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.4",
         "anchors": [
           "section-4-1"
@@ -2786,7 +2792,7 @@
       "title": "重连核对不重发",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.1.4",
         "anchors": [
           "section-4-1"
@@ -2823,7 +2829,7 @@
       "title": "品种级策略接口与多策略归属",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.4 品种级策略接口",
         "anchors": [
           "section-3-4"
@@ -2878,7 +2884,7 @@
       "title": "事件推导账本",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.1",
         "anchors": [
           "section-4-4"
@@ -2910,7 +2916,7 @@
       "title": "计价基准与结算盈亏",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.1",
         "anchors": [
           "section-4-4"
@@ -2942,7 +2948,7 @@
       "title": "两种盈亏视图",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.1",
         "anchors": [
           "section-4-4"
@@ -2974,7 +2980,7 @@
       "title": "精度与舍入",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.4 回测模式端口适配、§4.4.1",
         "anchors": [
           "section-3-4",
@@ -3008,7 +3014,7 @@
       "title": "保证金与可用资金三字段",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.2",
         "anchors": [
           "section-4-4"
@@ -3044,7 +3050,7 @@
       "title": "大边 / 组合优惠",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.2",
         "anchors": [
           "section-4-4"
@@ -3085,7 +3091,7 @@
       "title": "追保与强平",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.3",
         "anchors": [
           "section-4-4"
@@ -3116,7 +3122,7 @@
       "title": "结算单对账",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.4",
         "anchors": [
           "section-4-4"
@@ -3147,7 +3153,7 @@
       "title": "估值质量",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.4.1",
         "anchors": [
           "section-4-4"
@@ -3190,7 +3196,7 @@
       "title": "规则历史表",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.4.2",
         "anchors": [
           "section-5-4"
@@ -3223,7 +3229,7 @@
       "title": "手续费公式",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.4.2",
         "anchors": [
           "section-5-4"
@@ -3254,7 +3260,7 @@
       "title": "生效区间唯一性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.4.2",
         "anchors": [
           "section-5-4"
@@ -3287,7 +3293,7 @@
       "title": "规则来源登记",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.5、§1.2",
         "anchors": [
           "section-1-2",
@@ -3321,7 +3327,7 @@
       "title": "研究模式默认成本假设",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.6",
         "anchors": [
           "chapter-2"
@@ -3352,7 +3358,7 @@
       "title": "必经路径与串行执行序列",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5、§3.4",
         "anchors": [
           "section-4-5",
@@ -3388,7 +3394,7 @@
       "title": "三类规则与持久化计数",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.1",
         "anchors": [
           "section-4-5"
@@ -3420,7 +3426,7 @@
       "title": "交易所硬约束进内核",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.1",
         "anchors": [
           "section-4-5"
@@ -3456,7 +3462,7 @@
       "title": "自成交与账户范围",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.2",
         "anchors": [
           "section-4-5"
@@ -3487,7 +3493,7 @@
       "title": "熔断状态机",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.3",
         "anchors": [
           "section-4-5"
@@ -3518,7 +3524,7 @@
       "title": "长假前钩子",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.4",
         "anchors": [
           "section-4-5"
@@ -3550,7 +3556,7 @@
       "title": "唯一交易出口与控制代次",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.5",
         "anchors": [
           "section-4-5"
@@ -3587,7 +3593,7 @@
       "title": "看门狗与接管",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.5",
         "anchors": [
           "section-4-5"
@@ -3619,7 +3625,7 @@
       "title": "人工命令与开盘检查",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.6",
         "anchors": [
           "section-4-5"
@@ -3674,7 +3680,7 @@
       "title": "交易事件库",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.6.1",
         "anchors": [
           "section-4-6"
@@ -3713,7 +3719,7 @@
       "title": "成交去重键",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.6.1",
         "anchors": [
           "section-4-6"
@@ -3745,7 +3751,7 @@
       "title": "事务与游标快照",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.6.1",
         "anchors": [
           "section-4-6"
@@ -3777,7 +3783,7 @@
       "title": "启动重连流程",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.6.2",
         "anchors": [
           "section-4-6"
@@ -3815,7 +3821,7 @@
       "title": "故障注入",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.6.2、§9.2",
         "anchors": [
           "section-4-6",
@@ -3885,7 +3891,7 @@
       "title": "Bar 因果约束",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1",
         "anchors": [
           "section-6-1"
@@ -3916,7 +3922,7 @@
       "title": "订单场景与价格边界",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.1",
         "anchors": [
           "section-6-1"
@@ -3951,7 +3957,7 @@
       "title": "涨跌停流动性情景",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.1",
         "anchors": [
           "section-6-1"
@@ -3983,7 +3989,7 @@
       "title": "参与率共享预算",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.2",
         "anchors": [
           "section-6-1"
@@ -4014,7 +4020,7 @@
       "title": "同 Bar 互斥保守路径",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.2",
         "anchors": [
           "section-6-1"
@@ -4045,7 +4051,7 @@
       "title": "Tick 撮合与排队",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.2",
         "anchors": [
           "section-6-2"
@@ -4080,7 +4086,7 @@
       "title": "时间延迟事件",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.3",
         "anchors": [
           "section-6-3"
@@ -4123,7 +4129,7 @@
       "title": "执行时点决定因素",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.3",
         "anchors": [
           "section-6-1"
@@ -4154,7 +4160,7 @@
       "title": "四种执行策略",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.3",
         "anchors": [
           "section-6-1"
@@ -4185,7 +4191,7 @@
       "title": "错过与缺价处置",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.1.3、§二.3",
         "anchors": [
           "section-6-1",
@@ -4219,7 +4225,7 @@
       "title": "样本划分",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.4",
         "anchors": [
           "section-6-4"
@@ -4256,7 +4262,7 @@
       "title": "敏感性分析",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.4",
         "anchors": [
           "section-6-4"
@@ -4292,7 +4298,7 @@
       "title": "报告指标",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.4",
         "anchors": [
           "section-6-4"
@@ -4329,7 +4335,7 @@
       "title": "向量化通道",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.3",
         "anchors": [
           "section-3-3"
@@ -4360,7 +4366,7 @@
       "title": "影子模式",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.5",
         "anchors": [
           "section-6-5"
@@ -4395,7 +4401,7 @@
       "title": "全链路回放",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §6.6",
         "anchors": [
           "section-6-6"
@@ -4431,7 +4437,7 @@
       "title": "实验快照",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.5",
         "anchors": [
           "section-5-5"
@@ -4513,7 +4519,7 @@
       "title": "连续仿真运行与场景覆盖",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §9.1 阶段 5、§9.2 A18",
         "anchors": [
           "section-9-1",
@@ -4547,7 +4553,7 @@
       "title": "脚本清单",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.1、§七",
         "anchors": [
           "chapter-8",
@@ -4615,7 +4621,7 @@
       "title": "日志关联与脱敏",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.2",
         "anchors": [
           "chapter-8"
@@ -4646,7 +4652,7 @@
       "title": "指标告警",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.2",
         "anchors": [
           "chapter-8"
@@ -4685,7 +4691,7 @@
       "title": "运行环境",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §4.5.5",
         "anchors": [
           "section-4-5"
@@ -4717,7 +4723,7 @@
       "title": "容量测量",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.2、§3.2",
         "anchors": [
           "section-3-2",
@@ -4751,7 +4757,7 @@
       "title": "Python / CTP 封装验证",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.1",
         "anchors": [
           "chapter-2"
@@ -4784,7 +4790,7 @@
       "title": "终端采集与认证",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.2",
         "anchors": [
           "chapter-2"
@@ -4815,7 +4821,7 @@
       "title": "凭证管理",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.2",
         "anchors": [
           "chapter-2"
@@ -4846,7 +4852,7 @@
       "title": "仿真环境独立配置",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.2",
         "anchors": [
           "chapter-2"
@@ -4884,7 +4890,7 @@
       "title": "可复现性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.5、§3.4",
         "anchors": [
           "section-5-5",
@@ -4919,7 +4925,7 @@
       "title": "性能不改语义",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.4",
         "anchors": [
           "section-3-4"
@@ -4952,7 +4958,7 @@
       "title": "模块依赖约束",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §3.4 模块依赖约束",
         "anchors": [
           "section-3-4"
@@ -4989,7 +4995,7 @@
       "title": "耐久性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §5.1、§5.4",
         "anchors": [
           "section-5-1",
@@ -5022,7 +5028,7 @@
       "title": "可观测性",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §八.2",
         "anchors": [
           "chapter-8"
@@ -5054,7 +5060,7 @@
       "title": "安全",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §二.2、§4.6.1、§6.6",
         "anchors": [
           "section-4-6",
@@ -5089,7 +5095,7 @@
       "title": "平台",
       "status": "formal",
       "source": {
-        "file": "中国期货自动交易与回测工具构建规划.md",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
         "citation": "规划 §一、§二.1",
         "anchors": [
           "chapter-1",

@@ -276,15 +276,27 @@ def validate_preservation(reg, docs, source):
     require(len(gates) == 5 and current == gates, "Original delivery/live gates changed")
     sql = lambda text: [block.strip() for block in re.findall(FENCE + r"sql\n(.*?)" + FENCE, text, re.S)]
     require(sql(docs[4]) == sql(source), "Original SQL examples changed")
-    require(tree_paths(source) <= tree_paths(docs[4]), "Original planned module path missing")
+    document_moves = reg["baseline"].get("document_moves", {})
+    require(isinstance(document_moves, dict), "Document moves must be a mapping")
+    for previous, current in document_moves.items():
+        require(Path(previous).name == previous and previous.endswith(".md"),
+                "Only root Markdown documents may be relocated: " + previous)
+        require(Path(current).name == previous, "Relocated document name differs: " + previous)
+        target = (ROOT / current).resolve()
+        require(target.is_relative_to(ROOT / "docs") and target.is_file(),
+                "Relocated document missing or outside docs: " + current)
+        require(not (ROOT / previous).exists(), "Old root document still exists: " + previous)
+    planned_paths = {document_moves.get(path, path) for path in tree_paths(source)}
+    require(planned_paths <= tree_paths(docs[4]), "Original planned module/document path missing")
     for number, text in docs.items():
         require("| 版本 | " + reg["baseline"]["version"] + " |" in text, "Document version differs: " + DOC_NAMES[number])
         require(text.count("<!-- BEGIN GENERATED:") == text.count("<!-- END GENERATED:"), "Unbalanced generated markers")
 
 
-def validate_fixtures(reg):
+def validate_fixtures(reg, source):
     fixture_ids = set()
     known = {case["id"] for case in reg["acceptances"]}
+    source_anchors = set(re.findall(r'<a id="([^"]+)"></a>', source))
     for relative in reg["fixture_files"]:
         path = (ROOT / relative).resolve()
         require(path.is_relative_to(ROOT), "Fixture path outside repository")
@@ -295,6 +307,11 @@ def validate_fixtures(reg):
         require(data["cases"], "Empty fixture: " + relative)
         unique(data["cases"], "id", "fixture case ID in " + relative)
         require(data["oracle"]["method"] == "independent_specification", "Fixture lacks independent expected specification")
+        require(data["source_refs"], "Fixture lacks source references: " + relative)
+        for reference in data["source_refs"]:
+            source_file, separator, anchor = reference.partition("#")
+            require(source_file == reg["baseline"]["source_file"], "Fixture source path differs: " + relative)
+            require(separator and anchor in source_anchors, "Invalid fixture source anchor: " + relative)
         for case in data["cases"]:
             require(set(case["acceptance_ids"]) <= known and case["acceptance_ids"], "Unknown fixture acceptance")
             require(case["inputs"] and case["expected"], "Fixture lacks inputs or expected result")
@@ -317,7 +334,7 @@ def main():
     current = {n: read(path) for n, path in DOC_PATHS.items()}
     rendered = render(reg, current, source)
     validate_preservation(reg, rendered, source)
-    count = validate_fixtures(reg)
+    count = validate_fixtures(reg, source)
     require((ROOT / reg["baseline"]["changes_file"]).is_file(), "Missing change record")
     changed = [n for n in current if current[n] != rendered[n]]
     if changed and not args.write:
@@ -329,7 +346,7 @@ def main():
     edges = sum(len(req["acceptance_ids"]) for req in reg["requirements"])
     print("PASS: {} R entries, {} formal requirements, {} pending, {} acceptance edges, {} fixture specs.".format(
         len(reg["original_requirements"]), formal, len(reg["requirements"]) - formal, edges, count))
-    print("Preserved: 36 acceptance rows, 8 stage task/delivery rows, 21 scripts, 5 gates, SQL and planned paths.")
+    print("Preserved: 36 acceptance rows, 8 stage task/delivery rows, 21 scripts, 5 gates, SQL and planned paths (document moves applied).")
     print("Trading tests and broker verification: NOT EXECUTED.")
     if args.write:
         print("Regenerated: " + (", ".join(DOC_NAMES[n] for n in changed) if changed else "no changes"))

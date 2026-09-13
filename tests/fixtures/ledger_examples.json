@@ -5,8 +5,8 @@
   "evidence_status": "specification_only",
   "rules_status": "synthetic_test_inputs_not_production_rules",
   "source_refs": [
-    "中国期货自动交易与回测工具构建规划.md#section-4-4",
-    "中国期货自动交易与回测工具构建规划.md#section-9-2"
+    "docs/sources/中国期货自动交易与回测工具构建规划.md#section-4-4",
+    "docs/sources/中国期货自动交易与回测工具构建规划.md#section-9-2"
   ],
   "oracle": {
     "method": "independent_specification",

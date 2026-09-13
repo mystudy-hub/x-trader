@@ -1,0 +1,2 @@
+# Preserve the exact source bytes referenced by the documentation SHA-256.
+docs/sources/中国期货自动交易与回测工具构建规划.md -text
