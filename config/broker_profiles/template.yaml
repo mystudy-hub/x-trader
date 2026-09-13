@@ -1,0 +1,372 @@
+# 柜台能力登记；未知值为 null，核验状态和缺口单独记录。模板不代表柜台支持。
+broker_id: null
+profile_name: null
+ctp_version: null
+effective_from: null
+effective_to: null
+verified_at: null
+verified_by: null
+capabilities:
+  offset_mapping:
+    SHFE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 今昨仓品种，须核验平今、平昨标志及分配顺序
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    DCE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 统一平仓，须核验计费方式
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    CZCE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 统一平仓，须核验计费方式
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    CFFEX:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 仅启用中金所时核验
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    INE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 今昨仓品种，须核验平今、平昨标志及分配顺序
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+  order_types:
+    limit_order:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 限价单支持
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    market_order:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 市价单支持，须核验各交易所差异
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    fak_fok:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 立即成交剩余撤销 / 全部成交否则撤销
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+  time_in_force:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 订单有效期类型与跨日延续规则
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  stage_permissions:
+    auction_submit:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 集合竞价阶段报单受理层级
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    auction_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 集合竞价阶段撤单受理层级
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    continuous_submit:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 连续交易阶段报单受理层级
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    continuous_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 连续交易阶段撤单受理层级
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    cancel_only_window:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 只撤不报窗口（如 CZCE 再竞价前）
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    break_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 小节休市撤单受理
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+  parking_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 预埋受理不等于可撮合订单
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  query_limits:
+    interval_ms:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 可从 1000ms 起测，不视为通用限额
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    max_concurrent:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 可从 1 个在途起测
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+  cancel_counting:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 撤单计数以请求、接受、撤销哪个事件触发
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  commission_rates:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 账户实际适用的开仓/平今/平昨费率、按手或按金额、加收与舍入
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  margin_rates:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 比例、按金额/按手、方向、投机/套保、组合优惠资格
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  delivery_limits:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 账户交割资格与最晚平仓日
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  cancel_identifiers:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 原订单 FrontID+SessionID+OrderRef 与 ExchangeID+OrderSysID；三元组能否跨会话使用须实测
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  position_query:
+    yd_position_semantic:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: YdPosition 为日初量还是剩余量
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    position_date_grouping:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: PositionDate、方向、投机/套保分组语义
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+    shfe_ine_records:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: SHFE/INE 分条记录归一化
+      verification_status: 未开始
+      gap_ids: []
+      evidence: null
+      verified_by: null
+  front_maintenance:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 各端点已知重启和维护窗口；结算前后及夜盘前的恢复验证
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  floating_profit_usage:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 浮盈能否参与开仓、风险度或保证金覆盖；盈利可计入比例、浮亏扣减、按合约还是账户汇总
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  conditional_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 是否存在、触发地点、有效期、断线后存续；未核验按无托管保护设计
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  settlement_format:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 取得样例结算单供解析器（A22）使用
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  overnight_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 跨日订单失效或继续有效
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+  allow_lock:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 账户是否允许锁仓（S2 前确定）
+    verification_status: 未开始
+    gap_ids: []
+    evidence: null
+    verified_by: null
+schema_version: 1
+scope:
+  contracts: []
+  exchanges: []
+  products: []
+gap_ids: []

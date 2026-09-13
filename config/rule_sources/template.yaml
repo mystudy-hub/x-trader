@@ -1,0 +1,27 @@
+# 日期、交易日与物理时刻分开；时刻用带时区 ISO 8601；source_document 和 evidence 使用 path/sha256 引用。
+schema_version: 1
+is_example: false
+rule_id: null
+title: null
+issuer: null
+rule_type: null
+source_url: null
+source_document: null
+published_at: null
+known_at: null
+effective_basis: null
+effective_trading_day: null
+effective_from: null
+effective_to: null
+applies_to:
+  exchanges: []
+  products: []
+  contracts: []
+replaces: null
+replaced_by: null
+verification_status: 未开始
+verified_at: null
+verified_by: null
+evidence: null
+gap_ids: []
+details: {}

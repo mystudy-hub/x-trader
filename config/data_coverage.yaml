@@ -1,0 +1,194 @@
+# 实际登记使用 data_sources；带 _template 的对象仅供填写参考，不参与验收。证据路径相对仓库根目录。
+schema_version: 1
+gap_ids:
+- GAP-S0-02
+data_sources: []
+data_source_template:
+  source_id: null
+  source_name: null
+  datasets:
+  - dataset_id: null
+    dataset_type: bar
+    period: 1h
+    available_fields:
+    - timestamp
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - open_interest
+    time_range:
+      start_date: null
+      end_date: null
+    update_delay: null
+    historical_revision: null
+    license:
+      scope: null
+      local_storage: null
+    open_semantic: null
+    auction_inclusion: null
+    verification_status: 未开始
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: []
+execution_price_coverage:
+- strategy: NEXT_SESSION_OPEN
+  description: 下一可交易时段开盘
+  required_data: 明确归属目标时段的开盘或竞价价格
+  verification_status: 登记缺口
+  data_source: null
+  verified_at: null
+  notes: 数据源定义须证实日线 Open 正是该时刻价格
+  verified_by: null
+  evidence: null
+  gap_ids:
+  - GAP-S0-02
+  data_granularity: null
+- strategy: NEXT_DAY_SESSION_OPEN
+  description: 下一日盘开盘
+  required_data: 独立的日盘开盘价或足以识别该开盘的盘中数据
+  verification_status: 登记缺口
+  data_source: null
+  verified_at: null
+  notes: 含夜盘品种必须区分夜盘开盘与日盘开盘
+  verified_by: null
+  evidence: null
+  gap_ids:
+  - GAP-S0-02
+  data_granularity: null
+- strategy: NEXT_DAY_FIXED_TIME
+  description: 下一日盘收盘前固定时间
+  required_data: 与所选时刻对齐的分钟或更细价格
+  verification_status: 登记缺口
+  data_source: null
+  verified_at: null
+  notes: 如选择 14:50，须有该时刻的实际价格
+  verified_by: null
+  evidence: null
+  gap_ids:
+  - GAP-S0-02
+  data_granularity: null
+- strategy: NEXT_BAR_OPEN
+  description: 下一 Bar 开盘
+  required_data: 实际合约下一可用 Bar 开盘价及时段边界
+  verification_status: 登记缺口
+  data_source: null
+  verified_at: null
+  notes: Bar 周期与信号频率对齐
+  verified_by: null
+  evidence: null
+  gap_ids:
+  - GAP-S0-02
+  data_granularity: 1h
+engineering_sample:
+  contract: SHFE.rb2410
+  product: rb
+  exchange: SHFE
+  purpose: 首个实际合约的固定工程小样本，采购和核验后用于手工对账
+  time_range:
+    start_date: null
+    end_date: null
+  data_source: null
+  verification_status: 登记缺口
+  verified_at: null
+  verified_by: null
+  evidence: null
+  gap_ids:
+  - GAP-S0-02
+  required_roles:
+  - bars
+  - settlement
+  - limits
+  - contract_info
+  - sessions
+  - rules
+  artifacts: {}
+  artifact_template:
+    path: null
+    sha256: null
+  validation_report_template:
+    schema_version: 1
+    contract: SHFE.rb2410
+    time_range:
+      start_date: null
+      end_date: null
+    checks:
+      fields_complete: false
+      execution_price_covered: false
+      time_range_covered: false
+      rules_covered: false
+    artifact_hashes:
+      bars: null
+      settlement: null
+      limits: null
+      contract_info: null
+      sessions: null
+      rules: null
+    # 键为 config/rule_sources/ 下实际登记文件的仓库相对路径，值为其 SHA-256。
+    rule_source_hashes: {}
+research_dataset:
+  purpose: M4 多品种研究交付前到位；M4 是里程碑编号
+  requirements:
+    min_years: 8
+    min_products: 20
+    cycles: 至少两个完整商品牛熊周期
+    data_types:
+    - 实际合约日线
+    - 逐合约成交量与持仓量（主力映射用）
+    - 按执行策略补齐时段开盘或盘中价格
+  status: 未启动
+  procurement_started: null
+  data_source: null
+  procurement_evidence: null
+  expected_delivery: null
+  gap_ids:
+  - GAP-S0-03
+test_products:
+- product: rb
+  name: 螺纹钢
+  exchange: SHFE
+  reason: 有夜盘、今昨仓区分、首个样例合约
+  status: 已确定为首个工程样本
+- product: MA
+  name: 甲醇
+  exchange: CZCE
+  reason: 跨交易所、短年份代码、只撤不报窗口
+  status: 候选品种（S4 接入）
+- product: i
+  name: 铁矿石
+  exchange: DCE
+  reason: 市价单与跨期指令
+  status: 候选品种（S4 接入）
+- product: m
+  name: 豆粕
+  exchange: DCE
+  reason: 市价单与跨期指令
+  status: 候选品种（S4 接入）
+- product: AP
+  name: 苹果
+  exchange: CZCE
+  reason: 无夜盘
+  status: 候选品种（S4 接入）
+- product: jd
+  name: 鸡蛋
+  exchange: DCE
+  reason: 无夜盘
+  status: 候选品种（S4 接入）
+- product: au
+  name: 黄金
+  exchange: SHFE
+  reason: 凌晨收盘
+  status: 候选品种（S4 接入）
+- product: cu
+  name: 铜
+  exchange: SHFE
+  reason: 凌晨收盘
+  status: 候选品种（S4 接入）
+principles:
+- 缺少所选时段或时刻的价格时该执行策略不可运行
+- 研究模式不能静默借用其他时段 Open/Close 或插值补造成交价
+- 缺少结算价、关键费率或交易时段时，精确核算模式中止并说明缺项
+- 明确主连与实际合约的区别，仅有主连数据时结果标注为粗筛
+- 日盘开盘、夜盘开盘和固定盘中时刻不能由同一个日线 Open 代替

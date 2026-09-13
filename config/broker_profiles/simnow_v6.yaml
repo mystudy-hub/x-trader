@@ -1,0 +1,415 @@
+# 柜台能力登记；未知值为 null，核验状态和缺口单独记录。模板不代表柜台支持。
+broker_id: '9999'
+profile_name: simnow_v6
+ctp_version: null
+effective_from: null
+effective_to: null
+verified_at: null
+verified_by: null
+capabilities:
+  offset_mapping:
+    SHFE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 今昨仓品种，须核验平今、平昨标志及分配顺序
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    DCE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 统一平仓，须核验计费方式
+      verification_status: 未启用
+      gap_ids: []
+      evidence: null
+      verified_by: null
+      reason: 首个工程样本只启用 SHFE.rb，其他交易所范围尚未启用。
+    CZCE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 统一平仓，须核验计费方式
+      verification_status: 未启用
+      gap_ids: []
+      evidence: null
+      verified_by: null
+      reason: 首个工程样本只启用 SHFE.rb，其他交易所范围尚未启用。
+    CFFEX:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 首版不启用中金所
+      verification_status: 未启用
+      gap_ids: []
+      evidence: null
+      verified_by: null
+      reason: 首个工程样本只启用 SHFE.rb，其他交易所范围尚未启用。
+    INE:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 今昨仓品种，须核验平今、平昨标志及分配顺序
+      verification_status: 未启用
+      gap_ids: []
+      evidence: null
+      verified_by: null
+      reason: 首个工程样本只启用 SHFE.rb，其他交易所范围尚未启用。
+  order_types:
+    limit_order:
+      value: null
+      evidence_level: null
+      source: CTP API ThostFtdcOrderPriceTypeType
+      test_id: null
+      verified_at: null
+      notes: 限价单支持
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    market_order:
+      value: null
+      evidence_level: null
+      source: CTP API ThostFtdcOrderPriceTypeType
+      test_id: null
+      verified_at: null
+      notes: 市价单支持，须核验各交易所差异
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    fak_fok:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 立即成交剩余撤销 / 全部成交否则撤销
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+  time_in_force:
+    value: null
+    evidence_level: null
+    source: CTP API ThostFtdcTimeConditionType
+    test_id: null
+    verified_at: null
+    notes: 订单有效期类型与跨日延续规则
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  stage_permissions:
+    auction_submit:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 集合竞价阶段报单受理层级
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    auction_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 集合竞价阶段撤单受理层级
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    continuous_submit:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 连续交易阶段报单受理层级
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    continuous_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 连续交易阶段撤单受理层级
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    cancel_only_window:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 只撤不报窗口（如 CZCE 再竞价前）
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    break_cancel:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 小节休市撤单受理
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+  parking_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 预埋受理不等于可撮合订单；仿真环境行为可能与实盘不同
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  query_limits:
+    interval_ms:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 可从 1000ms 起测，不视为通用限额；仿真环境限制可能与实盘不同
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    max_concurrent:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: 可从 1 个在途起测；仿真环境限制可能与实盘不同
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+  cancel_counting:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 撤单计数以请求、接受、撤销哪个事件触发
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  commission_rates:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 仿真环境费率仅供测试，不能作为回测历史费率；实盘须取得期货公司实际费率
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  margin_rates:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 仿真环境保证金比例仅供测试；实盘须取得期货公司实际比例
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  delivery_limits:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 仿真账户交割资格与实盘可能不同
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  cancel_identifiers:
+    value: null
+    evidence_level: null
+    source: CTP API ReqOrderAction
+    test_id: null
+    verified_at: null
+    notes: 三元组（FrontID+SessionID+OrderRef）能否跨会话使用须实测
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  position_query:
+    yd_position_semantic:
+      value: null
+      evidence_level: null
+      source: CTP API CThostFtdcInvestorPositionField
+      test_id: null
+      verified_at: null
+      notes: YdPosition 为日初量还是剩余量，须实测验证
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    position_date_grouping:
+      value: null
+      evidence_level: null
+      source: CTP API PositionDate
+      test_id: null
+      verified_at: null
+      notes: PositionDate、方向、投机/套保分组语义
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+    shfe_ine_records:
+      value: null
+      evidence_level: null
+      source: null
+      test_id: null
+      verified_at: null
+      notes: SHFE/INE 分条记录归一化
+      verification_status: 登记缺口
+      gap_ids:
+      - GAP-S0-05
+      evidence: null
+      verified_by: null
+  front_maintenance:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: SimNow 前置维护窗口须单独登记；仿真环境与实盘前置可能不同
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  floating_profit_usage:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 仿真环境浮盈规则可能与实盘不同
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  conditional_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 未核验按无托管保护设计
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  settlement_format:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 取得 SimNow 样例结算单供解析器（A22）使用
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  overnight_orders:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 跨日订单失效或继续有效
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+  allow_lock:
+    value: null
+    evidence_level: null
+    source: null
+    test_id: null
+    verified_at: null
+    notes: 账户是否允许锁仓（S2 前确定）
+    verification_status: 登记缺口
+    gap_ids:
+    - GAP-S0-05
+    evidence: null
+    verified_by: null
+simulation_notes:
+- SimNow 为仿真环境，行为可能与真实柜台不同
+- 仿真环境独立配置（FR-LIVE-04）
+- 历史制度边界用原公告验证，不能由当前仿真行为反推
+- A25 历史制度用例不能用 SimNow 当前行为验收
+- 手续费、保证金、查询限制等须在真实期货公司账户单独核验
+schema_version: 1
+scope:
+  contracts:
+  - SHFE.rb2410
+  exchanges:
+  - SHFE
+  products:
+  - rb
+gap_ids:
+- GAP-S0-01
+- GAP-S0-05

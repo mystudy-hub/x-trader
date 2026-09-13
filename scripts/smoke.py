@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+
 def check_python_environment():
     """检查 Python 版本 (>=3.12)."""
     major, minor = sys.version_info[:2]
@@ -26,8 +27,9 @@ def check_python_environment():
     return True
 
 
-def validate_config_template(config):
+def validate_config_template(config, root=None):
     """检查模板声明及受版本控制的默认路径，不表示账户能力已核验。"""
+    root = ROOT if root is None else Path(root).resolve()
     if not isinstance(config, dict):
         raise ValueError("配置必须为 YAML 映射")
     if config["system"]["mode"] not in {"backtest", "vector_scan", "paper", "shadow", "live", "replay"}:
@@ -42,7 +44,10 @@ def validate_config_template(config):
     if strategy["data_granularity"] not in {"1d", "1h", "1m", "tick"}:
         raise ValueError("未知价格数据粒度")
     if strategy["execution_strategy"] not in {
-        "NEXT_SESSION_OPEN", "NEXT_DAY_SESSION_OPEN", "NEXT_DAY_FIXED_TIME", "NEXT_BAR_OPEN"
+        "NEXT_SESSION_OPEN",
+        "NEXT_DAY_SESSION_OPEN",
+        "NEXT_DAY_FIXED_TIME",
+        "NEXT_BAR_OPEN",
     }:
         raise ValueError("执行策略须符合 FR-EXEC-02")
     if strategy["execution_strategy"] == "NEXT_DAY_FIXED_TIME":
@@ -54,10 +59,10 @@ def validate_config_template(config):
     capital = Decimal(config["risk"]["initial_capital"])
     if not capital.is_finite() or capital <= 0:
         raise ValueError("示例初始资金必须是正的有限金额")
-    data_root = (ROOT / config["data"]["storage_dir"]).resolve()
-    if not data_root.is_relative_to(ROOT / "data_storage"):
+    data_root = (root / config["data"]["storage_dir"]).resolve()
+    if not data_root.is_relative_to(root / "data_storage"):
         raise ValueError("模板运行数据必须位于已忽略的 data_storage/ 内")
-    databases = [(ROOT / config["storage"][key]).resolve() for key in ("journal_db_path", "rules_db_path")]
+    databases = [(root / config["storage"][key]).resolve() for key in ("journal_db_path", "rules_db_path")]
     if databases[0] == databases[1] or any(not path.is_relative_to(data_root) for path in databases):
         raise ValueError("交易库与规则库必须分开并位于运行数据目录内")
 
@@ -87,6 +92,7 @@ def check_package_import():
         import qh_trader.engine
         import qh_trader.gateway
         import qh_trader.infrastructure
+
         print(f"PASS: {qh_trader.__name__} 及其主要分层模块导入成功")
         return True
     except Exception as exc:
@@ -100,11 +106,7 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
 
     print("=== QH-Trader 冒烟测试 (Day 0 / S0 阶段占位) ===")
-    ok = (
-        check_python_environment()
-        and check_config_template()
-        and check_package_import()
-    )
+    ok = check_python_environment() and check_config_template() and check_package_import()
     if ok:
         print("=== 冒烟测试全部通过: 工程基础骨架就绪 ===")
         sys.exit(0)

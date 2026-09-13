@@ -6,9 +6,13 @@
 
 ## 当前进度
 
-截至 2026-09-13，仓库已建立 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。各项交付与验证依据见 [Day 0 验收记录](docs/06_开发计划.md#day0-acceptance)。下一阶段为 S0 前期核验；交易内核实现、交易验收与柜台联调仍待开展，规格夹具的执行状态为 `not_executed`。
+截至 2026-09-14，仓库维持 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。S1-01 已实现核心值对象、事件、虚拟时钟和七类端口协议，交付边界见 [S1-01 实现记录](docs/06_开发计划.md#s1-01-implementation)。下一工作项为 S1-02 Schema 与质量校验。
+
+S0 的配置登记和检查工具已修复，真实工程样本、规则原件和数据采购仍待补齐；当前按用户指示先推进仅依赖 Day 0 的 S1-01。完整 S0/S1 出口、交易内核验收和柜台联调尚未通过，原有规格夹具仍为 `not_executed`。
 
 前期工作从 [09 前期准备与规则核验清单](docs/09_前期准备与规则核验清单.md) 开始，逐项登记核验结果与缺口；阶段安排和出口条件见 [06 开发计划](docs/06_开发计划.md)。已记录的修订与验证结果见 [10 文档变更记录](docs/10_文档变更记录.md)。
+
+材料内容与保存约定见 [09 §6](docs/09_前期准备与规则核验清单.md#6-工程样本与研究数据集)。当前 [数据覆盖清单](config/data_coverage.yaml) 的实际供应商和样本文件列表为空；规则模板、合成示例和 SDK 归档均不能替代真实行情及适用公告。
 
 ## 文档入口
 
@@ -76,6 +80,15 @@ uv run --no-sync python scripts/check_ci.py
 执行 `uv run --no-sync python scripts/install_hooks.py --check` 可检查本地触发器是否已启用。本地提交检查满足 D0-6 的自动触发要求，GitHub 工作流继续提供托管检查。
 
 [GitHub Actions 工作流](.github/workflows/ci.yml) 在推送、PR 更新或手动触发时，使用 Windows runner 和固定的 uv 0.8.4 安装锁定依赖，然后运行同一入口。工作流随提交推送到 GitHub 后生效，结果在仓库 Actions 页面查看。Python 版本沿用 `.python-version`，其 CTP 兼容性仍按 S0 清单核验。
+
+S0 材料检查使用实际本地配置，单独运行：
+
+```powershell
+uv run --no-sync python scripts/init_env.py
+uv run --no-sync python scripts/check_s0_exit.py --json
+```
+
+环境报告写入 `runs/s0/environment.json`，只执行离线依赖、文件级 SQLite 参数和 SDK 归档检查。出口检查区分已验证、允许登记的缺口、待完成和无效证据；尚无真实样本时返回非零是预期结果，不影响独立核心模块的单元测试。
 
 ## 提交规范
 

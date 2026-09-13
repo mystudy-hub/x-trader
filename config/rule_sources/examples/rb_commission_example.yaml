@@ -1,0 +1,32 @@
+# 仅用于展示格式；不参与规则验收，不作为实际费率或默认值。
+schema_version: 1
+is_example: true
+rule_id: EXAMPLE-COMMISSION
+title: 合成手续费格式示例（非交易所公告）
+issuer: null
+rule_type: commission
+source_url: null
+source_document: null
+published_at: null
+known_at: null
+effective_basis: null
+effective_trading_day: null
+effective_from: null
+effective_to: null
+applies_to:
+  exchanges:
+  - SHFE
+  products:
+  - rb
+  contracts: []
+replaces: null
+replaced_by: null
+verification_status: 未开始
+verified_at: null
+verified_by: null
+evidence: null
+gap_ids: []
+details:
+  open_by_amount: '0.00006'
+  close_today_by_amount: '0.00012'
+  close_yesterday_by_amount: '0.00006'

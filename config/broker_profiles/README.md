@@ -1,26 +1,17 @@
-# 柜台能力与配置目录 (Broker Profiles)
+# 柜台能力登记
 
-本目录用于存放目标期货公司柜台的特性映射文件与联调能力证据（对应规划 §4.5 与需求 `FR-ORD-01`, `FR-ORD-02`, `FR-LIVE-04`）。
+关联需求：FR-ORD-01、FR-ORD-02、FR-CAL-07、FR-LED-05、FR-LED-06。完整核验项见 [09 §4](../../docs/09_前期准备与规则核验清单.md)。
 
-## 配置文件规范
+[template.yaml](template.yaml) 是填写模板；[simnow_v6.yaml](simnow_v6.yaml) 是当前候选环境登记，18 组能力尚未实测。文件名不代表已确认的 CTP 版本，也不证明柜台支持其中的能力。
 
-每个柜台以 `<broker_id>_<profile_name>.yaml` 命名，例如 `9999_openctp_sim.yaml`。
+## 填写约定
 
-包含字段：
+- 顶层使用 `schema_version: 1`，填写 `profile_name` 及 `scope` 中的交易所、品种和实际合约。
+- `ctp_version` 核验后填写具体三段版本；`effective_from/effective_to` 使用带时区时刻。尚未核验时保留 `null`，关联有效的 `gap_ids`。
+- `capabilities` 按模板保留 18 组能力；可以按交易所或子能力继续分层，每个叶子独立登记。
+- 未核验叶子的 `value` 必须为 `null`，`verification_status` 使用 `未开始`、`进行中` 或 `登记缺口`；登记缺口时引用 [gaps.yaml](../gaps.yaml) 中尚未关闭的编号。
+- 叶子标为 `已核验` 时填写明确的 `value`、`source`、`verified_at`、`verified_by` 和 `evidence: {path, sha256}`。证据路径相对于仓库根目录。
+- 目标范围以外的叶子可标为 `未启用`，但须填写 `reason`，值仍为空。
+- `evidence_level`、`test_id` 用于区分本地受理、柜台接受和交易所受理，并关联脱敏联调记录。头文件中存在枚举不能替代实测。
 
-- `broker_id` / `broker_name`: 柜台标识与全称
-- `exchange` / `product` / `broker_profile`: 适用交易所、品种与账户配置范围
-- `ctp_api_version`: CTP 头文件与动态库版本
-- `effective_from` / `effective_to`: 能力适用区间，历史版本保留
-- `capabilities`:
-  - `supports_forquote`: 是否支持询价
-  - `supports_parked_order`: 是否支持预埋单
-  - `max_query_rate_per_sec`: 单连接每秒最大查询次数（流控阈值）
-  - `close_order_mapping`: 平今/平昨报单语法映射（上期所平今 `THOST_FTDC_OF_CloseToday` vs 普通平仓）
-- `verification`:
-  - `status`: 未开始 / 进行中 / 已核验 / 登记缺口
-  - `source_ref`: 期货公司说明或原始接口文档
-  - `verified_at`: 联调通过日期
-  - `evidence_ref`: 对应脱敏测试日志或工单编号
-
-每项能力分别登记值、范围、来源与核验状态；未核验值保持 null 或登记缺口，不作为柜台默认能力。完整字段及核验项以 [09 柜台能力表](../../docs/09_前期准备与规则核验清单.md) 为准；本目录当前只有规范说明，实际能力表在 S0 建立。
+运行配置的 `broker.profile` 指向登记的 `profile_name`。S0 检查允许明确的未关闭缺口；这只说明登记完整，不能使未知能力成为实盘默认值。实际报撤、查询和账户资金语义继续在 S5 联调时核验。

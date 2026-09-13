@@ -1,0 +1,100 @@
+# 只登记适用性；场景和通过条件以原规划及 docs/07 为准，不重定义 A25 编号。
+schema_version: 1
+target_contract: SHFE.rb2410
+cases:
+- id: A25-01
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null
+- id: A25-02
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null
+- id: A25-03
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null
+- id: A25-04
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null
+- id: A25-05
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null
+- id: A25-06
+  status: 未启用
+  scope:
+    exchanges:
+    - CFFEX
+    products: []
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 首个工程样本未启用中金所，原国债特殊时段场景保留编号。
+  gap_ids: []
+  evidence: null
+- id: A25-07
+  status: 待核验
+  scope:
+    exchanges:
+    - SHFE
+    products:
+    - rb
+    time_range:
+      start_date: null
+      end_date: null
+  reason: 沿用 07 与原规划的案例定义，待按样本区间和原公告确定适用性。
+  gap_ids:
+  - GAP-S0-06
+  evidence: null

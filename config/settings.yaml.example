@@ -49,6 +49,7 @@ data:
   use_memory_cache: true
   engineering_sample:
     contract: "SHFE.rb2410"
+    status: "已确定合约"                 # 状态：已确定合约，数据待采购
     start_date: null                     # 样本期间、授权和数据覆盖在 S0 确认。
     end_date: null
 

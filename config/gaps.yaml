@@ -1,0 +1,153 @@
+# 唯一缺口登记入口；数量从 gaps 计算，不维护重复统计表。
+schema_version: 1
+gaps:
+- gap_id: GAP-S0-01
+  related_requirements:
+  - FR-LIVE-01
+  - FR-LIVE-02
+  - NFR-07
+  item: CTP 封装选型与兼容性验证
+  gap_type: 待核验
+  affected_scope:
+    components:
+    - gateway/ctp_gateway.py
+    - 终端采集与认证顺序
+    capabilities:
+    - 登录
+    - 查询
+    - 报单
+    - 回报处理
+  current_handling: 阻断实盘
+  handling_details: 候选封装、API/DLL 兼容性及终端采集认证顺序待核验；SDK 原件见 docs/simnow，安装情况以环境报告为准。
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: 完成 S0-02 联调：登录、查询持仓、报单、接收回报全流程验证并记录 DLL 哈希
+  status: 未关闭
+  closed_at: null
+  notes: 09 文档 §2.1, 2.3, 2.4
+  close_evidence: null
+- gap_id: GAP-S0-02
+  related_requirements:
+  - FR-DATA-10
+  item: 工程样本数据采购
+  gap_type: 数据不可得
+  affected_scope:
+    contracts:
+    - SHFE.rb2410
+    data_types:
+    - 1h Bar
+    - 结算价
+    - 涨跌停价
+    - 成交量
+    - 持仓量
+    time_range: SHFE.rb2410 实际挂牌区间内的样本期间待确定
+  current_handling: 阻断验收
+  handling_details: 已确定首个工程样本为 SHFE.rb2410，数据供应商和授权待确定
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: 采购数据并验证字段完整性、时间范围覆盖、执行价格可用
+  status: 未关闭
+  closed_at: null
+  notes: 阻塞 S0 工程样本出口、S1-06 和 S3 的相关验收；不把文件模板当成数据到位。
+  close_evidence: null
+- gap_id: GAP-S0-03
+  related_requirements:
+  - FR-DATA-10
+  item: 研究数据集采购
+  gap_type: 数据不可得
+  affected_scope:
+    products:
+    - 待确定 20+ 品种
+    data_types:
+    - 实际合约日线
+    - 成交量
+    - 持仓量
+    time_range: 8-10 年历史数据
+  current_handling: 阻断验收
+  handling_details: 采购尚未启动；完整研究数据在 M4 前到位，M3 使用工程样本。M4 不表示四分钟数据。
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: 完成 8-10 年、20+ 品种数据采购，覆盖至少两个完整牛熊周期
+  status: 未关闭
+  closed_at: null
+  notes: 09 文档 §6.2；最长前置，应在 Day 0 启动采购流程
+  close_evidence: null
+- gap_id: GAP-S0-04
+  related_requirements:
+  - FR-RULE-04
+  - FR-CAL-10
+  item: 历史规则公告收集
+  gap_type: 无原文
+  affected_scope:
+    rule_types:
+    - 手续费
+    - 保证金
+    - 交易时段
+    - 夜盘调整
+    - 竞价制度
+    exchanges:
+    - SHFE
+    - DCE
+    - CZCE
+    time_range: 2016-2024
+  current_handling: 禁用
+  handling_details: 缺失关键时段或执行价格时禁用对应能力；允许的成本假设单独登记，不能用当前规则回填历史。
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: 逐项登记规则来源、原文哈希和生效时间，缺失部分明确标注受影响区间
+  status: 未关闭
+  closed_at: null
+  notes: 09 文档 §7；S1 规则库实现前必须建立登记表
+  close_evidence: null
+- gap_id: GAP-S0-05
+  related_requirements:
+  - FR-ORD-01
+  - FR-ORD-02
+  - FR-LED-05
+  - FR-LED-06
+  item: 柜台能力核验
+  gap_type: 柜台未答复
+  affected_scope:
+    capabilities:
+    - 开平映射
+    - 今昨仓口径
+    - 查询限制
+    - 浮盈使用
+    - 手续费加收
+    - 保证金比例
+  current_handling: 阻断实盘
+  handling_details: 能力表框架已建立，但 18 项能力全部待核验
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: S5 联调完成，每项能力有实测用例和脱敏证据
+  status: 未关闭
+  closed_at: null
+  notes: 09 文档 §4；S0 建立框架，S5 柜台联调验证
+  close_evidence: null
+- gap_id: GAP-S0-06
+  related_requirements:
+  - FR-CAL-08
+  item: A25 子场景适用范围确定
+  gap_type: 待核验
+  affected_scope:
+    test_cases:
+    - A25-01 至 A25-07
+    exchanges:
+    - SHFE
+    - DCE
+    - CZCE
+  current_handling: 禁用
+  handling_details: A25-01—07 沿用原验收定义；适用范围未核验前不得宣称对应场景已通过。
+  registered_at: '2026-09-13'
+  registered_by: 开发团队
+  close_condition: 按已启用交易所、品种、历史区间标记 A25 各子用例为适用/未启用/待核验
+  status: 未关闭
+  closed_at: null
+  notes: 09 文档 §6.1, §9.6；S1 Sessions 实现时接入
+  close_evidence: null
+principles:
+- 缺口未关闭前对应能力不得作为生产默认
+- 研究模式使用假设的须在报告中列出影响
+- 精确核算模式对关键缺口中止
+- 不因被评审或时间底稿引用就成为生产默认
+- 不伪造历史配置
