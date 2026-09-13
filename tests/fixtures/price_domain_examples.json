@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "fixture_id": "price-domain-examples",
+  "execution_status": "not_executed",
+  "evidence_status": "specification_only",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": [
+    "中国期货自动交易与回测工具构建规划.md#chapter-8"
+  ],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "仅按每条输入明确的合成有效域判定。合法价差可为负或零，复权指标不强制对齐实际合约报价步长。研究序列通过质量校验不等于可作为实际成交价格，空盘口仍保持缺失语义。"
+  },
+  "cases": [
+    {
+      "id": "actual_contract_valid",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "actual_contract",
+        "price": "100",
+        "rule": {
+          "min": "90",
+          "max": "110",
+          "price_tick": "1"
+        }
+      },
+      "expected": {
+        "quality_status": "valid",
+        "eligible_execution_price": true
+      }
+    },
+    {
+      "id": "actual_contract_off_tick",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "actual_contract",
+        "price": "100.5",
+        "rule": {
+          "min": "90",
+          "max": "110",
+          "price_tick": "1"
+        }
+      },
+      "expected": {
+        "quality_status": "invalid",
+        "reason": "off_tick",
+        "eligible_execution_price": false
+      }
+    },
+    {
+      "id": "actual_contract_out_of_range",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "actual_contract",
+        "price": "112",
+        "rule": {
+          "min": "90",
+          "max": "110",
+          "price_tick": "1"
+        }
+      },
+      "expected": {
+        "quality_status": "invalid",
+        "reason": "outside_declared_domain",
+        "eligible_execution_price": false
+      }
+    },
+    {
+      "id": "negative_spread",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "derived_spread",
+        "price": "-5.25",
+        "rule": {
+          "min": "-50",
+          "max": "50",
+          "decimal_places": 2
+        }
+      },
+      "expected": {
+        "quality_status": "valid",
+        "eligible_execution_price": false
+      }
+    },
+    {
+      "id": "zero_spread",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "derived_spread",
+        "price": "0",
+        "rule": {
+          "min": "-50",
+          "max": "50",
+          "decimal_places": 2
+        }
+      },
+      "expected": {
+        "quality_status": "valid",
+        "eligible_execution_price": false
+      }
+    },
+    {
+      "id": "adjusted_fraction",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "adjusted_indicator",
+        "price": "0.375",
+        "underlying_price_tick": "1",
+        "rule": {
+          "min": "-100",
+          "max": "100",
+          "decimal_places": 3
+        }
+      },
+      "expected": {
+        "quality_status": "valid",
+        "force_underlying_tick_rounding": false,
+        "eligible_execution_price": false
+      }
+    },
+    {
+      "id": "missing_book_not_zero_price",
+      "acceptance_ids": [
+        "A16"
+      ],
+      "inputs": {
+        "series_type": "actual_contract",
+        "raw_bid_price": "0",
+        "source_marks_bid_missing": true
+      },
+      "expected": {
+        "quality_status": "missing",
+        "canonical_bid_price": null,
+        "eligible_execution_price": false
+      }
+    }
+  ]
+}
+

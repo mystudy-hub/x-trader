@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "fixture_id": "order-event-examples",
+  "execution_status": "not_executed",
+  "evidence_status": "specification_only",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": [
+    "中国期货自动交易与回测工具构建规划.md#section-4-1",
+    "中国期货自动交易与回测工具构建规划.md#section-4-6"
+  ],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "按唯一真实成交扣减持仓与冻结。终态累计成交超过已入账部分继续预占。30秒和空查询不能证明未发送；旧代次约束命令，不能否定真实成交。"
+  },
+  "cases": [
+    {
+      "id": "terminal_before_fills",
+      "acceptance_ids": [
+        "A02"
+      ],
+      "inputs": {
+        "initial": {
+          "pos_td": 5,
+          "frozen_td": 3,
+          "accounted_fill_qty": 0
+        },
+        "order": {
+          "client_order_id": "close-1",
+          "offset": "CLOSE_TODAY",
+          "quantity": 3
+        },
+        "events": [
+          {
+            "type": "order_report",
+            "status": "CANCELED",
+            "cumulative_fill_qty": 2
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|T1",
+            "quantity": 1
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|T2",
+            "quantity": 1
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|T1",
+            "quantity": 1
+          }
+        ]
+      },
+      "expected": {
+        "states_after_events": [
+          {
+            "pos_td": 5,
+            "frozen_td": 2,
+            "accounted_fill_qty": 0
+          },
+          {
+            "pos_td": 4,
+            "frozen_td": 1,
+            "accounted_fill_qty": 1
+          },
+          {
+            "pos_td": 3,
+            "frozen_td": 0,
+            "accounted_fill_qty": 2
+          },
+          {
+            "pos_td": 3,
+            "frozen_td": 0,
+            "accounted_fill_qty": 2
+          }
+        ],
+        "final_order_status": "CANCELED",
+        "unique_trade_postings": 2
+      }
+    },
+    {
+      "id": "unknown_send_timeout",
+      "acceptance_ids": [
+        "A03"
+      ],
+      "inputs": {
+        "local_send_result": 0,
+        "remote_confirmation": null,
+        "reserved_margin": "100",
+        "events": [
+          {
+            "type": "disconnect"
+          },
+          {
+            "type": "timeout",
+            "seconds": 30
+          },
+          {
+            "type": "query_completed",
+            "orders": [],
+            "trades": []
+          }
+        ]
+      },
+      "expected": {
+        "send_state": "SENT_UNKNOWN",
+        "reserved_margin": "100",
+        "release_reservation": false,
+        "auto_resubmit": false,
+        "pending_reconciliation": true
+      }
+    },
+    {
+      "id": "proven_not_sent",
+      "acceptance_ids": [
+        "A03"
+      ],
+      "inputs": {
+        "adapter_evidence": "合成适配器明确证明未调用网络发送；不代表真实CTP非零返回语义",
+        "proven_not_sent": true,
+        "reserved_margin": "100"
+      },
+      "expected": {
+        "send_state": "NOT_SENT",
+        "reserved_margin": "0",
+        "failure_recorded": true,
+        "auto_resubmit": false
+      }
+    },
+    {
+      "id": "old_epoch_trade_is_fact",
+      "acceptance_ids": [
+        "A02",
+        "A23"
+      ],
+      "inputs": {
+        "current_epoch": 8,
+        "order_epoch": 7,
+        "risk_state": "HALTED",
+        "available_for_new_trades": "0",
+        "initial_position": 0,
+        "events": [
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|T3",
+            "order_epoch": 7,
+            "quantity": 1
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|T3",
+            "order_epoch": 7,
+            "quantity": 1
+          },
+          {
+            "type": "new_order_command",
+            "command_epoch": 7,
+            "quantity": 1
+          }
+        ]
+      },
+      "expected": {
+        "final_position": 1,
+        "unique_trade_postings": 1,
+        "old_epoch_command_rejected": true,
+        "real_trade_discarded": false,
+        "risk_state": "HALTED"
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,5552 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "version": "0.2",
+    "date": "2026-09-13",
+    "source_file": "中国期货自动交易与回测工具构建规划.md",
+    "source_sha256": "C802C02F6F2768B354351EF0A0E8CA9925A274F2BB9DFCFEEAE54D8115452D34",
+    "changes_file": "docs/10_文档变更记录.md",
+    "execution_status": "not_executed"
+  },
+  "original_requirements": [
+    {
+      "id": "R-01",
+      "text": "首版限定 Windows、单账户、普通期货、日线 / 小时级 Bar 事件驱动回测与 CLI 报告",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§1 末段",
+        "anchors": [
+          "chapter-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-02",
+      "text": "阶段 0 须在运行配置中声明目标策略类别；未声明不得进入模拟盘或实盘",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§1.1",
+        "anchors": [
+          "section-1-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-03",
+      "text": "三类策略（低频 CTA / 分钟级日内 / Tick 级）分别定义首版必需、可推迟与须上调优先级的能力",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§1.1 表",
+        "anchors": [
+          "section-1-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-04",
+      "text": "尚未实现的规则在运行配置中明确禁用",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§1 末段",
+        "anchors": [
+          "chapter-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-05",
+      "text": "区分研究模式（显式假设、报告标注）与精确核算模式（缺项中止）",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.3、§2.6、§4.4.2",
+        "anchors": [
+          "chapter-2",
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-06",
+      "text": "先验证 Python 3.12 与 CTP 封装在目标 Windows 架构上的全链路可用，再锁定版本；`uv` 管理依赖并记录 DLL 哈希",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.1",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-07",
+      "text": "终端采集组件按平台 / API 版本匹配，采集与认证失败阻止进入可交易状态，载荷与原始终端标识不落日志 / 快照",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.2、A27",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-08",
+      "text": "凭证通过本地秘密配置加载，不进入仓库、日志或实验快照",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.2",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-09",
+      "text": "模拟 / 仿真环境使用独立配置，其交易日与撮合规则不默认继承实盘",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.2、§4.2",
+        "anchors": [
+          "chapter-2",
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-10",
+      "text": "建立能力表：按 `exchange + product + broker_profile + ctp_version + effective_from` 记录开平映射、报单类型、报撤权限、预埋、查询限制、费用、保证金、交割限制及测试证据；未知能力禁止实盘",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.2、§4.1.1",
+        "anchors": [
+          "chapter-2",
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-11",
+      "text": "下载前建立数据覆盖清单；执行价格覆盖按执行策略单独校验，缺失时该执行策略不可运行且不借用其他时段价格",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.3",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-12",
+      "text": "工程验收样本与策略研究数据集分开采购管理；低频 CTA 研究集须覆盖 8—10 年、20+ 品种、两个牛熊周期",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.4",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-13",
+      "text": "测试品种组合覆盖 SHFE 夜盘、CZCE 跨所、DCE 市价与跨期、无夜盘、凌晨收盘品种",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.4",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-14",
+      "text": "历史规则公告表作为阶段 0 独立交付物，含发布 / 生效日期、来源、哈希、核验状态；不得用当前费率回填历史",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.5",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-15",
+      "text": "研究模式默认成本假设（滑点、手续费、保证金、参与率）显式声明并在报告标注，进入模拟盘前必须替换",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§2.6",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-16",
+      "text": "回测与实盘共享订单状态机、平仓路由、持仓、账本、规则、风控、移仓逻辑；禁止各自维护资金或持仓算法",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-17",
+      "text": "实盘由独立执行服务独占账户 CTP 交易连接；策略、移仓、看门狗、人工命令均经该服务",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4、§4.5.5",
+        "anchors": [
+          "section-3-4",
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-18",
+      "text": "同一账户的订单、持仓、账本与风控状态由一个执行序列更新；CTP 回调只转换和入队",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-19",
+      "text": "行情录制与分析使用独立队列，交易事件优先；队列有容量、积压指标和故障策略",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4、§5.1",
+        "anchors": [
+          "section-3-4",
+          "section-5-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-20",
+      "text": "回测使用虚拟时钟，行情可见、订单到达、成交、回报分别建事件；同时间事件优先级固定并入运行清单",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-21",
+      "text": "策略只能查询 `available_at <= 当前策略时钟` 的数据，禁止直接读取数据湖",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-22",
+      "text": "策略以品种表达意图，内核按当时可见主力映射解析为实际合约开平子订单；可显式指定实际合约；多策略共用账户按归属分账、按净额路由",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-23",
+      "text": "回测模式交易事件库使用内存适配器，结束后导出规范事件；SQLite 交易事务日志服务模拟盘与实盘，元数据/规则库不受此限制",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-24",
+      "text": "价格可用整数 Tick，费用与盈亏用足够精度定点数，按规定环节舍入；性能优化不得改变舍入、顺序或语义",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4、§4.4.1",
+        "anchors": [
+          "section-3-4",
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-25",
+      "text": "模块依赖单向：`core/` 无环，`domain/`、`strategy/` 仅依赖 `core/`，`engine/` 依赖 `core/`、`domain/`，`scripts/` 唯一装配；依赖检查验证禁止边与循环",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-26",
+      "text": "内部订单用开仓 / 平今 / 平昨明确意图，由适配器按能力表映射；平仓顺序由账户规则和策略配置决定",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.1",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-27",
+      "text": "撤单标识、今昨仓查询口径、查询流控、前置维护四项须逐柜台核验，不作为通用事实",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.1",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-28",
+      "text": "按账户、合约、方向、投机 / 套保维护 `pos_yd/pos_td/frozen_yd/frozen_td`，冻结由逐单预占汇总，不变量 `0 <= frozen <= pos`",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.2",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-29",
+      "text": "SmartRouter 生成不改状态的子订单计划；执行序列在同一事务内记录意图、冻结持仓、预占保证金与费用",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.2、§4.5",
+        "anchors": [
+          "section-4-1",
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-30",
+      "text": "每笔去重成交只更新一次持仓、冻结与账本；撤单 / 拒单只释放已确认不会成交的部分；终态累计成交大于已入账时保留差额冻结",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.2",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-31",
+      "text": "订单状态含 `CREATED/SUBMITTING/ACCEPTED/PARTIALLY_FILLED/FILLED/CANCELED/REJECTED/EXPIRED/cancel_pending/UNKNOWN`；迟到状态不倒退、迟到成交仍入账",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.3",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-32",
+      "text": "网关覆盖本地返回、`OnRspOrderInsert`、`OnErrRtnOrderInsert`、`OnRtnOrder`、`OnRtnTrade` 及撤单错误，归一为领域事件；重复到达不重复计算",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.3",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-33",
+      "text": "成交先于报单回报时按已核验 `ExchangeID + OrderSysID` 或原会话映射绑定；无法归属的成交持久化为待关联占位，不猜配、不丢弃、不补开仓",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.3",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-34",
+      "text": "`send_state` 三态 `NOT_SENT/SENT_UNKNOWN/CONFIRMED_REMOTE` 与订单状态正交；`ReqOrderInsert` 返回 0 不代表受理",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.4",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-35",
+      "text": "重连后立即核对；超时、空查询、查无此单均不自动释放预占或重发；30 秒仅为测试参数",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.1.4",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-36",
+      "text": "交易时段表按交易所、品种、合约例外、生效区间版本化；交易日映射不用自然日加一天或下一工作日",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2.1—2",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-37",
+      "text": "保留 CTP `TradingDay/ActionDay` 原始字段并结合日历校验；模拟端点独立配置",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2.3",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-38",
+      "text": "`SessionClosed` 按合约时段生成，不写死 15:00；`SettlementReady` 经完整性检查生成，未就绪标 `SETTLEMENT_PENDING`，不用收盘价替代",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2.4—5",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-39",
+      "text": "今昨仓在已确认 `TradingDayAdvanced` 事件中一次性转换；晚到回报按原交易日处理；结算修订用差额更正事件",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2.6",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-40",
+      "text": "`MarketPhase` 按实际合约维护竞价申报 / 撮合 / 只撤不报 / 等待 / 连续 / 小节休市 / 停牌 / 收盘 / 未知；每阶段配置 `can_submit/can_cancel/can_match`；边界左闭右开",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2 交易小节",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-41",
+      "text": "各交易所时段基线（商品日盘、无夜盘开盘竞价、夜盘开盘、三所日盘再竞价、CZCE 只撤不报、CFFEX）按版本核验，历史调整不回填",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2 表",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-42",
+      "text": "夜盘残留单按有效期、交易日与阶段转换规则处理，不重建、不重复预占或计费、不自动清空",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-43",
+      "text": "节前停夜盘与节后恢复依据交易所放假公告生成实际时段；节后首日竞价覆盖常规模板",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-44",
+      "text": "日历与 `OnRtnInstrumentStatus` 共同确定实时权限；状态缺失 / 过期 / 冲突时保守门禁并告警",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-45",
+      "text": "`DailyLifecycleManager` 维护 `PRE_OPEN/RUNNING/POST_CLOSE/SETTLEMENT_IN_PROGRESS/MAINTENANCE/RECONCILING`；半结算查询不覆盖最后一致快照；结算未完成禁止新增风险但不关闭风控；任务幂等",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.2 每日生命周期",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-46",
+      "text": "主力映射使用决策时点可用数据，默认 T+1 首个可交易时段生效；保存 `decision_time/effective_from`、候选、输入版本、规则",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.1",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-47",
+      "text": "实际合约使用含交易所与完整交割年月的稳定标识；郑商所短代码由 `ContractResolver` 按交易日与合约目录解析，歧义隔离报错",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.1、A29",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-48",
+      "text": "连续指标只用当时已生成的映射与复权因子；原始拼接价、连续指标价与收益率视图分别定义；切换日不产生拼接动量或账本盈利",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.2",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-49",
+      "text": "主力识别（`data/`）与账户移仓（`domain/rollover.py`）解耦；映射变化不自动改仓位",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.3",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-50",
+      "text": "移仓时点为策略参数（切换生效日 / 交叉后第 N 日 / 最晚平仓日前 N 日），允许分批；腿序可配置并计入临时敞口",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.3",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-51",
+      "text": "两腿移仓状态机 `PLANNED->LEG_1->LEG_2->DONE`，异常 `PAUSED/FAILED` 保留已成交事实",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.4",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-52",
+      "text": "移仓损益来自真实两腿成交，不额外固定扣双倍费用；报告分列价差、执行费用、持仓收益、展期归因",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.3.4",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-53",
+      "text": "账本由不可变成交、费用、划转、结算、更正事件推导；策略收益剔除外部现金流",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-54",
+      "text": "今仓计价基准为成交价、昨仓为上一结算价；日终对剩余持仓计提到结算价；已划入余额的结算盈亏不再计入动态权益",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-55",
+      "text": "共享一套事实生成 `mtm_close_pnl` 与 `trade_close_pnl` 两种视图；手工样例 +100 / −20 / +80，权益只增加 80",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-56",
+      "text": "区分 `broker_available`、`available_for_new_trades`、`margin_coverage_equity`；浮盈能否开仓按账户规则核验，两视图不相加",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.2",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-57",
+      "text": "单向大边 / 组合优惠按账户、品种、合约组合、方向、标志与生效规则决定；减仓前重算资金需求",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.2",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-58",
+      "text": "盘中 / 盘后保证金检查、追保期限、强平按期货公司规则建模；强平受时段、涨跌停、流动性约束",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.3",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-59",
+      "text": "期货公司结算单为权威口径；交付解析器每日自动比对，差异超误差禁止新增风险",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.4",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-60",
+      "text": "最新价过期、盘口缺失、涨跌停流动性不足时记录估值质量并使用保守风险估值",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-61",
+      "text": "风控是所有意图必经路径；控制权核验、风控校验、预占在账户执行序列串行完成，发送在本地事务提交后",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-62",
+      "text": "交易所 / 监管、期货公司 / 柜台、内部偏好三类规则分别管理；计数随事件持久化，重启不清零；不设无来源生产默认值",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.1",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-63",
+      "text": "交易所硬约束（日内开仓限额、持仓限额、交割月最晚平仓、涨跌停幅度调整）在共享内核执行，回测阶段即可见",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.1、A19",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-64",
+      "text": "自成交检查含发送中、撤单未确认及未知状态委托；账户入口受控，无法识别的委托或持仓差异禁止新增风险",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.2",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-65",
+      "text": "熔断 `NORMAL->REDUCE_ONLY->CANCELING->FLATTENING->HALTED`；减仓不被开仓冷却阻断但仍守硬限制；发出清仓不等于仓位归零",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.3",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-66",
+      "text": "长假前按品种 / 策略配置减仓或降杠杆钩子，回测同样执行",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.4",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-67",
+      "text": "执行服务持久化 `controller_id` 与单调递增 `control_epoch`，所有交易命令接收与发送前校验；单实例约束",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-68",
+      "text": "独立看门狗检测心跳；超时默认告警等待人工或申请接管；接管顺序为停旧命令 → 持久化新代次 → 对账 → 允许撤单减仓；旧出口无法隔离时不另建连接",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-69",
+      "text": "部署独立于交易主机的存活告警；托管保护经能力表核验后仅作备份",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-70",
+      "text": "人工命令（暂停、撤单、减仓、查询、恢复）经当前控制者与唯一执行服务执行并留审计；每个时段开盘前执行检查清单",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.5.6",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-71",
+      "text": "交易事件库保存意图、父子关系、归属、代次、`send_state`、标识映射、待关联成交、预占、递增 `journal_seq`；回报脱敏原文落盘，载荷与凭证不落盘",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-72",
+      "text": "成交去重键由适配器按柜台编号真实唯一范围定义（账户、交易所、交易日、成交编号等），不单用 `OrderRef` 或 `TradeID`",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-73",
+      "text": "去重、账本更新、预占变更与游标在同一事务提交；快照保存 `journal_seq`，从游标重放",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-74",
+      "text": "启动流程 `DISCONNECTED->RECOVERING->RECONCILING->READY`，差异未解决保持禁止新增风险；`READY` 不自动解除熔断",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.6.2",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-75",
+      "text": "验收注入断线、重复乱序回报、部分成交后终止、查询中成交、磁盘写失败等故障；恢复成功以柜台与本地一致为准",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§4.6.2",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-76",
+      "text": "首版历史 Bar 直接写版本化 Parquet；实时行情用有界队列 → 完整分段 → 校验 → 原子重命名 → manifest 发布，不承诺 WAL",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.1",
+        "anchors": [
+          "section-5-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-77",
+      "text": "Compaction 由已封闭分段与时段水位驱动，重复执行不重复纳入；规范文件新版本原子发布，不覆盖被实验引用的内容",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.1",
+        "anchors": [
+          "section-5-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-78",
+      "text": "通用字段：`instrument_id/symbol/exchange`、UTC `event_time`、`receive_time`、`available_at`、`trading_day/session_id`、`source_seq/ingest_seq`、`schema_version/quality_flags`",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.2.1",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-79",
+      "text": "分别定义 Bar、ExecutionReference、Tick、Settlement、Instruments、Sessions、InstrumentStatus、DominantMapping、AccountSnapshot 数据集",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.2.2",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-80",
+      "text": "Tick 累计量转增量处理交易日重置、重复快照、断线、缺首笔，不简单负差取零",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.2.2",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-81",
+      "text": "DuckDB 只读分析已发布 Parquet；查询从 manifest 取文件，禁止通配多版本；联表带 `available_at` 条件；记录资源占用",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.3",
+        "anchors": [
+          "section-5-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-82",
+      "text": "`meta/control.db` 与 `live/trading.db` 分职责；WAL + `synchronous=FULL` + 外键 + busy_timeout；备份用备份接口；意图持久化失败不发单",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.4.1",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-83",
+      "text": "`contracts_rules_history` 与 `commission_rules_history` 含生效区间、`available_at`、账户配置、来源、版本；手续费按开仓 / 平今 / 平昨分存",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-84",
+      "text": "手续费 `= 手数×每手费用 + 价格×乘数×手数×金额费率`，再按规则舍入；最低收费等显式扩展",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-85",
+      "text": "生效区间 `[from, to)`、支持日内调整；同一时点与账户下适用规则唯一；晚发布更正按更正事件入账",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-86",
+      "text": "每次回测生成不可变 `run_manifest.json`，覆盖数据哈希、代码、依赖、类别、执行策略、映射、撮合情景、Sessions、生命周期配置、种子与排序",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.5",
+        "anchors": [
+          "section-5-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-87",
+      "text": "同环境同种子重跑得到相同订单、成交、账本；变更生成新实验标识",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§5.5",
+        "anchors": [
+          "section-5-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-88",
+      "text": "完整 Bar T 收盘信号最早在下一可交易 Bar 撮合；此前生效订单可在 Bar T 内成交",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-89",
+      "text": "按订单场景定义撮合条件与价格边界（主动、竞价 / 只撤、下一 Bar 开盘、限价买 / 卖、盘中触价、涨跌停）",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1.1",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-90",
+      "text": "`limit_liquidity_scenario` 至少提供方向保守（默认）与触板无成交（压力）两种情景，入运行清单",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1.1、A20",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-91",
+      "text": "`participation_rate` 限制同 Bar 可模拟成交量，多策略共享预算；本 Bar 成交结果在 Bar 处理完成后公开",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1.2",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-92",
+      "text": "同 Bar 互斥条件采用保守路径或更细数据，禁止按收益择优",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1.2",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-93",
+      "text": "执行时点由日历、信号 `available_at`、延迟与生效规则决定；四种执行策略各有数据要求；错过按配置顺延或取消",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.1.3",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-94",
+      "text": "Tick 撮合区分委托合法性、涨跌停成交、主动成交、被动排队、部分成交与不确定性；结果标注为排队估算",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.2",
+        "anchors": [
+          "section-6-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-95",
+      "text": "报单、撤单、回报、行情延迟按时间事件独立建模；定时事件不依赖 Tick 推进；撤单到达不等于生效",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.3",
+        "anchors": [
+          "section-6-3"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-96",
+      "text": "训练 / 验证 / 保留样本按时间划分，滚动验证满足可见性；对成本、滑点、参与率、延迟、换月做敏感性分析",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.4",
+        "anchors": [
+          "section-6-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-97",
+      "text": "报告含扣费权益、回撤、换手、费用贡献、保证金峰值、未成交、未完成移仓、强平、数据降级，并分品种、日 / 夜盘、换月归因",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.4",
+        "anchors": [
+          "section-6-4"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-98",
+      "text": "影子模式 → 最小手数并行 → 周报（实际滑点对假设、成交率）→ 偏差超范围标记不可外推；回放 / 注入不折抵运行时长",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.5",
+        "anchors": [
+          "section-6-5"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-99",
+      "text": "`replay_market_data.py` 复用回测引擎做全链路回放，强制 `SimulatedGateway` 与隔离存储；不同倍速结果一致",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§6.6",
+        "anchors": [
+          "section-6-6"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-100",
+      "text": "运维脚本清单（§8.1 共 21 个）各有明确职责与输出",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§8.1",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-101",
+      "text": "日志从基础阶段启用并关联账户别名、策略、代次、`client_order_id`、柜台标识、`journal_seq`、交易日、规则版本；脱敏",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§8.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-102",
+      "text": "指标覆盖行情年龄、队列积压、未知请求、待关联成交、对账差异、预占、阶段冲突、生命周期超时等；关键故障有告警与风险状态动作",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§8.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-103",
+      "text": "以代表性负载测量资源、吞吐、尾延迟与恢复耗时后确定容量预算",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§8.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-104",
+      "text": "分 S0—S7 八个阶段实施；依赖顺序与各阶段可验收交付按规划执行",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§9.1",
+        "anchors": [
+          "section-9-1"
+        ]
+      },
+      "other_target": "06 开发计划"
+    },
+    {
+      "id": "R-105",
+      "text": "29 个验收案例（A01—A29）与 A25 七个子用例的预期结果独立计算，不由待测算法生成",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§9.2",
+        "anchors": [
+          "section-9-2"
+        ]
+      },
+      "other_target": "07 测试与验收方案；02 验收追溯"
+    },
+    {
+      "id": "R-106",
+      "text": "按数据类型校验字段、时间、价格与可见性；价格有效域区分实际合约、价差与复权序列，空盘口不补成可成交零价",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§8.2、§5.2",
+        "anchors": [
+          "chapter-8",
+          "section-5-2"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-107",
+      "text": "向量化快速研究通道与事件驱动回测并存，共用当时可见映射、执行时点、价格来源和成本口径，S3 交付参数扫描",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§3.3、§9.1 阶段 3",
+        "anchors": [
+          "section-3-3",
+          "section-9-1"
+        ]
+      },
+      "other_target": null
+    },
+    {
+      "id": "R-108",
+      "text": "S5 实时连续仿真至少一个完整自然月，时长与场景分别记录；回放/注入不折抵时长，S6 影子与最小手数实盘另行计时",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "§9.1 阶段 5、§9.2 A18、§6.5",
+        "anchors": [
+          "section-9-1",
+          "section-9-2",
+          "section-6-5"
+        ]
+      },
+      "other_target": null
+    }
+  ],
+  "requirements": [
+    {
+      "id": "FR-SCOPE-01",
+      "title": "首版范围",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §一、§1.1",
+        "anchors": [
+          "section-1-1",
+          "chapter-1"
+        ]
+      },
+      "source_requirements": [
+        "R-01",
+        "R-13"
+      ],
+      "priority": "P0",
+      "applicability": "首版配置、所选策略类别及每次范围扩展",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [
+        "G-SCOPE"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-SCOPE-02",
+      "title": "策略类别声明为前置条件",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §1.1",
+        "anchors": [
+          "section-1-1"
+        ]
+      },
+      "source_requirements": [
+        "R-02"
+      ],
+      "priority": "P0",
+      "applicability": "首版配置、所选策略类别及每次范围扩展",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-SCOPE-03",
+      "title": "三类策略分层要求",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §1.1",
+        "anchors": [
+          "section-1-1"
+        ]
+      },
+      "source_requirements": [
+        "R-03"
+      ],
+      "priority": "P0（低频 CTA 列）/ P2（其余两列）",
+      "applicability": "首版配置、所选策略类别及每次范围扩展",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A12",
+        "A13"
+      ],
+      "acceptance_scope": {
+        "A12": "已启用策略类别的订单合法性；Tick 排队按范围启用",
+        "A13": "仅启用精细延迟时"
+      },
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-SCOPE-04",
+      "title": "未实现规则显式禁用",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §一、§9.3",
+        "anchors": [
+          "section-9-3",
+          "chapter-1"
+        ]
+      },
+      "source_requirements": [
+        "R-04"
+      ],
+      "priority": "P0",
+      "applicability": "首版配置、所选策略类别及每次范围扩展",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A19",
+        "A25"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S1"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-SCOPE-05",
+      "title": "研究模式与精确核算模式",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.3、§二.6、§4.4.2",
+        "anchors": [
+          "section-4-4",
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-05"
+      ],
+      "priority": "P0",
+      "applicability": "首版配置、所选策略类别及每次范围扩展",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A16",
+        "A21"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-SCOPE-06",
+      "title": "首版最小闭环定义",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-01，待确认）",
+        "anchors": [
+          "prop-01"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S3"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-01"
+    },
+    {
+      "id": "FR-DATA-01",
+      "title": "通用标识与时间字段",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.2.1",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "source_requirements": [
+        "R-78"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A16",
+        "A29"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-02",
+      "title": "各数据集定义",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.2.2",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "source_requirements": [
+        "R-79"
+      ],
+      "priority": "P0（基础/已启用数据集）/ P2（Tick）",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "基础数据集与契约",
+          "priority": "P0"
+        },
+        {
+          "stage": "S4",
+          "scope": "主力映射/连续因子数据集",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "InstrumentStatus 与账户查询视图",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "Tick 数据集",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A16",
+        "A21",
+        "A25",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-03",
+      "title": "available_at 可见性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4、§5.3、§5.4.2",
+        "anchors": [
+          "section-3-4",
+          "section-5-3",
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-21"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A11",
+        "A16",
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-04",
+      "title": "分段录制与原子发布",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.1",
+        "anchors": [
+          "section-5-1"
+        ]
+      },
+      "source_requirements": [
+        "R-19",
+        "R-76"
+      ],
+      "priority": "P0（历史 Bar 发布）/ P2（实时 Tick 录制）",
+      "applicability": "历史 Bar 发布必需；实时 Tick 录制按实际启用范围验收，低频路线可推迟到 S7",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "历史 Bar 原子发布",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "实时 Tick 录制，提前启用须提前验收",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A14"
+      ],
+      "acceptance_scope": {
+        "A14": "S1 历史 Bar 发布与启用时的行情录制故障；Tick 录制未启用时不要求该部分"
+      },
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-05",
+      "title": "Compaction 幂等",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.1",
+        "anchors": [
+          "section-5-1"
+        ]
+      },
+      "source_requirements": [
+        "R-77"
+      ],
+      "priority": "P2（Tick Compaction 按启用范围）",
+      "applicability": "已启用的 Tick 分段录制与 Compaction；提前启用时不得等待 S7 才验收",
+      "deliveries": [
+        {
+          "stage": "S7",
+          "scope": "Tick Compaction，提前启用须提前验收",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A14",
+        "A15"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-06",
+      "title": "DuckDB 只读边界",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.3",
+        "anchors": [
+          "section-5-3"
+        ]
+      },
+      "source_requirements": [
+        "R-81"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A15",
+        "A16"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-07",
+      "title": "SQLite 职责与耐久性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.4.1",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-82"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A14"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-08",
+      "title": "数据质量校验",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.2、§5.2",
+        "anchors": [
+          "section-5-2",
+          "chapter-8"
+        ]
+      },
+      "source_requirements": [
+        "R-106"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A16"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-09",
+      "title": "累计量转增量",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.2.2",
+        "anchors": [
+          "section-5-2"
+        ]
+      },
+      "source_requirements": [
+        "R-80"
+      ],
+      "priority": "P2（Tick 启用时）",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S7",
+          "scope": "适用部分",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A16"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-10",
+      "title": "数据覆盖清单与执行价格覆盖",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.3",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-11",
+        "R-12"
+      ],
+      "priority": "P0",
+      "applicability": "已启用数据集、信号与执行价格范围；Tick 部分随能力启用",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A21",
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-DATA-11",
+      "title": "研究数据集作为 S0 硬出口",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-09，待确认）",
+        "anchors": [
+          "prop-09"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S0"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-09"
+    },
+    {
+      "id": "FR-CAL-01",
+      "title": "版本化时段表",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.1、§5.4.2",
+        "anchors": [
+          "section-4-2",
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-36"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A25",
+        "A25-03",
+        "A25-06"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-02",
+      "title": "交易日映射",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.2",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-36"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A25-05"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-03",
+      "title": "CTP TradingDay / ActionDay 校验",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.3",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-37"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "原始时间字段与端点配置契约",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "目标柜台 TradingDay/ActionDay 核验",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A04",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-04",
+      "title": "SessionClosed",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.4、§4.2 每日生命周期",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-38"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "收盘事件领域协议",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "回测实际时段事件",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A25-06"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-05",
+      "title": "SettlementReady / SETTLEMENT_PENDING",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.5",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-38"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "结算领域协议与手工账",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "结算事件接入回测",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "真实结算数据联调",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-06",
+      "title": "TradingDayAdvanced 今昨转换",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2.6",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-39"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A26",
+        "A25-05"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-07",
+      "title": "MarketPhase 与操作权限",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 交易小节",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-40"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "解析",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "撮合",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A25",
+        "A25-01",
+        "A25-02",
+        "A25-04"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-08",
+      "title": "各交易所时段基线",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 时段基线表",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-13",
+        "R-41"
+      ],
+      "priority": "P0（已启用品种）",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A25",
+        "A25-01",
+        "A25-02",
+        "A25-03",
+        "A25-04",
+        "A25-05",
+        "A25-06"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-09",
+      "title": "夜盘残留单",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 交易小节",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-42"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A25",
+        "A25-02"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-10",
+      "title": "节假日公告驱动",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 交易小节、§4.5.4",
+        "anchors": [
+          "section-4-2",
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-43"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A25",
+        "A25-03",
+        "A25-05"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-11",
+      "title": "InstrumentStatus 与日历共同门禁",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 交易小节",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-44"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A25",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-12",
+      "title": "DailyLifecycleManager 与半结算门禁",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.2 每日生命周期协调",
+        "anchors": [
+          "section-4-2"
+        ]
+      },
+      "source_requirements": [
+        "R-45"
+      ],
+      "priority": "P0",
+      "applicability": "已启用交易所、品种、历史区间及执行时段",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "领域用例",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "联调",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CAL-13",
+      "title": "本机时钟同步与偏差监控",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-07，待确认）",
+        "anchors": [
+          "prop-07"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S5"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-07"
+    },
+    {
+      "id": "FR-CON-01",
+      "title": "稳定标识与 ContractResolver",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.1",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-47"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A29"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-02",
+      "title": "当时可知主力映射",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.1",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-46"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-03",
+      "title": "连续序列与收益率视图",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.2",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-48"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-04",
+      "title": "主力识别与移仓解耦",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.3",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-49"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-05",
+      "title": "移仓时点与腿序",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.3",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-50"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-06",
+      "title": "两腿状态机",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.4",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-51"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-07",
+      "title": "移仓成本与归因",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.3.4",
+        "anchors": [
+          "section-4-3"
+        ]
+      },
+      "source_requirements": [
+        "R-52"
+      ],
+      "priority": "P0",
+      "applicability": "实际合约解析及已启用的多品种、主力映射和移仓范围",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-CON-08",
+      "title": "新品种存活偏差与强制减仓",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-08，待确认）",
+        "anchors": [
+          "prop-08"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S4"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-08"
+    },
+    {
+      "id": "FR-ORD-01",
+      "title": "开平意图能力映射",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §一、§4.1.1",
+        "anchors": [
+          "section-4-1",
+          "chapter-1"
+        ]
+      },
+      "source_requirements": [
+        "R-10",
+        "R-26"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A01"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-02",
+      "title": "能力表核验项",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.1",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-10",
+        "R-27"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "登记",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "实测",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A01",
+        "A04",
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-03",
+      "title": "持仓四字段与逐单预占不变量",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.2",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-28",
+        "R-29",
+        "R-30"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A01",
+        "A02",
+        "A08"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-04",
+      "title": "订单状态与回报语义",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.3",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-30",
+        "R-31"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A02",
+        "A03"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-05",
+      "title": "FeedbackNormalizer 与待关联成交",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.3",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-32",
+        "R-33"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "领域",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "CTP",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A02",
+        "A04"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-06",
+      "title": "send_state 三态",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.4",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-34"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A03"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-07",
+      "title": "重连核对不重发",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.1.4",
+        "anchors": [
+          "section-4-1"
+        ]
+      },
+      "source_requirements": [
+        "R-35"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "领域",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "联调",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A03",
+        "A04"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-08",
+      "title": "品种级策略接口与多策略归属",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4 品种级策略接口",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "source_requirements": [
+        "R-22"
+      ],
+      "priority": "P0",
+      "applicability": "单账户已启用合约、订单类型及经核验的柜台能力",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A01",
+        "A10"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-ORD-09",
+      "title": "Strategy API 详细规范与组合层分配",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-03，待确认）",
+        "anchors": [
+          "prop-03"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S2"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-03"
+    },
+    {
+      "id": "FR-LED-01",
+      "title": "事件推导账本",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-53"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06",
+        "A22"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-02",
+      "title": "计价基准与结算盈亏",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-54"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06",
+        "A22"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-03",
+      "title": "两种盈亏视图",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-55"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06",
+        "A22"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-04",
+      "title": "精度与舍入",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4 回测模式端口适配、§4.4.1",
+        "anchors": [
+          "section-3-4",
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-24"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06",
+        "A07",
+        "A15"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-05",
+      "title": "保证金与可用资金三字段",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.2",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-56"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "模型",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "口径核验",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A08"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-06",
+      "title": "大边 / 组合优惠",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.2",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-57"
+      ],
+      "priority": "P0（账户已启用规则）/ P2（新增复杂组合优化）",
+      "applicability": "账户实际启用的保证金/优惠规则必须核验；未启用的复杂组合优化可后续扩展",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "基础资金模型及已启用优惠条件",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "账户实际规则核验",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "新增复杂组合优化",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A08"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-07",
+      "title": "追保与强平",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.3",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-58"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "目标账户追保与强平规则",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-08",
+      "title": "结算单对账",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.4",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-59"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A22"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LED-09",
+      "title": "估值质量",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.4.1",
+        "anchors": [
+          "section-4-4"
+        ]
+      },
+      "source_requirements": [
+        "R-60"
+      ],
+      "priority": "P0",
+      "applicability": "已启用账户资金、费用、保证金和结算规则",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "保守估值领域规则",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "回测估值质量报告",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "实盘一致快照与风险估值",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09",
+        "A12",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RULE-01",
+      "title": "规则历史表",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-14",
+        "R-83"
+      ],
+      "priority": "P0",
+      "applicability": "所选账户、合约、历史区间与规则版本",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A07",
+        "A15"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RULE-02",
+      "title": "手续费公式",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-84"
+      ],
+      "priority": "P0",
+      "applicability": "所选账户、合约、历史区间与规则版本",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A07"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RULE-03",
+      "title": "生效区间唯一性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.4.2",
+        "anchors": [
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-85"
+      ],
+      "priority": "P0",
+      "applicability": "所选账户、合约、历史区间与规则版本",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A07",
+        "A15",
+        "A25-03"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RULE-04",
+      "title": "规则来源登记",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.5、§1.2",
+        "anchors": [
+          "section-1-2",
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-14"
+      ],
+      "priority": "P0",
+      "applicability": "所选账户、合约、历史区间与规则版本",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A25"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RULE-05",
+      "title": "研究模式默认成本假设",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.6",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-15"
+      ],
+      "priority": "P0",
+      "applicability": "所选账户、合约、历史区间与规则版本",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-01",
+      "title": "必经路径与串行执行序列",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5、§3.4",
+        "anchors": [
+          "section-4-5",
+          "section-3-4"
+        ]
+      },
+      "source_requirements": [
+        "R-16",
+        "R-18",
+        "R-29",
+        "R-61"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A08",
+        "A09"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-02",
+      "title": "三类规则与持久化计数",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.1",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-62"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09",
+        "A19"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-03",
+      "title": "交易所硬约束进内核",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.1",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-63"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "硬约束领域实现",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "回测中生效与报告",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A19"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-04",
+      "title": "自成交与账户范围",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.2",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-64"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A08"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-05",
+      "title": "熔断状态机",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.3",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-65"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-06",
+      "title": "长假前钩子",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.4",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-66"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S4",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A05",
+        "A18"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-07",
+      "title": "唯一交易出口与控制代次",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-17",
+        "R-67"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "控制代次领域逻辑",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "唯一执行服务与最终发送校验",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A23"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-08",
+      "title": "看门狗与接管",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-68",
+        "R-69"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A23"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-09",
+      "title": "人工命令与开盘检查",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.6",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-70"
+      ],
+      "priority": "P0",
+      "applicability": "本系统的交易命令及账户已启用范围；真实成交按事实分支处理",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A23",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-RISK-10",
+      "title": "门禁错过信号计数与成本报告",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-04，待确认）",
+        "anchors": [
+          "prop-04"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S3"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-04"
+    },
+    {
+      "id": "FR-REC-01",
+      "title": "交易事件库",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "source_requirements": [
+        "R-23",
+        "R-71"
+      ],
+      "priority": "P0",
+      "applicability": "领域恢复协议及已启用运行模式，当前柜台部分须联调",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "内存",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "SQLite",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A04",
+        "A14",
+        "A23"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-REC-02",
+      "title": "成交去重键",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "source_requirements": [
+        "R-72"
+      ],
+      "priority": "P0",
+      "applicability": "领域恢复协议及已启用运行模式，当前柜台部分须联调",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A02",
+        "A04"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-REC-03",
+      "title": "事务与游标快照",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.6.1",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "source_requirements": [
+        "R-73"
+      ],
+      "priority": "P0",
+      "applicability": "领域恢复协议及已启用运行模式，当前柜台部分须联调",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A04",
+        "A14"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-REC-04",
+      "title": "启动重连流程",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.6.2",
+        "anchors": [
+          "section-4-6"
+        ]
+      },
+      "source_requirements": [
+        "R-74"
+      ],
+      "priority": "P0",
+      "applicability": "领域恢复协议及已启用运行模式，当前柜台部分须联调",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "可控网关恢复协议",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "柜台查询、重连与对账",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A04",
+        "A23",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-REC-05",
+      "title": "故障注入",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.6.2、§9.2",
+        "anchors": [
+          "section-4-6",
+          "section-9-2"
+        ]
+      },
+      "source_requirements": [
+        "R-75"
+      ],
+      "priority": "P0",
+      "applicability": "领域恢复协议及已启用运行模式，当前柜台部分须联调",
+      "deliveries": [
+        {
+          "stage": "S2",
+          "scope": "领域故障样例",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "当前柜台与交易存储故障集",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "启用 Tick 的存储/回放故障",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A02",
+        "A03",
+        "A04",
+        "A14",
+        "A18"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-REC-06",
+      "title": "进程模型与 IPC、CTP 回调汇入",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-06，待确认）",
+        "anchors": [
+          "prop-06"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S2",
+        "S5"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-06"
+    },
+    {
+      "id": "FR-MATCH-01",
+      "title": "Bar 因果约束",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-88"
+      ],
+      "priority": "P0",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A11"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-02",
+      "title": "订单场景与价格边界",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.1",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-89"
+      ],
+      "priority": "P0",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A11",
+        "A12",
+        "A20",
+        "A25",
+        "A25-07"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-03",
+      "title": "涨跌停流动性情景",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.1",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-90"
+      ],
+      "priority": "P0",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A12",
+        "A20"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-04",
+      "title": "参与率共享预算",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.2",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-91"
+      ],
+      "priority": "P0",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A11"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-05",
+      "title": "同 Bar 互斥保守路径",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.2",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-92"
+      ],
+      "priority": "P0",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A11"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-06",
+      "title": "Tick 撮合与排队",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.2",
+        "anchors": [
+          "section-6-2"
+        ]
+      },
+      "source_requirements": [
+        "R-94"
+      ],
+      "priority": "P2",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S7",
+          "scope": "适用部分",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A12",
+        "A13"
+      ],
+      "acceptance_scope": {
+        "A12": "启用 Tick 排队估算时的相应部分；基础订单合法性由 FR-MATCH-02 覆盖",
+        "A13": "精细 Tick 撮合、撤单与回报时序，随能力启用"
+      },
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-MATCH-07",
+      "title": "时间延迟事件",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.3",
+        "anchors": [
+          "section-6-3"
+        ]
+      },
+      "source_requirements": [
+        "R-20",
+        "R-95"
+      ],
+      "priority": "P0（框架）/ P2（精细延迟）",
+      "applicability": "Bar 基础路径；Tick、排队和精细延迟按类别启用",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "基础时间调度与撤单边界",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "精细延迟",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A13",
+        "A25-04",
+        "A28"
+      ],
+      "acceptance_scope": {
+        "A13": "S7 精细延迟，按类别启用",
+        "A25-04": "S3 撤单跨边界的基础调度与权限",
+        "A28": "S3 Bar 定时推进；S7 扩展 Tick 路径"
+      },
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-EXEC-01",
+      "title": "执行时点决定因素",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.3",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-93"
+      ],
+      "priority": "P0",
+      "applicability": "已声明的执行策略、目标时段及其价格数据",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A21"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-EXEC-02",
+      "title": "四种执行策略",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.3",
+        "anchors": [
+          "section-6-1"
+        ]
+      },
+      "source_requirements": [
+        "R-93"
+      ],
+      "priority": "P0",
+      "applicability": "已声明的执行策略、目标时段及其价格数据",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A21"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-EXEC-03",
+      "title": "错过与缺价处置",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.1.3、§二.3",
+        "anchors": [
+          "section-6-1",
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-11",
+        "R-93"
+      ],
+      "priority": "P0",
+      "applicability": "已声明的执行策略、目标时段及其价格数据",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A21",
+        "A25-07"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-01",
+      "title": "样本划分",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.4",
+        "anchors": [
+          "section-6-4"
+        ]
+      },
+      "source_requirements": [
+        "R-12",
+        "R-96"
+      ],
+      "priority": "P0",
+      "applicability": "S3 验证方法与工程样例；完整策略评价在 S4 使用满足年限、品种数及周期要求的研究集",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "样本划分与固定工程样例的验证",
+          "priority": "P0"
+        },
+        {
+          "stage": "S4",
+          "scope": "完整多品种研究集及样本外评价",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-02",
+      "title": "敏感性分析",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.4",
+        "anchors": [
+          "section-6-4"
+        ]
+      },
+      "source_requirements": [
+        "R-96"
+      ],
+      "priority": "P0",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "单品种工程敏感性",
+          "priority": "P0"
+        },
+        {
+          "stage": "S4",
+          "scope": "多品种成本与执行压力",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-03",
+      "title": "报告指标",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.4",
+        "anchors": [
+          "section-6-4"
+        ]
+      },
+      "source_requirements": [
+        "R-97"
+      ],
+      "priority": "P0",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "单品种回测报告",
+          "priority": "P0"
+        },
+        {
+          "stage": "S4",
+          "scope": "多品种样本外与移仓归因",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A17",
+        "A22"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-04",
+      "title": "向量化通道",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.3",
+        "anchors": [
+          "section-3-3"
+        ]
+      },
+      "source_requirements": [
+        "R-107"
+      ],
+      "priority": "P0",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A17"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-05",
+      "title": "影子模式",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.5",
+        "anchors": [
+          "section-6-5"
+        ]
+      },
+      "source_requirements": [
+        "R-98"
+      ],
+      "priority": "P0",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S6",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18",
+        "A24"
+      ],
+      "acceptance_scope": {
+        "A18": "S6 复用场景覆盖要求；S5 仿真时长由 FR-VAL-10 负责",
+        "A24": "S6 执行偏差校准及扩大资金证据，另满足本需求的独立自然月下限"
+      },
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-06",
+      "title": "全链路回放",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §6.6",
+        "anchors": [
+          "section-6-6"
+        ]
+      },
+      "source_requirements": [
+        "R-99"
+      ],
+      "priority": "P0（Bar 路径）/ P2（Tick 路径）",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "Bar 全链路回放",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "Tick 全链路回放",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A28"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-07",
+      "title": "实验快照",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.5",
+        "anchors": [
+          "section-5-5"
+        ]
+      },
+      "source_requirements": [
+        "R-86"
+      ],
+      "priority": "P0",
+      "applicability": "工程验证、策略研究及已启用运行模式，证据按用途分开",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "数据快照与不可变引用",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "完整 run_manifest 与规范结果",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A15"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-VAL-08",
+      "title": "向量化与事件驱动容差一致性",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-05，待确认）",
+        "anchors": [
+          "prop-05"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S3"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-05"
+    },
+    {
+      "id": "FR-VAL-09",
+      "title": "影子模式按场景计时",
+      "status": "pending",
+      "source": {
+        "file": "docs/00_文档索引.md",
+        "citation": "评审补充（PROP-02，待确认）",
+        "anchors": [
+          "prop-02"
+        ]
+      },
+      "source_requirements": [],
+      "priority": "待确认",
+      "applicability": "待确认议题，不进入正式阶段出口",
+      "deliveries": [],
+      "proposed_stages": [
+        "S6"
+      ],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": "PROP-02"
+    },
+    {
+      "id": "FR-VAL-10",
+      "title": "连续仿真运行与场景覆盖",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §9.1 阶段 5、§9.2 A18",
+        "anchors": [
+          "section-9-1",
+          "section-9-2"
+        ]
+      },
+      "source_requirements": [
+        "R-108"
+      ],
+      "priority": "P0",
+      "applicability": "S5 目标认可仿真环境；时长与 S6 影子/实盘独立",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18"
+      ],
+      "acceptance_scope": {
+        "A18": "S5 实时连续仿真时长与场景；不抵扣 S6 实盘校准时长"
+      },
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-OPS-01",
+      "title": "脚本清单",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.1、§七",
+        "anchors": [
+          "chapter-8",
+          "chapter-7"
+        ]
+      },
+      "source_requirements": [
+        "R-100"
+      ],
+      "priority": "P0（对应阶段已启用脚本）/ P2（Tick 扩展）",
+      "applicability": "对应阶段已启用的脚本、运行模式与存储",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "环境、数据、快照与校验脚本",
+          "priority": "P0"
+        },
+        {
+          "stage": "S3",
+          "scope": "回测、扫描、报告、Bar 回放与 smoke",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "执行、恢复、对账、备份和人工控制脚本",
+          "priority": "P0"
+        },
+        {
+          "stage": "S6",
+          "scope": "影子运行及执行偏差周报",
+          "priority": "P0"
+        },
+        {
+          "stage": "S7",
+          "scope": "compact_ticks 及 Tick 扩展",
+          "priority": "P2"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A04",
+        "A09",
+        "A14",
+        "A15",
+        "A16",
+        "A17",
+        "A18",
+        "A21",
+        "A22",
+        "A23",
+        "A24",
+        "A25",
+        "A26",
+        "A27",
+        "A28"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-OPS"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-OPS-02",
+      "title": "日志关联与脱敏",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "source_requirements": [
+        "R-101"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的脚本、运行模式与存储",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-OPS-03",
+      "title": "指标告警",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "source_requirements": [
+        "R-19",
+        "R-102"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的脚本、运行模式与存储",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "回测指标",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "实盘指标",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09",
+        "A14",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-OPS-04",
+      "title": "运行环境",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §4.5.5",
+        "anchors": [
+          "section-4-5"
+        ]
+      },
+      "source_requirements": [
+        "R-69"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的脚本、运行模式与存储",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18",
+        "A23"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-OPS-05",
+      "title": "容量测量",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.2、§3.2",
+        "anchors": [
+          "section-3-2",
+          "chapter-8"
+        ]
+      },
+      "source_requirements": [
+        "R-103"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的脚本、运行模式与存储",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "部署前代表性负载容量测量",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-CAPACITY"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LIVE-01",
+      "title": "Python / CTP 封装验证",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.1",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-06"
+      ],
+      "priority": "P0",
+      "applicability": "目标 Windows / Python / CTP 版本、端点及账户配置",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LIVE-02",
+      "title": "终端采集与认证",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.2",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-07"
+      ],
+      "priority": "P0",
+      "applicability": "目标 Windows / Python / CTP 版本、端点及账户配置",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LIVE-03",
+      "title": "凭证管理",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.2",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-08"
+      ],
+      "priority": "P0",
+      "applicability": "目标 Windows / Python / CTP 版本、端点及账户配置",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "FR-LIVE-04",
+      "title": "仿真环境独立配置",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.2",
+        "anchors": [
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-09"
+      ],
+      "priority": "P0",
+      "applicability": "目标 Windows / Python / CTP 版本、端点及账户配置",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "仿真环境独立配置与能力登记",
+          "priority": "P0"
+        },
+        {
+          "stage": "S5",
+          "scope": "目标仿真行为验证与接入要求核验",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A18"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-01",
+      "title": "可复现性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.5、§3.4",
+        "anchors": [
+          "section-5-5",
+          "section-3-4"
+        ]
+      },
+      "source_requirements": [
+        "R-20",
+        "R-86",
+        "R-87"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A15",
+        "A28"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-02",
+      "title": "性能不改语义",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "source_requirements": [
+        "R-24"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S3",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A06",
+        "A07",
+        "A15"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-03",
+      "title": "模块依赖约束",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4 模块依赖约束",
+        "anchors": [
+          "section-3-4"
+        ]
+      },
+      "source_requirements": [
+        "R-16",
+        "R-25"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "依赖检查骨架与已建模块",
+          "priority": "P0"
+        },
+        {
+          "stage": "S2",
+          "scope": "领域内核的禁止边与循环检查",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [],
+      "acceptance_scope": {},
+      "checks": [
+        "G-ARCH"
+      ],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-04",
+      "title": "耐久性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §5.1、§5.4",
+        "anchors": [
+          "section-5-1",
+          "section-5-4"
+        ]
+      },
+      "source_requirements": [
+        "R-82"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A14",
+        "A18"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-05",
+      "title": "可观测性",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §八.2",
+        "anchors": [
+          "chapter-8"
+        ]
+      },
+      "source_requirements": [
+        "R-101"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S1",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A09",
+        "A26"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-06",
+      "title": "安全",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §二.2、§4.6.1、§6.6",
+        "anchors": [
+          "section-4-6",
+          "section-6-6",
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-07",
+        "R-08"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27",
+        "A28"
+      ],
+      "acceptance_scope": {},
+      "checks": [],
+      "proposal_id": null
+    },
+    {
+      "id": "NFR-07",
+      "title": "平台",
+      "status": "formal",
+      "source": {
+        "file": "中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §一、§二.1",
+        "anchors": [
+          "chapter-1",
+          "chapter-2"
+        ]
+      },
+      "source_requirements": [
+        "R-06"
+      ],
+      "priority": "P0",
+      "applicability": "对应阶段已启用的运行模式与能力",
+      "deliveries": [
+        {
+          "stage": "S0",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A27"
+      ],
+      "acceptance_scope": {},
+      "checks": [
+        "G-S0"
+      ],
+      "proposal_id": null
+    }
+  ],
+  "acceptances": [
+    {
+      "id": "A01",
+      "layers": "单元 + 柜台联调",
+      "stages": "S2（领域）、S5（柜台）",
+      "prerequisites": "能力表；今昨仓持仓夹具"
+    },
+    {
+      "id": "A02",
+      "layers": "恢复 + 柜台联调",
+      "stages": "S2、S5",
+      "prerequisites": "可控网关事件夹具；脱敏回报样本"
+    },
+    {
+      "id": "A03",
+      "layers": "恢复 + 柜台联调",
+      "stages": "S2、S5",
+      "prerequisites": "适配器返回语义配置；断线注入"
+    },
+    {
+      "id": "A04",
+      "layers": "恢复 + 回放 + 柜台联调",
+      "stages": "S2、S5",
+      "prerequisites": "SQLite 快照与事件；查询限流注入"
+    },
+    {
+      "id": "A05",
+      "layers": "单元 + 集成",
+      "stages": "S1（日历）、S3",
+      "prerequisites": "版本化日历；节假日公告样例"
+    },
+    {
+      "id": "A06",
+      "layers": "单元 + 集成",
+      "stages": "S2、S5",
+      "prerequisites": "Settlement 记录含修订版本；跨日手工账"
+    },
+    {
+      "id": "A07",
+      "layers": "单元",
+      "stages": "S1、S2",
+      "prerequisites": "规则历史表夹具；日内生效区间"
+    },
+    {
+      "id": "A08",
+      "layers": "单元 + 柜台联调",
+      "stages": "S2、S5（资金口径）",
+      "prerequisites": "账户资金使用规则版本；柜台可用资金查询脱敏样本"
+    },
+    {
+      "id": "A09",
+      "layers": "单元 + 柜台联调",
+      "stages": "S2、S5",
+      "prerequisites": "熔断状态夹具；限流注入"
+    },
+    {
+      "id": "A10",
+      "layers": "单元 + 集成",
+      "stages": "S4",
+      "prerequisites": "成对主力映射样本；价差样例"
+    },
+    {
+      "id": "A11",
+      "layers": "集成",
+      "stages": "S3",
+      "prerequisites": "工程样本 Bar；多订单夹具"
+    },
+    {
+      "id": "A12",
+      "layers": "集成 + 柜台联调",
+      "stages": "S3（合法性）、S5（柜台）、S7（排队）",
+      "prerequisites": "涨跌停边界；Tick 样本（S7）"
+    },
+    {
+      "id": "A13",
+      "layers": "集成",
+      "stages": "S7（精细延迟）",
+      "prerequisites": "稀疏 Tick 样本；延迟配置"
+    },
+    {
+      "id": "A14",
+      "layers": "恢复",
+      "stages": "S1（文件）、S5（交易状态）、S7（Tick 存储）",
+      "prerequisites": "存储故障注入"
+    },
+    {
+      "id": "A15",
+      "layers": "集成",
+      "stages": "S1（快照）、S3",
+      "prerequisites": "run_manifest；固定种子"
+    },
+    {
+      "id": "A16",
+      "layers": "单元 + 集成",
+      "stages": "S1、S3、S7",
+      "prerequisites": "质量校验夹具"
+    },
+    {
+      "id": "A17",
+      "layers": "集成",
+      "stages": "S3、S4",
+      "prerequisites": "样本划分配置；研究数据集（S4）"
+    },
+    {
+      "id": "A18",
+      "layers": "实时运行（时长）+ 历史回放 / 故障注入（场景）",
+      "stages": "S5（仿真时长）；S6（场景清单复用，独立时长见 FR-VAL-05）",
+      "prerequisites": "目标仿真环境、FR-VAL-10 运行报告；S6 场景证据单独登记"
+    },
+    {
+      "id": "A19",
+      "layers": "单元 + 集成",
+      "stages": "S2（实现）、S3（回测生效）",
+      "prerequisites": "限额规则版本"
+    },
+    {
+      "id": "A20",
+      "layers": "集成",
+      "stages": "S3",
+      "prerequisites": "触板成对样本；`limit_liquidity_scenario` 配置"
+    },
+    {
+      "id": "A21",
+      "layers": "集成",
+      "stages": "S3",
+      "prerequisites": "ExecutionReference；日夜盘价差样例"
+    },
+    {
+      "id": "A22",
+      "layers": "单元 + 柜台联调",
+      "stages": "S2（视图）、S5（解析器）",
+      "prerequisites": "样例结算单；跨日手工账"
+    },
+    {
+      "id": "A23",
+      "layers": "恢复 + 柜台联调",
+      "stages": "S2（代次逻辑）、S5",
+      "prerequisites": "多进程夹具；备份文件"
+    },
+    {
+      "id": "A24",
+      "layers": "实时运行",
+      "stages": "S6",
+      "prerequisites": "影子引擎、最小手数实盘；独立运行时长记录（FR-VAL-05）"
+    },
+    {
+      "id": "A25",
+      "layers": "单元 + 回放 + 柜台联调",
+      "stages": "S1、S3、S4、S5",
+      "prerequisites": "`tests/fixtures/sessions/`"
+    },
+    {
+      "id": "A26",
+      "layers": "恢复 + 柜台联调",
+      "stages": "S2、S5",
+      "prerequisites": "半结算查询样本；重启注入"
+    },
+    {
+      "id": "A27",
+      "layers": "柜台联调",
+      "stages": "S5",
+      "prerequisites": "采集组件；接入模式记录"
+    },
+    {
+      "id": "A28",
+      "layers": "回放",
+      "stages": "S3（Bar）、S7（Tick）",
+      "prerequisites": "固定版本历史行情；独立预期"
+    },
+    {
+      "id": "A29",
+      "layers": "单元",
+      "stages": "S1",
+      "prerequisites": "历史合约目录"
+    },
+    {
+      "id": "A25-01",
+      "layers": "单元 + 回放 + 柜台联调",
+      "stages": "S1、S3、S5",
+      "prerequisites": "Sessions 常规模板；能力表预埋项"
+    },
+    {
+      "id": "A25-02",
+      "layers": "单元 + 回放",
+      "stages": "S1、S3",
+      "prerequisites": "残留单夹具；三所与 CZCE 日盘模板"
+    },
+    {
+      "id": "A25-03",
+      "layers": "单元 + 回放（历史原文必备）",
+      "stages": "S1、S3",
+      "prerequisites": "原公告归档；旧新两版 Sessions"
+    },
+    {
+      "id": "A25-04",
+      "layers": "集成 + 回放",
+      "stages": "S3",
+      "prerequisites": "延迟配置；撤单拒绝事件"
+    },
+    {
+      "id": "A25-05",
+      "layers": "单元 + 集成",
+      "stages": "S1、S3、S4",
+      "prerequisites": "节假日公告归档"
+    },
+    {
+      "id": "A25-06",
+      "layers": "单元 + 回放（历史原文必备）",
+      "stages": "S1、S3、S4（仅启用中金所及相关历史范围）",
+      "prerequisites": "国债合约目录与细则"
+    },
+    {
+      "id": "A25-07",
+      "layers": "集成",
+      "stages": "S3",
+      "prerequisites": "ExecutionReference；降级配置"
+    }
+  ],
+  "checks": [
+    {
+      "id": "G-SCOPE",
+      "title": "运行配置与启用范围声明",
+      "stages": [
+        "S0"
+      ],
+      "source_anchor": "chapter-1"
+    },
+    {
+      "id": "G-S0",
+      "title": "前期准备与核验出口",
+      "stages": [
+        "S0"
+      ],
+      "source_anchor": "section-9-1"
+    },
+    {
+      "id": "G-S1",
+      "title": "未实现/未核验能力的显式禁用",
+      "stages": [
+        "S1"
+      ],
+      "source_anchor": "chapter-1"
+    },
+    {
+      "id": "G-ARCH",
+      "title": "分层禁止边与循环依赖",
+      "stages": [
+        "S1",
+        "S2"
+      ],
+      "source_anchor": "section-3-4"
+    },
+    {
+      "id": "G-OPS",
+      "title": "21 个脚本在启用阶段的职责、隔离与输出",
+      "stages": [
+        "S1",
+        "S3",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "source_anchor": "chapter-8"
+    },
+    {
+      "id": "G-CAPACITY",
+      "title": "代表性负载的资源、吞吐、尾延迟与恢复容量预算",
+      "stages": [
+        "S5"
+      ],
+      "source_anchor": "chapter-8"
+    }
+  ],
+  "stages": [
+    {
+      "id": "S0",
+      "name": "策略类别、接口与数据核验",
+      "exit_conditions": "09 文档清单全部项有状态（完成 / 缺口登记）；跨日盈亏手工账（4.4 样例）由独立人工计算完成；策略类别写入运行配置。",
+      "dependencies": "无（Day 0 工程基础动作先行，见 §10）"
+    },
+    {
+      "id": "S1",
+      "name": "数据契约、规则、日历与持久化（精简版）",
+      "exit_conditions": "A29；A25-01~07 日历 / 权限断言部分（已启用范围）；A16 质量校验部分；A07 计费单元部分；tests/architecture 依赖检查通过。",
+      "dependencies": "S0 的规则登记、数据覆盖清单、工程样本"
+    },
+    {
+      "id": "S2",
+      "name": "共享交易领域内核",
+      "exit_conditions": "A01、A02、A03、A04（领域层、可控网关事件）、A07、A08、A26（领域用例）；架构检查通过。",
+      "dependencies": "S1 规则库与日历查询端口"
+    },
+    {
+      "id": "S3",
+      "name": "单品种简化 Bar 回测与快速研究通道",
+      "exit_conditions": "A05、A11、A15、A16、A17、A19、A20、A21、A25（已启用范围）、A28（Bar 路径）。PROP-01 仅为待确认的内部里程碑建议，不替代本完整出口。",
+      "dependencies": "S2 内核；S1 ExecutionReference 与 Sessions"
+    },
+    {
+      "id": "S4",
+      "name": "多品种、移仓与节前处理",
+      "exit_conditions": "A10；A25 新增品种与历史范围；A17 多品种样本外报告。",
+      "dependencies": "S3 回测闭环；研究数据集到位"
+    },
+    {
+      "id": "S5",
+      "name": "CTP 仿真、恢复与看门狗联调",
+      "exit_conditions": "A02、A03、A04（柜台联调）、A06、A08（资金口径）、A09、A12（订单合法性）、A14（交易状态及所有已启用存储）、A18（FR-VAL-10 独立仿真时长与场景）、A22、A23、A25（当前能力）、A26、A27。",
+      "dependencies": "S2 内核；S0 能力表与仿真环境；期货公司联调窗口"
+    },
+    {
+      "id": "S6",
+      "name": "影子模式与最小手数实盘",
+      "exit_conditions": "首笔实盘门槛（08 §10）通过后，影子模式与最小手数并行实盘连续运行至少一个完整自然月；A24 通过，A18 场景证据补齐且类型分开，每日对账无未解释差异。S5 仿真时长不抵扣本阶段时长。",
+      "dependencies": "S5 全部出口；程序化交易报备完成"
+    },
+    {
+      "id": "S7",
+      "name": "扩大范围与精细撮合",
+      "exit_conditions": "扩大资金门槛（08 文档 §10）；启用 Tick 时 A12（排队）、A13、A14（Tick 存储）、A28（Tick 路径）。",
+      "dependencies": "S6 出口；策略类别扩展声明"
+    }
+  ],
+  "proposals": [
+    {
+      "id": "PROP-01",
+      "title": "S3a 内部里程碑，S3b 保留完整出口",
+      "requirement_id": "FR-SCOPE-06",
+      "product": "D-1",
+      "architecture": "无",
+      "plan": "§6",
+      "test": "无",
+      "operations": "无",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-02",
+      "title": "自然月下限之外增加真实换月/长假证据",
+      "requirement_id": "FR-VAL-09",
+      "product": "D-2",
+      "architecture": "无",
+      "plan": "S6（仅议题）",
+      "test": "X04",
+      "operations": "O02",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-03",
+      "title": "Strategy API 细化与组合层仓位分配归属",
+      "requirement_id": "FR-ORD-09",
+      "product": "D-3",
+      "architecture": "ADR-X5",
+      "plan": "无",
+      "test": "无",
+      "operations": "无",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-04",
+      "title": "门禁错过信号计数与成本报告",
+      "requirement_id": "FR-RISK-10",
+      "product": "D-4",
+      "architecture": "无",
+      "plan": "无",
+      "test": "X02",
+      "operations": "O01",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-05",
+      "title": "向量化与事件驱动分层一致性",
+      "requirement_id": "FR-VAL-08",
+      "product": "D-5",
+      "architecture": "ADR-X4",
+      "plan": "S3-08（待确认部分）",
+      "test": "X01",
+      "operations": "无",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-06",
+      "title": "进程、IPC 与回调汇入执行序列",
+      "requirement_id": "FR-REC-06",
+      "product": "D-6",
+      "architecture": "ADR-X1、ADR-X2",
+      "plan": "S5-13",
+      "test": "无",
+      "operations": "无",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-07",
+      "title": "时钟同步、偏差与单调耗时口径",
+      "requirement_id": "FR-CAL-13",
+      "product": "D-7",
+      "architecture": "ADR-X3",
+      "plan": "S5-13",
+      "test": "X03",
+      "operations": "O03",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-08",
+      "title": "强制减仓制度与新品种存活偏差",
+      "requirement_id": "FR-CON-08",
+      "product": "D-8",
+      "architecture": "无",
+      "plan": "无",
+      "test": "X05",
+      "operations": "O04",
+      "status": "pending"
+    },
+    {
+      "id": "PROP-09",
+      "title": "完整研究数据集是否成为 S0 硬出口",
+      "requirement_id": "FR-DATA-11",
+      "product": "D-13",
+      "architecture": "无",
+      "plan": "§5（采购依赖）",
+      "test": "无",
+      "operations": "09 §9",
+      "status": "pending"
+    }
+  ],
+  "fixture_files": [
+    "tests/fixtures/ledger_examples.json",
+    "tests/fixtures/order_event_examples.json",
+    "tests/fixtures/session_boundary_examples.json",
+    "tests/fixtures/price_domain_examples.json"
+  ]
+}

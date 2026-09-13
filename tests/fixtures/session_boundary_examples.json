@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "fixture_id": "session-boundary-examples",
+  "execution_status": "not_executed",
+  "evidence_status": "specification_only",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": [
+    "中国期货自动交易与回测工具构建规划.md#acceptance-a25"
+  ],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "合成权限区间左闭右开；UTC 00:59:00 对应 Asia/Shanghai 08:59:00，已进入不可撤阶段。撤单拒绝不终结原单或释放预占；随后唯一成交才更新数量。本样例不能充作历史制度或当前柜台证据。"
+  },
+  "cases": [
+    {
+      "id": "at_cutoff",
+      "acceptance_ids": [
+        "A25-04"
+      ],
+      "inputs": {
+        "sent_at": "2026-09-14T00:58:58Z",
+        "arrived_at": "2026-09-14T00:59:00Z",
+        "initial": {
+          "pos_td": 2,
+          "frozen_td": 2,
+          "order_status": "ACCEPTED"
+        },
+        "subsequent_events": [
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|auction-T1",
+            "quantity": 1
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|auction-T1",
+            "quantity": 1
+          }
+        ]
+      },
+      "expected": {
+        "arrival_phase": "AUCTION_MATCH",
+        "cancel_accepted": false,
+        "cancel_effective_at": null,
+        "after_cancel_reject": {
+          "pos_td": 2,
+          "frozen_td": 2,
+          "order_status": "ACCEPTED"
+        },
+        "after_trade_reports": {
+          "pos_td": 1,
+          "frozen_td": 1,
+          "order_status": "PARTIALLY_FILLED",
+          "unique_trade_postings": 1
+        }
+      }
+    },
+    {
+      "id": "after_cutoff",
+      "acceptance_ids": [
+        "A25-04"
+      ],
+      "inputs": {
+        "sent_at": "2026-09-14T00:58:58Z",
+        "arrived_at": "2026-09-14T00:59:01Z",
+        "initial": {
+          "pos_td": 2,
+          "frozen_td": 2,
+          "order_status": "ACCEPTED"
+        },
+        "subsequent_events": [
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|auction-T1",
+            "quantity": 1
+          },
+          {
+            "type": "trade",
+            "trade_key": "test-account|test-exchange|D1|auction-T1",
+            "quantity": 1
+          }
+        ]
+      },
+      "expected": {
+        "arrival_phase": "AUCTION_MATCH",
+        "cancel_accepted": false,
+        "cancel_effective_at": null,
+        "after_cancel_reject": {
+          "pos_td": 2,
+          "frozen_td": 2,
+          "order_status": "ACCEPTED"
+        },
+        "after_trade_reports": {
+          "pos_td": 1,
+          "frozen_td": 1,
+          "order_status": "PARTIALLY_FILLED",
+          "unique_trade_postings": 1
+        }
+      }
+    }
+  ],
+  "rule_fixture": {
+    "timezone": "Asia/Shanghai",
+    "instrument": "SYNTHETIC.FUTURE",
+    "windows": [
+      {
+        "start": "2026-09-14T00:55:00Z",
+        "end": "2026-09-14T00:59:00Z",
+        "phase": "AUCTION_SUBMIT",
+        "can_submit": true,
+        "can_cancel": true,
+        "can_match": false
+      },
+      {
+        "start": "2026-09-14T00:59:00Z",
+        "end": "2026-09-14T01:00:00Z",
+        "phase": "AUCTION_MATCH",
+        "can_submit": false,
+        "can_cancel": false,
+        "can_match": true
+      }
+    ]
+  }
+}
+

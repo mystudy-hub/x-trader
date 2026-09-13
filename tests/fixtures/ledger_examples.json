@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ledger-examples",
+  "execution_status": "not_executed",
+  "evidence_status": "specification_only",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": [
+    "中国期货自动交易与回测工具构建规划.md#section-4-4",
+    "中国期货自动交易与回测工具构建规划.md#section-9-2"
+  ],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "独立算式：结算 (110-100)*10=100；次日盯市 (108-110)*10=-20；逐笔 (108-100)*10=80；权益只增加80。费用 2*1.5 + 1000*10*2*0.0001=5。"
+  },
+  "cases": [
+    {
+      "id": "cross_day_pnl",
+      "acceptance_ids": [
+        "A06",
+        "A22"
+      ],
+      "inputs": {
+        "scope": "只断言盈亏与结算，保证金模型不在本样例断言范围",
+        "initial_cash": "1000.00",
+        "lots": 1,
+        "multiplier": "10",
+        "fee": "0",
+        "open_price": "100",
+        "settlement_price": "110",
+        "close_next_day": "108"
+      },
+      "expected": {
+        "day_one_settlement": "100.00",
+        "day_two_mtm_close_pnl": "-20.00",
+        "trade_close_pnl": "80.00",
+        "equity_change": "80.00",
+        "final_cash": "1080.00",
+        "final_position": 0,
+        "double_count_trade_pnl": false
+      }
+    },
+    {
+      "id": "mixed_commission",
+      "acceptance_ids": [
+        "A07"
+      ],
+      "inputs": {
+        "lots": 2,
+        "price": "1000",
+        "multiplier": "10",
+        "fee_per_lot": "1.5",
+        "fee_rate": "0.0001",
+        "currency_unit": "0.01"
+      },
+      "expected": {
+        "per_lot_component": "3.00",
+        "ad_valorem_component": "2.00",
+        "total_fee": "5.00"
+      }
+    }
+  ]
+}
+
