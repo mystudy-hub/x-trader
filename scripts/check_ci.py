@@ -8,8 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS = (
-    ("Architecture tests", ("-m", "pytest", "tests/architecture")),
-    ("Unit tests", ("-m", "pytest", "tests/unit")),
+    ("Architecture tests", ("-m", "pytest", "tests/architecture", "-q")),
+    ("Unit tests", ("-m", "pytest", "tests/unit", "-q")),
     ("Smoke check", ("scripts/smoke.py",)),
     ("Documentation validation", ("scripts/check_docs.py", "--check")),
 )

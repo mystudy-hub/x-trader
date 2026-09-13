@@ -1,64 +1,67 @@
-# ==============================================================================
-# QH-Trader 统一运行与策略配置模板 (settings.yaml.example)
-# 复制为 settings.yaml 并配置本地参数，注意：settings.yaml 已被 .gitignore 忽略，切勿提交！
-# 严格遵守规范：未声明策略类别的配置禁止进入模拟盘或实盘 (FR-SCOPE-02)
-# ==============================================================================
+# QH-Trader 配置模板；复制为 config/settings.yaml 后按 S0 清单填写。
+# 路径均相对于仓库根目录。示例金额和风控参数供工程开发使用，须在运行配置中确认。
 
 system:
-  # 运行模式: backtest (事件回测) | vector_scan (向量化扫描) | paper (模拟盘) | shadow (影子实盘) | live (真实实盘)
+  # backtest / vector_scan / paper / shadow / live / replay
   mode: "backtest"
   environment_id: "dev-windows-01"
   log_level: "INFO"
   log_dir: "runs/logs"
 
+accounting:
+  # research: 显式记录研究假设；exact: 缺关键数据或规则时中止。
+  mode: "research"
+
 strategy:
-  # 策略唯一标识
   name: "dual_thrust_trend"
   version: "0.1.0"
-  
-  # 策略类别声明 (必须显式声明，用于风控与执行模式适配: trend_following / mean_reversion / arbitrage / hft)
-  category: "trend_following"
-  
-  # 信号频率 (bar_daily / bar_hourly / bar_minute / tick)
+  # FR-SCOPE-02/03 的能力类别：low_frequency_cta / minute_intraday / tick。
+  category: "low_frequency_cta"
+  style: "trend_following"
+  # bar_daily / bar_hourly / bar_minute / tick
   signal_frequency: "bar_hourly"
-  
-  # 执行策略: NEXT_OPEN (次根Bar开盘价) | THIS_CLOSE (当根Bar收盘价) | TWAP | VWAP
-  execution_strategy: "NEXT_OPEN"
-  
-  # 价格数据粒度 (1d / 1h / 1m / tick)
+  # FR-EXEC-02；均须满足信号已可见、订单已生效及所需执行价格存在。
+  # NEXT_SESSION_OPEN: 下一可交易时段开盘。
+  # NEXT_DAY_SESSION_OPEN: 下一日盘开盘。
+  # NEXT_DAY_FIXED_TIME: 下一日盘收盘前固定时间。
+  # NEXT_BAR_OPEN: 下一可用 Bar 开盘。
+  execution_strategy: "NEXT_BAR_OPEN"
+  fixed_time_before_close_minutes: null  # 使用 NEXT_DAY_FIXED_TIME 时填写正数。
+  missed_execution: "defer"              # defer: 顺延；cancel: 取消本次信号。
+  # 信号频率不替代执行价格覆盖核验：1d / 1h / 1m / tick。
   data_granularity: "1h"
-  
-  # 目标合约池 (首版首个工程样本: 上期所螺纹钢 SHFE.rb)
   symbols:
-    - "SHFE.rb"
+    - "SHFE.rb"                         # 策略使用品种标识，成交映射到实际合约。
 
 risk:
-  # 硬风控约束参数
   account_id: "sim_account_01"
-  initial_capital: 1000000.0        # 初始资金
-  max_order_size: 10                # 单笔最大报单手数
-  max_position_per_symbol: 50       # 单品种最大持仓手数
-  max_order_cancellations_day: 400  # 日内报撤单次数上限 (防过度撤单与对倒嫌疑)
-  circuit_breaker_loss_pct: 0.05    # 日内回撤熔断阈值 (5%)
+  initial_capital: "1000000.00"          # 虚拟工程样例资金，金额用十进制字符串。
+  max_order_size: 10
+  max_position_per_symbol: 50
+  max_order_cancellations_day: null       # 核验账户规则、计数事件和窗口后配置。
+  circuit_breaker_loss_pct: "0.05"       # 示例阈值，回撤基准及现金流调整须明确。
+  drawdown_basis: null
+  allow_lock: null                       # D-10：S2 前按账户能力确定。
 
 data:
-  # 存储与历史数据路径
   storage_dir: "data_storage"
   parquet_compression: "ZSTD"
   use_memory_cache: true
+  engineering_sample:
+    contract: "SHFE.rb2410"
+    start_date: null                     # 样本期间、授权和数据覆盖在 S0 确认。
+    end_date: null
 
 storage:
-  # 事务日志与元数据
-  journal_db_path: "live/trading.db"
-  rules_db_path: "config/rule_sources/rules.db"
+  journal_db_path: "data_storage/live/trading.db"
+  rules_db_path: "data_storage/meta/control.db"
 
-# 柜台连接信息 (仅在 paper / shadow / live 模式生效)
-# 生产环境中凭证应通过环境变量注入 (如 CTP_PASSWORD, CTP_AUTHCODE)
+# 柜台接入信息由 S0 核验后填写；密码与 AuthCode 通过本地秘密配置或环境变量加载。
+# null 表示待核验，不能用占位值连接柜台。
 broker:
-  profile: "openctp_sim"            # 对应 config/broker_profiles/ 中的配置
-  front_trade_uri: "tcp://180.168.146.187:10130"
-  front_market_uri: "tcp://180.168.146.187:10131"
-  broker_id: "9999"
-  investor_id: "your_investor_id"
-  app_id: "simnow_client_test"
-  # 注意: 绝不在 example 中保留真实密码或 AuthCode
+  profile: null                         # 对应 config/broker_profiles/ 中的已核验配置。
+  front_trade_uri: null
+  front_market_uri: null
+  broker_id: null
+  investor_id: null
+  app_id: null

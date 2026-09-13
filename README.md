@@ -6,7 +6,7 @@
 
 ## 当前进度
 
-截至 2026-09-13，仓库已建立 **0.2 文档基线**，包含需求清单、架构与业务规则、开发与验收计划，以及文档一致性校验工具和规格夹具。交易内核实现、交易验收与柜台联调仍待开展，规格夹具的执行状态为 `not_executed`。
+截至 2026-09-13，仓库已建立 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。各项交付与验证依据见 [Day 0 验收记录](docs/06_开发计划.md#day0-acceptance)。下一阶段为 S0 前期核验；交易内核实现、交易验收与柜台联调仍待开展，规格夹具的执行状态为 `not_executed`。
 
 前期工作从 [09 前期准备与规则核验清单](docs/09_前期准备与规则核验清单.md) 开始，逐项登记核验结果与缺口；阶段安排和出口条件见 [06 开发计划](docs/06_开发计划.md)。已记录的修订与验证结果见 [10 文档变更记录](docs/10_文档变更记录.md)。
 
@@ -65,9 +65,18 @@ python scripts/check_docs.py --check
 
 ```powershell
 uv sync --locked --group dev
+uv run --no-sync python scripts/install_hooks.py
 uv run --no-sync python scripts/check_ci.py
 ```
 
 [统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke 和只读文档校验。各项检查都会执行，任一子检查失败时整体返回非零退出码。入口复用当前 Python 解释器，并固定在仓库根目录执行，便于本地与 CI 使用同一套检查。
 
+[安装脚本](scripts/install_hooks.py) 为当前仓库启用 [.githooks/pre-commit](.githooks/pre-commit)。每次 `git commit` 都由 [暂存区检查脚本](scripts/pre_commit.py) 导出准备提交的文件并运行统一检查；未暂存的修改会保留，不能遮盖暂存内容中的失败。被强制暂存的凭证或运行文件若匹配忽略规则，也会阻止提交。新克隆的仓库须运行一次安装命令；已有自定义 hooks 会保留并提示人工整合。使用其他虚拟环境时，可通过 `QH_TRADER_PYTHON` 指定 Python 可执行文件。
+
+执行 `uv run --no-sync python scripts/install_hooks.py --check` 可检查本地触发器是否已启用。本地提交检查满足 D0-6 的自动触发要求，GitHub 工作流继续提供托管检查。
+
 [GitHub Actions 工作流](.github/workflows/ci.yml) 在推送、PR 更新或手动触发时，使用 Windows runner 和固定的 uv 0.8.4 安装锁定依赖，然后运行同一入口。工作流随提交推送到 GitHub 后生效，结果在仓库 Actions 页面查看。Python 版本沿用 `.python-version`，其 CTP 兼容性仍按 S0 清单核验。
+
+## 提交规范
+
+`main` 为主分支。提交摘要采用 `type(scope): 摘要`，其中 scope 可省略；type 使用 `feat`、`fix`、`test`、`docs`、`refactor`、`chore` 或 `ci`。一次提交对应一个可解释的改动，复杂变更在提交说明中补充原因与验证结果。先暂存准备交付的文件，再由提交前检查验证这一份内容。

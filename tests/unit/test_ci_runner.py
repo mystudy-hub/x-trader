@@ -27,8 +27,8 @@ def test_success_runs_all_required_checks_with_the_current_interpreter(ci_runner
     assert ci_runner.main() == 0
     commands = [call.args[0] for call in run.call_args_list]
     assert commands == [
-        [ci_runner.sys.executable, "-m", "pytest", "tests/architecture"],
-        [ci_runner.sys.executable, "-m", "pytest", "tests/unit"],
+        [ci_runner.sys.executable, "-m", "pytest", "tests/architecture", "-q"],
+        [ci_runner.sys.executable, "-m", "pytest", "tests/unit", "-q"],
         [ci_runner.sys.executable, "scripts/smoke.py"],
         [ci_runner.sys.executable, "scripts/check_docs.py", "--check"],
     ]

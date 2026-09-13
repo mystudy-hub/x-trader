@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+if [ -n "${QH_TRADER_PYTHON:-}" ]; then
+    exec "$QH_TRADER_PYTHON" scripts/pre_commit.py
+elif [ -x .venv/Scripts/python.exe ]; then
+    exec .venv/Scripts/python.exe scripts/pre_commit.py
+elif [ -x .venv/bin/python ]; then
+    exec .venv/bin/python scripts/pre_commit.py
+fi
+printf '%s\n' 'Missing project Python. Run: uv sync --locked --group dev' >&2
+exit 1

@@ -33,6 +33,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+.ruff_cache/
 
 # AI and local credentials (CRITICAL: prevents leaking API keys/tokens)
 .claude/
@@ -58,6 +59,12 @@ runs/
 data_storage/
 live/
 meta/*.db
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 reports/
 *.html
 
@@ -66,5 +73,10 @@ config/settings.yaml
 !config/settings.yaml.example
 *credentials*
 *payload*.bin
+*payload*.json
+*system_info*.bin
+*system_info*.json
+terminal_payloads/
+config/*.local.yaml
+config/secrets*.yaml
 *.token
-
