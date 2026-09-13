@@ -54,3 +54,17 @@ Desktop.ini
 
 # Logs & Runtime data
 *.log
+runs/
+data_storage/
+live/
+meta/*.db
+reports/
+*.html
+
+# Configuration & Secrets (Keep .example files tracked)
+config/settings.yaml
+!config/settings.yaml.example
+*credentials*
+*payload*.bin
+*.token
+
