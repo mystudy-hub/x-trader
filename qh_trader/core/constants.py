@@ -112,3 +112,15 @@ class MissingRuleError(LookupError):
 
 class AmbiguousRuleError(LookupError):
     """规则或合约查询存在多个适用结果。"""
+
+
+class JournalConflictError(RuntimeError):
+    """事务与已提交的标识、游标或控制权冲突，调用方必须重新核对。"""
+
+
+class DuplicateFactError(JournalConflictError):
+    """带作用域的成交已经入账，本次事务未应用任何变更。"""
+
+
+class JournalCorruptionError(RuntimeError):
+    """已提交日志的校验和或数据契约不一致，不能继续发布状态。"""

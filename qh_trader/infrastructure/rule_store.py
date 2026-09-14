@@ -149,6 +149,10 @@ class RuleStore:
             raise RuntimeError("migrate before starting rule transactions")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            if self.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='journal_schema'"
+            ).fetchone():
+                raise ValueError("rule metadata and the trading journal must use separate databases")
             self.connection.execute(
                 "CREATE TABLE IF NOT EXISTS rule_store_schema ("
                 "singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL)"

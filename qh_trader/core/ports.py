@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from .constants import Exchange, MarketPhase, Offset, PriceType
-from .event import CanonicalEvent, JournalTransaction, TimerEvent
+from .event import CanonicalEvent, JournalSnapshot, JournalTransaction, TimerEvent
 from .objects import (
     AccountFunds,
     Bar,
@@ -34,6 +34,7 @@ from .objects import (
     Session,
     Tick,
     Trade,
+    TradeKey,
     VersionedValue,
 )
 
@@ -79,6 +80,9 @@ class JournalPort(Protocol):
     def snapshot(self, seq: int) -> None: ...
     def replay_from(self, seq: int) -> Iterator[CanonicalEvent]: ...
     def load_control_record(self) -> ControlRecord | None: ...
+    def load_checkpoint(self) -> JournalSnapshot: ...
+    def load_snapshot(self, seq: int | None = None) -> JournalSnapshot | None: ...
+    def contains_trade(self, key: TradeKey) -> bool: ...
 
 
 @runtime_checkable

@@ -148,3 +148,29 @@ class JournalTransaction:
         object.__setattr__(self, "events", events)
         object.__setattr__(self, "deduplication_keys", keys)
         object.__setattr__(self, "state_updates", freeze_payload(self.state_updates))
+
+
+@dataclass(frozen=True, slots=True)
+class JournalSnapshot:
+    account_id: str
+    journal_seq: int
+    cursor: int
+    state: Mapping[str, object]
+    deduplication_keys: frozenset[TradeKey]
+    control_record: ControlRecord | None
+
+    def __post_init__(self) -> None:
+        require_text(self.account_id, "account_id")
+        require_int(self.journal_seq, "journal_seq")
+        require_int(self.cursor, "cursor")
+        if not isinstance(self.state, Mapping):
+            raise TypeError("journal snapshot state must be a named mapping")
+        keys = frozenset(self.deduplication_keys)
+        if any(not isinstance(key, TradeKey) or key.account_id != self.account_id for key in keys):
+            raise ValueError("snapshot trade identities must match the account")
+        if self.control_record is not None and (
+            not isinstance(self.control_record, ControlRecord) or self.control_record.journal_seq > self.journal_seq
+        ):
+            raise ValueError("snapshot control record cannot be newer than its journal sequence")
+        object.__setattr__(self, "state", freeze_payload(self.state))
+        object.__setattr__(self, "deduplication_keys", keys)
