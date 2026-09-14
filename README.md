@@ -6,7 +6,7 @@
 
 ## 当前进度
 
-截至 2026-09-15，仓库维持 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。数据与规则整改、S1-08 交易日志已提交；**S1-09 结构化日志、脱敏和指标骨架已实现并通过专项测试**，接下来推进 S1-10 校验工具。实现与验收边界见 [S1 逐项记录](docs/06_开发计划.md#s1-09-implementation)。
+截至 2026-09-15，仓库维持 **0.2 文档基线，Day 0 八项工程基础要求已完成**。本轮补齐的 **S1-08 交易日志、S1-09 日志/脱敏/指标、S1-10 数据校验与缺口工具**均已实现并通过专项测试，按工作项单独提交。完整 S1 的真实数据与规则验收仍待资料齐备，见 [S1 逐项记录](docs/06_开发计划.md#s1-10-implementation)。
 
 新浪接口的 241 条日线和 1023 条小时线原始响应已归档，但均缺少成交额 `turnover`，其 Bar 边界、开盘语义、许可和规则证据仍待核验。完整 S0/S1 出口、S2 交易内核验收与柜台联调尚未通过，原有规格夹具仍为 `not_executed`。研究演示脚本的正确记账单元测试不替代正式交易验收。
 
@@ -109,6 +109,18 @@ uv run --no-sync python scripts/download_data.py --symbols SHFE.rb2410 --interva
 字段不完整、边界重叠、合约范围不符或缺少结算发布时间时拒绝发布。规范文件按内容哈希保存，`data_storage/manifests/` 保存不可变清单，`current.json` 是提交点；读者固定一个快照并校验哈希。旧 `manifest.json` 及无版本文件不会自动迁入此流程。
 
 发布合格数据后，`scripts/run_sample_backtest.py --catalog <实际目录文件> --snapshot <快照哈希>` 可运行研究演示。它通过 `MarketDataPort` 和虚拟时钟，在信号时刻之后的开盘观察成交，跟踪成本、已实现盈亏和费用，并输出成本及时间假设；保证金约束、正式逐日结算和 S2/S3 交易状态机仍须按计划实现。此前错误账务脚本产生的收益率不能沿用。
+
+## 独立数据校验与缺口报告
+
+`scripts/validate_data.py --raw <原始归档路径>` 检查响应/归档哈希和原始字段；`--raw` 模式不代表规范数据已通过。规范检查须提供 `--catalog`、`--calendar`、`--timings`；默认精确模式还要求 `--limits`、`--rules-db` 和 `--profile` 对应的实际边界、最终结算及唯一规则。执行价格默认检查下一 Bar 开盘，其他执行时点通过 `--execution-spec` 显式提供。`--mode research` 会列出假设和未校验项，不标为可用于精确模式。
+
+`scripts/gaps.py --calendar <日历路径> --start-day YYYY-MM-DD --end-day YYYY-MM-DD` 按实际 Sessions 扫描规范快照，排除休市和周末；无成交与断线只能由 `--evidence` 中带文件哈希的记录解释。它不生成缺失行情，也不把未知阶段当作休市。查看已登记的准备缺口可运行：
+
+```powershell
+uv run --no-sync python scripts/gaps.py --registry config/gaps.yaml
+```
+
+两项工具输出 JSON 报告，分别默认写入 `runs/validation/`、`runs/gaps/` 的内容哈希文件；失败范围另有隔离清单，源文件保持不变。任一必需检查失败或缺口未解决时退出码为 1。当前两份新浪归档的真实校验报告见 `config/data_coverage.yaml`，均因缺少成交额而未通过规范字段检查。
 
 ## 提交规范
 

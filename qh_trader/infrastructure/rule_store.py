@@ -6,6 +6,7 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
@@ -117,21 +118,32 @@ def _decode(kind: str, encoded: str) -> Any:
 class RuleStore:
     """A RuleStorePort adapter. File-backed schemas are migrated explicitly by the assembly entry point."""
 
-    def __init__(self, database: Path | str = ":memory:") -> None:
+    def __init__(self, database: Path | str = ":memory:", *, readonly: bool = False) -> None:
         in_memory = str(database) == ":memory:"
+        self.readonly = readonly
+        self._reading_snapshot = False
+        if readonly and in_memory:
+            raise ValueError("read-only rule queries require an existing database")
         if not in_memory:
             path = Path(database).resolve()
-            path.parent.mkdir(parents=True, exist_ok=True)
+            if readonly and not path.is_file():
+                raise FileNotFoundError("rule database does not exist")
+            if not readonly:
+                path.parent.mkdir(parents=True, exist_ok=True)
             database = path
-        self.connection = sqlite3.connect(database)
+        self.connection = (
+            sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) if readonly else sqlite3.connect(database)
+        )
         self.connection.row_factory = sqlite3.Row
-        mode = self.connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+        mode = self.connection.execute("PRAGMA journal_mode" if readonly else "PRAGMA journal_mode=WAL").fetchone()[0]
         if not in_memory and mode != "wal":
             self.connection.close()
             raise RuntimeError("rule database must support WAL")
         self.connection.execute("PRAGMA synchronous=FULL")
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.execute("PRAGMA busy_timeout=5000")
+        if readonly:
+            self.connection.execute("PRAGMA query_only=ON")
         if in_memory:
             self.migrate()
 
@@ -144,7 +156,23 @@ class RuleStore:
     def close(self) -> None:
         self.connection.close()
 
+    @contextmanager
+    def read_snapshot(self):
+        """Pin all validation queries to one consistent database read view."""
+        if self.connection.in_transaction:
+            raise RuntimeError("rule read snapshot must be entered outside another transaction")
+        self.connection.execute("BEGIN")
+        self._reading_snapshot = True
+        try:
+            self._require_schema()
+            yield self
+        finally:
+            self.connection.rollback()
+            self._reading_snapshot = False
+
     def migrate(self) -> None:
+        if self.readonly or self._reading_snapshot:
+            raise RuntimeError("read-only rule stores cannot migrate or register data")
         if self.connection.in_transaction:
             raise RuntimeError("migrate before starting rule transactions")
         self.connection.execute("BEGIN IMMEDIATE")
@@ -212,6 +240,8 @@ class RuleStore:
         effective_to: datetime | None,
         replaces: tuple[str, str] | None,
     ) -> None:
+        if self.readonly or self._reading_snapshot:
+            raise RuntimeError("read-only rule stores cannot register data")
         self._require_schema()
         wrapped = VersionedValue(
             value=value,

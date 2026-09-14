@@ -28,6 +28,9 @@ data_sources:
     raw_observation:
       path: data_storage/raw/8de6eb3b1c6be06ee508278a12849b2e2d13efdb609c6e6846b788ddc942931a.json
       sha256: 8de6eb3b1c6be06ee508278a12849b2e2d13efdb609c6e6846b788ddc942931a
+    quality_report:
+      path: runs/s1-10/daily/report-c8c3900979b24d2feaa559991742ed31a68a4ee65e6f63bbdee0670f02f76db2.json
+      sha256: c8c3900979b24d2feaa559991742ed31a68a4ee65e6f63bbdee0670f02f76db2
     notes: 2026-09-14 经 HTTPS 取得；有来源结算价字段，但发布时间和最终状态未核验，不能自动作为官方最终结算记录。
   - dataset_id: rb2410_1h_raw
     dataset_type: bar
@@ -51,6 +54,9 @@ data_sources:
     raw_observation:
       path: data_storage/raw/02be7961b2ceb4418a1b8792c4b61c47322e7c39ec52fd7b942d33d6eca6dd6b.json
       sha256: 02be7961b2ceb4418a1b8792c4b61c47322e7c39ec52fd7b942d33d6eca6dd6b
+    quality_report:
+      path: runs/s1-10/hourly/report-d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19.json
+      sha256: d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19
     notes: 2026-09-14 经 HTTPS 取得；旧规范文件存在 62 条周六交易日及 173 处区间重叠，保留原件并停止自动使用，待证据齐全后重新导入。
 data_source_template:
   source_id: null
