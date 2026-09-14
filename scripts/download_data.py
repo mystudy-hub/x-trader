@@ -1,0 +1,121 @@
+#!/usr/bin/env python
+"""Archive public source observations; publish canonical datasets only with complete import evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import logging
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+logger = logging.getLogger(__name__)
+
+
+def load_default_symbol() -> str:
+    import yaml
+
+    path = ROOT / "config/settings.yaml"
+    if not path.is_file():
+        path = ROOT / "config/settings.yaml.example"
+    data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    symbol = data.get("data", {}).get("engineering_sample", {}).get("contract")
+    if not symbol:
+        raise ValueError("declare the actual sample contract in configuration or --symbols")
+    return symbol
+
+
+def main(argv: list[str] | None = None) -> int:
+    from qh_trader.data.calendar import TradingCalendar
+    from qh_trader.data.contracts import ContractResolver
+    from qh_trader.data.downloader import FuturesDataDownloader, load_import_metadata
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--symbols")
+    parser.add_argument("--intervals", default="1d,1h")
+    parser.add_argument("--source", choices=["sina", "akshare"], default="sina")
+    parser.add_argument("--storage-dir", type=Path, default=Path("data_storage"))
+    parser.add_argument("--start-date")
+    parser.add_argument("--end-date")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--publish", action="store_true", help="publish after validating catalog, calendar and source timings"
+    )
+    mode.add_argument("--raw-only", action="store_true", help="archive observations only (the default)")
+    parser.add_argument("--catalog", type=Path)
+    parser.add_argument("--calendar", type=Path)
+    parser.add_argument("--timings", type=Path)
+    args = parser.parse_args(argv)
+    if args.publish and not all((args.catalog, args.calendar, args.timings)):
+        parser.error("--publish requires --catalog, --calendar and --timings")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    try:
+        symbols = [
+            value.strip()
+            for value in (args.symbols if args.symbols is not None else load_default_symbol()).split(",")
+            if value.strip()
+        ]
+        intervals = [value.strip() for value in args.intervals.split(",") if value.strip()]
+        if not symbols or not intervals:
+            raise ValueError("at least one contract and interval must be provided")
+        metadata = {}
+        for name in ("catalog", "calendar", "timings"):
+            path = getattr(args, name)
+            if path is not None:
+                path = path.resolve()
+                if not path.is_relative_to(ROOT):
+                    raise ValueError("import evidence files must be inside the repository")
+                metadata[name] = {
+                    "path": path.relative_to(ROOT).as_posix(),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+        timings, publications = load_import_metadata(args.timings) if args.timings is not None else ({}, {})
+        downloader = FuturesDataDownloader(
+            args.source,
+            ROOT / args.storage_dir,
+            resolver=ContractResolver.from_file(args.catalog) if args.catalog is not None else None,
+            calendar=TradingCalendar.from_file(args.calendar) if args.calendar is not None else None,
+            timings=timings,
+            publications=publications,
+            metadata_refs=metadata,
+        )
+    except (OSError, ValueError, KeyError, ImportError) as exc:
+        logger.error("数据接入未启动：%s", exc)
+        return 1
+    failures = 0
+    for symbol in symbols:
+        for interval in intervals:
+            try:
+                if args.publish:
+                    path, _, bars = downloader.download_bars(symbol, interval, args.start_date, args.end_date)
+                    logger.info("[%s %s] 已发布规范数据：%d 条，%s", symbol, interval, len(bars), path)
+                else:
+                    raw = downloader.download_raw(symbol, interval, args.start_date, args.end_date)
+                    if not raw.records:
+                        raise ValueError("source returned no observations")
+                    logger.info(
+                        "[%s %s] 原始行情已归档：%d 条，规范质量问题 %d 项，%s",
+                        symbol,
+                        interval,
+                        len(raw.records),
+                        len(raw.quality.issues),
+                        raw.path,
+                    )
+            except (OSError, ValueError, LookupError) as exc:
+                logger.error("[%s %s] 接入失败：%s", symbol, interval, exc)
+                failures += 1
+    if not args.publish:
+        logger.info("本次仅归档来源观察数据。规范发布需补齐字段、合约目录、日历及时间证据。")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+    raise SystemExit(main())

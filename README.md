@@ -6,13 +6,13 @@
 
 ## 当前进度
 
-截至 2026-09-14，仓库维持 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。S1-01 已实现核心值对象、事件、虚拟时钟和七类端口协议，交付边界见 [S1-01 实现记录](docs/06_开发计划.md#s1-01-implementation)。下一工作项为 S1-02 Schema 与质量校验。
+截至 2026-09-14，仓库维持 **0.2 文档基线，Day 0 八项工程基础要求已完成**，本地提交前自动检查已启用。S1-01 核心契约已实现；数据接入原型已完成本轮整改，覆盖严格 Schema、显式合约/日历查询、版本化发布、可见性回放及规则查询和计费。实现与验收边界见 [S1 整改记录](docs/06_开发计划.md#s1-data-remediation)。
 
-S0 的配置登记和检查工具已修复，真实工程样本、规则原件和数据采购仍待补齐；当前按用户指示先推进仅依赖 Day 0 的 S1-01。完整 S0/S1 出口、交易内核验收和柜台联调尚未通过，原有规格夹具仍为 `not_executed`。
+新浪接口的 241 条日线和 1023 条小时线原始响应已归档，但均缺少成交额 `turnover`，其 Bar 边界、开盘语义、许可和规则证据仍待核验。完整 S0/S1 出口、S2 交易内核验收与柜台联调尚未通过，原有规格夹具仍为 `not_executed`。研究演示脚本的正确记账单元测试不替代正式交易验收。
 
 前期工作从 [09 前期准备与规则核验清单](docs/09_前期准备与规则核验清单.md) 开始，逐项登记核验结果与缺口；阶段安排和出口条件见 [06 开发计划](docs/06_开发计划.md)。已记录的修订与验证结果见 [10 文档变更记录](docs/10_文档变更记录.md)。
 
-材料内容与保存约定见 [09 §6](docs/09_前期准备与规则核验清单.md#6-工程样本与研究数据集)。当前 [数据覆盖清单](config/data_coverage.yaml) 的实际供应商和样本文件列表为空；规则模板、合成示例和 SDK 归档均不能替代真实行情及适用公告。
+材料内容与保存约定见 [09 §6](docs/09_前期准备与规则核验清单.md#6-工程样本与研究数据集)。[数据覆盖清单](config/data_coverage.yaml) 已登记原始响应路径、哈希、覆盖范围及缺项；规范工程样本的 `artifacts` 仍待补齐。旧版 Parquet 文件保留在本地，新读取路径只接受已经提交的版本清单。
 
 ## 文档入口
 
@@ -73,7 +73,7 @@ uv run --no-sync python scripts/install_hooks.py
 uv run --no-sync python scripts/check_ci.py
 ```
 
-[统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke 和只读文档校验。各项检查都会执行，任一子检查失败时整体返回非零退出码。入口复用当前 Python 解释器，并固定在仓库根目录执行，便于本地与 CI 使用同一套检查。
+[统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke、只读文档校验，以及覆盖源码和测试的 Ruff 语法/未定义名称检查。各项检查都会执行，任一子检查失败时整体返回非零退出码。入口复用当前 Python 解释器，并固定在仓库根目录执行，便于本地与 CI 使用同一套检查。
 
 [安装脚本](scripts/install_hooks.py) 为当前仓库启用 [.githooks/pre-commit](.githooks/pre-commit)。每次 `git commit` 都由 [暂存区检查脚本](scripts/pre_commit.py) 导出准备提交的文件并运行统一检查；未暂存的修改会保留，不能遮盖暂存内容中的失败。被强制暂存的凭证或运行文件若匹配忽略规则，也会阻止提交。新克隆的仓库须运行一次安装命令；已有自定义 hooks 会保留并提示人工整合。使用其他虚拟环境时，可通过 `QH_TRADER_PYTHON` 指定 Python 可执行文件。
 
@@ -89,6 +89,24 @@ uv run --no-sync python scripts/check_s0_exit.py --json
 ```
 
 环境报告写入 `runs/s0/environment.json`，只执行离线依赖、文件级 SQLite 参数和 SDK 归档检查。出口检查区分已验证、允许登记的缺口、待完成和无效证据；尚无真实样本时返回非零是预期结果，不影响独立核心模块的单元测试。
+
+## 数据接入与研究演示
+
+默认只归档原始观察数据，包含响应内容、采集时间及 SHA-256；PowerShell 中的周期列表须加引号：
+
+```powershell
+uv run --no-sync python scripts/download_data.py --symbols SHFE.rb2410 --intervals "1d,1h" --raw-only
+```
+
+规范发布需要准备实际的合约目录、日历和来源时间元数据 JSON，格式见 [09 导入资料约定](docs/09_前期准备与规则核验清单.md#canonical-import-evidence)。例如准备好这些文件后运行：
+
+```powershell
+uv run --no-sync python scripts/download_data.py --symbols SHFE.rb2410 --intervals "1d" --publish --catalog config/contracts.actual.json --calendar config/calendar.actual.json --timings config/import_timings.actual.json
+```
+
+字段不完整、边界重叠、合约范围不符或缺少结算发布时间时拒绝发布。规范文件按内容哈希保存，`data_storage/manifests/` 保存不可变清单，`current.json` 是提交点；读者固定一个快照并校验哈希。旧 `manifest.json` 及无版本文件不会自动迁入此流程。
+
+发布合格数据后，`scripts/run_sample_backtest.py --catalog <实际目录文件> --snapshot <快照哈希>` 可运行研究演示。它通过 `MarketDataPort` 和虚拟时钟，在信号时刻之后的开盘观察成交，跟踪成本、已实现盈亏和费用，并输出成本及时间假设；保证金约束、正式逐日结算和 S2/S3 交易状态机仍须按计划实现。此前错误账务脚本产生的收益率不能沿用。
 
 ## 提交规范
 

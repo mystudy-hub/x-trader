@@ -1,4 +1,4 @@
-"""Run architecture tests, unit tests, smoke checks, and documentation validation."""
+"""Run architecture, unit, smoke, documentation and Python syntax/name checks."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ CHECKS = (
     ("Unit tests", ("-m", "pytest", "tests/unit", "-q")),
     ("Smoke check", ("scripts/smoke.py",)),
     ("Documentation validation", ("scripts/check_docs.py", "--check")),
+    ("Python syntax and names", ("-m", "ruff", "check", "--select", "E9,F63,F7,F82", "qh_trader", "scripts", "tests")),
 )
 
 

@@ -20,6 +20,7 @@ from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPENDENCIES = {
+    "akshare": "akshare",
     "polars": "polars",
     "pandas": "pandas",
     "pyarrow": "pyarrow",

@@ -29,7 +29,7 @@ gaps:
 - gap_id: GAP-S0-02
   related_requirements:
   - FR-DATA-10
-  item: 工程样本数据采购
+  item: 工程样本取得与规范核验
   gap_type: 数据不可得
   affected_scope:
     contracts:
@@ -40,12 +40,14 @@ gaps:
     - 涨跌停价
     - 成交量
     - 持仓量
+    - 成交额
+    - Bar 边界与开盘语义
     time_range: SHFE.rb2410 实际挂牌区间内的样本期间待确定
   current_handling: 阻断验收
-  handling_details: 已确定首个工程样本为 SHFE.rb2410，数据供应商和授权待确定
+  handling_details: 已取得新浪 rb2410 原始日线 241 条、小时线 1023 条并保存响应哈希；两者均缺 turnover，许可、时间边界、结算发布时间及配套规则待核验。旧派生文件保留但不作为规范数据默认读取。
   registered_at: '2026-09-13'
   registered_by: 开发团队
-  close_condition: 采购数据并验证字段完整性、时间范围覆盖、执行价格可用
+  close_condition: 补齐数据字段和许可，依据合约目录与版本化日历核验实际边界及执行价格，再发布规范工程样本和绑定哈希的核验记录
   status: 未关闭
   closed_at: null
   notes: 阻塞 S0 工程样本出口、S1-06 和 S3 的相关验收；不把文件模板当成数据到位。

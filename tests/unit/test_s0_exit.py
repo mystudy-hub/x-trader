@@ -159,7 +159,7 @@ def ready_case(tmp_path, module):
         "required_dependencies_ok": True,
         "dependencies": {
             name: {"status": "OK", "version": locked_versions[name]}
-            for name in ("polars", "pandas", "pyarrow", "numpy", "pydantic", "pyyaml", "structlog", "duckdb")
+            for name in ("akshare", "polars", "pandas", "pyarrow", "numpy", "pydantic", "pyyaml", "structlog", "duckdb")
         },
         "sqlite": {
             "passed": True,

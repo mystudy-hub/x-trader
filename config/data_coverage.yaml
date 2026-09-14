@@ -2,7 +2,56 @@
 schema_version: 1
 gap_ids:
 - GAP-S0-02
-data_sources: []
+data_sources:
+- source_id: sina_futures
+  source_name: 新浪财经公开行情（已取得原始响应，规范字段及许可待核验）
+  datasets:
+  - dataset_id: rb2410_1d_raw
+    dataset_type: bar
+    period: 1d
+    available_fields: [date, open, high, low, close, volume, open_interest, settlement_price]
+    missing_fields: [turnover]
+    time_range:
+      start_date: '2023-10-17'
+      end_date: '2024-10-15'
+    record_count: 241
+    update_delay: 待核验
+    historical_revision: 待核验
+    license: {scope: null, local_storage: null}
+    open_semantic: 待核验夜盘、日盘与竞价归属
+    auction_inclusion: null
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02, GAP-S0-04]
+    raw_observation:
+      path: data_storage/raw/8de6eb3b1c6be06ee508278a12849b2e2d13efdb609c6e6846b788ddc942931a.json
+      sha256: 8de6eb3b1c6be06ee508278a12849b2e2d13efdb609c6e6846b788ddc942931a
+    notes: 2026-09-14 经 HTTPS 取得；有来源结算价字段，但发布时间和最终状态未核验，不能自动作为官方最终结算记录。
+  - dataset_id: rb2410_1h_raw
+    dataset_type: bar
+    period: 1h
+    available_fields: [datetime, open, high, low, close, volume, open_interest]
+    missing_fields: [turnover]
+    time_range:
+      start_date: '2024-01-22'
+      end_date: '2024-10-15'
+    record_count: 1023
+    update_delay: 待核验
+    historical_revision: 待核验
+    license: {scope: null, local_storage: null}
+    open_semantic: 待核验跨小休、午休及收盘短 Bar 的实际边界
+    auction_inclusion: null
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02, GAP-S0-04]
+    raw_observation:
+      path: data_storage/raw/02be7961b2ceb4418a1b8792c4b61c47322e7c39ec52fd7b942d33d6eca6dd6b.json
+      sha256: 02be7961b2ceb4418a1b8792c4b61c47322e7c39ec52fd7b942d33d6eca6dd6b
+    notes: 2026-09-14 经 HTTPS 取得；旧规范文件存在 62 条周六交易日及 173 处区间重叠，保留原件并停止自动使用，待证据齐全后重新导入。
 data_source_template:
   source_id: null
   source_name: null
@@ -105,6 +154,7 @@ engineering_sample:
   - sessions
   - rules
   artifacts: {}
+  notes: 原始行情已取得并登记在 data_sources；当前尚无通过字段、时间及规则核验的完整规范工程样本。
   artifact_template:
     path: null
     sha256: null

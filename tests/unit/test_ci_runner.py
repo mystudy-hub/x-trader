@@ -31,20 +31,21 @@ def test_success_runs_all_required_checks_with_the_current_interpreter(ci_runner
         [ci_runner.sys.executable, "-m", "pytest", "tests/unit", "-q"],
         [ci_runner.sys.executable, "scripts/smoke.py"],
         [ci_runner.sys.executable, "scripts/check_docs.py", "--check"],
+        [ci_runner.sys.executable, "-m", "ruff", "check", "--select", "E9,F63,F7,F82", "qh_trader", "scripts", "tests"],
     ]
     assert all(call.kwargs["cwd"] == ROOT for call in run.call_args_list)
     assert "PASS: All CI checks passed." in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("failed_check", range(4))
+@pytest.mark.parametrize("failed_check", range(5))
 def test_any_failed_check_fails_the_run_without_skipping_other_checks(ci_runner, monkeypatch, capsys, failed_check):
-    statuses = [0, 0, 0, 0]
+    statuses = [0, 0, 0, 0, 0]
     statuses[failed_check] = 5
     run = Mock(side_effect=[subprocess.CompletedProcess([], status) for status in statuses])
     monkeypatch.setattr(ci_runner.subprocess, "run", run)
 
     assert ci_runner.main() == 1
-    assert run.call_count == 4
+    assert run.call_count == 5
     output = capsys.readouterr()
     assert "PASS: All CI checks passed." not in output.out
     assert f"FAIL: {ci_runner.CHECKS[failed_check][0]} (exit 5)" in output.err

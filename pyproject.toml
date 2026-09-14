@@ -5,6 +5,7 @@ description = "Chinese Futures Trading, Backtesting, and Research Platform"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "akshare>=1.15.0",
     "duckdb>=1.0.0",
     "numpy>=1.26.0",
     "pandas>=2.2.0",

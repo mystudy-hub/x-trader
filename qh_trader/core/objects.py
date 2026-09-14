@@ -26,6 +26,19 @@ from .constants import (
     Side,
 )
 
+ROUNDING_MODES = frozenset(
+    {
+        "ROUND_05UP",
+        "ROUND_CEILING",
+        "ROUND_DOWN",
+        "ROUND_FLOOR",
+        "ROUND_HALF_DOWN",
+        "ROUND_HALF_EVEN",
+        "ROUND_HALF_UP",
+        "ROUND_UP",
+    }
+)
+
 T = TypeVar("T")
 
 
@@ -616,6 +629,8 @@ class CommissionRule:
         if self.currency_unit <= 0:
             raise ValueError("currency_unit must be positive")
         require_text(self.rounding, "rounding")
+        if self.rounding not in ROUNDING_MODES:
+            raise ValueError("rounding must name an explicit Decimal rounding mode")
 
 
 @dataclass(frozen=True, slots=True)
