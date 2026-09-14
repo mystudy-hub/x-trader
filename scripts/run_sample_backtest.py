@@ -72,8 +72,44 @@ def run_trend_backtest(
     return result
 
 
-def main(argv: list[str] | None = None) -> int:
+def _run(args: argparse.Namespace, metrics) -> int:
     from qh_trader.data.contracts import ContractResolver
+    from qh_trader.infrastructure.observability import log_context
+
+    try:
+        with metrics.timer("research.run_seconds"):
+            result = run_trend_backtest(
+                args.symbol,
+                args.interval,
+                args.storage_dir,
+                catalog=ContractResolver.from_file(args.catalog),
+                snapshot_id=args.snapshot,
+                fee_per_lot=args.fee_per_lot,
+            )
+    except (ValueError, OSError, LookupError) as exc:
+        metrics.increment("research.runs", labels={"result": "failed"})
+        logger.error("样本研究演示未执行：%s", exc)
+        return 1
+    metrics.increment("research.runs", labels={"result": "success"})
+    metrics.increment("research.fills", result["trades_count"])
+    with log_context(rule_version=result["catalog_version"], instrument_id=args.symbol):
+        logger.info(
+            "研究原型演示完成（不作为 S2/S3 交易验收）",
+            extra={
+                "snapshot_id": result["snapshot_id"],
+                "assumptions": result["assumptions"],
+                "data_provenance": result["data_provenance"],
+                "final_equity": result["final_equity"],
+                "return_pct": result["total_return_pct"],
+                "drawdown_pct": result["max_drawdown_pct"],
+                "trades_count": result["trades_count"],
+            },
+        )
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    from qh_trader.infrastructure.observability import MetricsRegistry, configure_logging
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", default="SHFE.rb2410")
@@ -82,32 +118,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--snapshot")
     parser.add_argument("--fee-per-lot", type=Decimal, default=Decimal("5"))
+    parser.add_argument("--log-file", type=Path)
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        result = run_trend_backtest(
-            args.symbol,
-            args.interval,
-            args.storage_dir,
-            catalog=ContractResolver.from_file(args.catalog),
-            snapshot_id=args.snapshot,
-            fee_per_lot=args.fee_per_lot,
-        )
-    except (ValueError, OSError, LookupError) as exc:
-        logger.error("样本研究演示未执行：%s", exc)
+        with configure_logging(
+            file=args.log_file,
+            path_root=ROOT,
+            context={"component": "sample_backtest", "account_alias": "research", "strategy_id": "ma-demo"},
+        ):
+            metrics = MetricsRegistry()
+            status = _run(args, metrics)
+            logger.info("研究运行指标", extra={"metrics": metrics.snapshot()})
+            return status
+    except OSError:
+        print("结构化日志不可用，本次命令失败。", file=sys.stderr)
         return 1
-    logger.info("研究原型演示（不作为 S2/S3 交易验收）")
-    logger.info("数据快照：%s", result["snapshot_id"])
-    logger.info("成本及撮合假设：%s", result["assumptions"])
-    logger.info("数据来源与时间假设：%s", result["data_provenance"])
-    logger.info(
-        "期末权益：%s；收益率：%.4f%%；最大回撤：%.4f%%；成交事件：%s",
-        result["final_equity"],
-        result["total_return_pct"],
-        result["max_drawdown_pct"],
-        result["trades_count"],
-    )
-    return 0
 
 
 if __name__ == "__main__":
