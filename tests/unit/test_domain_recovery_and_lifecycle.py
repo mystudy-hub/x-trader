@@ -92,3 +92,11 @@ def test_daily_lifecycle_semi_settlement_protection():
     lifecycle.on_settlement_confirmed(date(2024, 9, 9))
     assert lifecycle.phase == LifecyclePhase.SETTLED
     assert lifecycle.is_settlement_complete is True
+
+    # 推进到新交易日 (D12 修复验证: 必须清除 semi_settled_warning)
+    lifecycle.advance_trading_day(date(2024, 9, 10))
+    assert lifecycle.phase == LifecyclePhase.INITIALIZING
+    assert lifecycle.semi_settled_warning is False
+    lifecycle.on_reconciliation_passed()
+    lifecycle.on_market_open()
+    assert lifecycle.can_accept_new_risk() is True

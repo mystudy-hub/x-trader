@@ -242,7 +242,7 @@ def test_complete_explicit_inputs_can_pass_exact_checks(
         )
     assert report.passed, report.issues
     assert report.as_dict()["ready_for_exact"]
-    assert len(report.summary["rule_versions_used"]) == 5
+    assert len(report.summary["rule_versions_used"]) == 2 + len(Offset)
 
 
 def test_missing_execution_is_an_error_even_in_research_mode(

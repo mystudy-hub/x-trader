@@ -24,6 +24,7 @@ class PositionSide(StrEnum):
 
 class Offset(StrEnum):
     OPEN = "OPEN"
+    CLOSE = "CLOSE"
     CLOSE_TODAY = "CLOSE_TODAY"
     CLOSE_YESTERDAY = "CLOSE_YESTERDAY"
 

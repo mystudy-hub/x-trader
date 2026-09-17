@@ -221,8 +221,14 @@ class Order:
         self.send_state = SendState.CONFIRMED_REMOTE
         self.reconciliation_required = False
 
-        # 累计成交量只增不减
-        if update.filled_quantity > self.cum_filled_qty:
+        # 累计成交量只增不减 (防御性上界校验, D2)
+        if update.filled_quantity > self.quantity:
+            self.reconciliation_required = True
+            self.reconciliation_reason = (
+                f"remote filled_quantity ({update.filled_quantity}) exceeds quantity ({self.quantity})"
+            )
+            self.cum_filled_qty = self.quantity
+        elif update.filled_quantity > self.cum_filled_qty:
             self.cum_filled_qty = update.filled_quantity
 
         # 状态机流转 (防倒退规则: 终态不能倒退回活动状态)
@@ -248,6 +254,12 @@ class Order:
             raise ValueError(f"trade side mismatch: {trade.side} != {self.side}")
 
         self.trades.append(trade)
+        if self.accounted_filled_qty + trade.quantity > self.quantity:
+            self.reconciliation_required = True
+            self.reconciliation_reason = (
+                f"trade fill exceeds order quantity: current={self.accounted_filled_qty}, "
+                f"trade={trade.quantity}, total={self.quantity}"
+            )
         self.accounted_filled_qty += trade.quantity
         if self.accounted_filled_qty > self.cum_filled_qty:
             self.cum_filled_qty = self.accounted_filled_qty

@@ -82,6 +82,7 @@ class DailyLifecycleManager:
         # 若未完成结算就尝试推进交易日，保持门禁阻止直接交易
         self.current_trading_day = new_trading_day
         self.is_settlement_complete = False
+        self.semi_settled_warning = False
         self.phase = LifecyclePhase.INITIALIZING
 
     def can_accept_new_risk(self) -> bool:

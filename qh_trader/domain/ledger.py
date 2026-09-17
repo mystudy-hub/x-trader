@@ -80,6 +80,14 @@ class InstrumentLedger:
 
         self.closed_records: list[ClosedTradeRecord] = []
 
+    @property
+    def open_long_lots(self) -> tuple[PositionLot, ...]:
+        return tuple(self._long_lots)
+
+    @property
+    def open_short_lots(self) -> tuple[PositionLot, ...]:
+        return tuple(self._short_lots)
+
     def add_open_lot(self, trade: Trade) -> None:
         lot = PositionLot(
             trade_id=trade.trade_id,
@@ -332,8 +340,14 @@ class AccountLedger:
             # 多头结算:
             # 今仓: (settle - open_price)
             if pos_long.pos_td > 0:
-                for lot in ledger._long_lots:
-                    pnl = (settle_price - lot.price) * Decimal(lot.quantity) * mult
+                if ledger.open_long_lots:
+                    for lot in ledger.open_long_lots:
+                        pnl = (settle_price - lot.price) * Decimal(lot.quantity) * mult
+                        day_settlement_pnl += pnl
+                else:
+                    # 极端恢复场景兜底: 若无批次则使用基准价计算
+                    ref = ledger.pre_settlement_price or settle_price
+                    pnl = (settle_price - ref) * Decimal(pos_long.pos_td) * mult
                     day_settlement_pnl += pnl
 
             # 昨仓: (settle - pre_settle)
@@ -344,8 +358,13 @@ class AccountLedger:
 
             # 空头结算:
             if pos_short.pos_td > 0:
-                for lot in ledger._short_lots:
-                    pnl = (lot.price - settle_price) * Decimal(lot.quantity) * mult
+                if ledger.open_short_lots:
+                    for lot in ledger.open_short_lots:
+                        pnl = (lot.price - settle_price) * Decimal(lot.quantity) * mult
+                        day_settlement_pnl += pnl
+                else:
+                    ref = ledger.pre_settlement_price or settle_price
+                    pnl = (ref - settle_price) * Decimal(pos_short.pos_td) * mult
                     day_settlement_pnl += pnl
 
             if pos_short.pos_yd > 0:

@@ -138,17 +138,22 @@ class PositionDetail:
             if self.pos_td < quantity:
                 raise ValueError(f"cannot close more today position than exists: pos_td={self.pos_td}, fill={quantity}")
             self.pos_td -= quantity
-            # 扣减对应冻结
-            consumed = frozen_td_consumed if frozen_td_consumed > 0 else min(self.frozen_td, quantity)
-            self.frozen_td = max(0, self.frozen_td - consumed)
+            consumed_td = frozen_td_consumed if frozen_td_consumed > 0 else min(self.frozen_td, quantity)
+            self.frozen_td = max(0, self.frozen_td - consumed_td)
+            remaining = quantity - consumed_td
+            if remaining > 0 and (frozen_yd_consumed > 0 or self.frozen_td == 0):
+                self.frozen_yd = max(0, self.frozen_yd - min(self.frozen_yd, remaining))
         elif offset == Offset.CLOSE_YESTERDAY:
             if self.pos_yd < quantity:
                 raise ValueError(
                     f"cannot close more yesterday position than exists: pos_yd={self.pos_yd}, fill={quantity}"
                 )
             self.pos_yd -= quantity
-            consumed = frozen_yd_consumed if frozen_yd_consumed > 0 else min(self.frozen_yd, quantity)
-            self.frozen_yd = max(0, self.frozen_yd - consumed)
+            consumed_yd = frozen_yd_consumed if frozen_yd_consumed > 0 else min(self.frozen_yd, quantity)
+            self.frozen_yd = max(0, self.frozen_yd - consumed_yd)
+            remaining = quantity - consumed_yd
+            if remaining > 0 and (frozen_td_consumed > 0 or self.frozen_yd == 0):
+                self.frozen_td = max(0, self.frozen_td - min(self.frozen_td, remaining))
         else:
             raise ValueError(f"unsupported fill offset: {offset}")
 
@@ -297,21 +302,24 @@ class PositionManager:
             res = self._reservations.get(client_order_id)
 
         if res is not None and trade.offset != Offset.OPEN:
-            # 消耗预占中的冻结
+            # 消耗预占中的冻结 (支持跨桶补扣，避免幽灵冻结)
             qty = trade.quantity
             res.accounted_fill_qty += qty
             if res.offset == Offset.CLOSE_TODAY:
                 f_td_consumed = min(res.frozen_td, qty)
-                res.frozen_td -= f_td_consumed
+                rem = qty - f_td_consumed
+                f_yd_consumed = min(res.frozen_yd, rem)
             elif res.offset == Offset.CLOSE_YESTERDAY:
                 f_yd_consumed = min(res.frozen_yd, qty)
-                res.frozen_yd -= f_yd_consumed
+                rem = qty - f_yd_consumed
+                f_td_consumed = min(res.frozen_td, rem)
             else:
                 f_yd_consumed = min(res.frozen_yd, qty)
                 rem = qty - f_yd_consumed
                 f_td_consumed = min(res.frozen_td, rem)
-                res.frozen_yd -= f_yd_consumed
-                res.frozen_td -= f_td_consumed
+
+            res.frozen_yd -= f_yd_consumed
+            res.frozen_td -= f_td_consumed
 
             if res.accounted_fill_qty >= res.quantity and res.frozen_yd == 0 and res.frozen_td == 0:
                 self._reservations.pop(client_order_id, None)
