@@ -58,6 +58,35 @@ data_sources:
       path: runs/s1-10/hourly/report-d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19.json
       sha256: d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19
     notes: 2026-09-14 经 HTTPS 取得；旧规范文件存在 62 条周六交易日及 173 处区间重叠，保留原件并停止自动使用，待证据齐全后重新导入。
+- source_id: tushare
+  source_name: Tushare Pro 期货官方数据源（真实成交额与结算价，日历与时间证据齐备）
+  datasets:
+  - dataset_id: rb2410_1d_canonical
+    dataset_type: bar
+    period: 1d
+    available_fields: [date, open, high, low, close, volume, turnover, open_interest, settlement_price, pre_settlement_price]
+    missing_fields: []
+    time_range:
+      start_date: '2023-10-17'
+      end_date: '2024-10-15'
+    record_count: 241
+    update_delay: 日终结算后
+    historical_revision: 无
+    license: {scope: 学术与自营回测研究, local_storage: true}
+    open_semantic: 交易所官方日线（含集合竞价与夜日盘）
+    auction_inclusion: true
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02]
+    raw_observation:
+      path: data_storage/raw/651bf3b3a45494c2157340a3ae15ee4068a36cf1dadcd4b10402500a646155c4.json
+      sha256: 651bf3b3a45494c2157340a3ae15ee4068a36cf1dadcd4b10402500a646155c4
+    quality_report:
+      path: runs/sample_validation/report-b5102633145f63acacc2ef1cc05427d9dd98bd97c979af427af2132d4532fcec.json
+      sha256: b5102633145f63acacc2ef1cc05427d9dd98bd97c979af427af2132d4532fcec
+    notes: 2026-09-17 经 Tushare Pro 官方接口取得；完整包含 turnover 与结算价，经 validate_data.py 校验通过并原子发布至不可变 Parquet。
 data_source_template:
   source_id: null
   source_name: null

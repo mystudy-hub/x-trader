@@ -65,3 +65,18 @@ def test_get_spec_returns_supplied_dates_not_estimated_fifteenth(sample_catalog)
         sample_catalog.get_spec("SHFE.rb2410", as_of=date(2024, 10, 16))
     with pytest.raises(MissingRuleError):
         sample_catalog.resolve("SHFE.rb2410", known_at=datetime(2023, 1, 1, tzinfo=timezone.utc))
+
+
+def test_real_catalog_file_if_present():
+    from pathlib import Path
+    catalog_path = Path("config/contract_catalog_2024v1.json")
+    if not catalog_path.exists():
+        pytest.skip("real catalog file not generated")
+    resolver = ContractResolver.from_file(catalog_path)
+    inst, y, m = resolver.resolve("SHFE.rb2410")
+    assert inst.symbol == "rb2410"
+    assert (y, m) == (2024, 10)
+    fg_inst, fg_y, fg_m = resolver.resolve("FG501", as_of=date(2024, 10, 1))
+    assert fg_inst.exchange == Exchange.CZCE
+    assert (fg_y, fg_m) == (2025, 1)
+

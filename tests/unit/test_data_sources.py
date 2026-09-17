@@ -12,6 +12,7 @@ from qh_trader.core.objects import InstrumentId
 from qh_trader.data.sources import (
     AkShareDataSource,
     SinaFuturesDataSource,
+    TushareFuturesDataSource,
     create_data_source,
     normalize_instrument_to_symbol,
 )
@@ -93,3 +94,62 @@ def test_client_http_error_is_not_retried_as_plaintext():
         with pytest.raises(HTTPError):
             source._http_get("https://example.invalid")
     assert request.call_count == 1
+
+
+def test_tushare_code_mapping():
+    assert TushareFuturesDataSource.to_tushare_code("SHFE.rb2410") == "RB2410.SHF"
+    assert TushareFuturesDataSource.to_tushare_code("CZCE.FG2501") == "FG2501.ZCE"
+    assert TushareFuturesDataSource.to_tushare_code("DCE.m2409") == "M2409.DCE"
+    assert TushareFuturesDataSource.to_tushare_code("CFFEX.IF2409") == "IF2409.CFX"
+    assert TushareFuturesDataSource.to_tushare_code("INE.sc2409") == "SC2409.INE"
+    assert TushareFuturesDataSource.to_tushare_code("GFEX.si2409") == "SI2409.GFE"
+    assert TushareFuturesDataSource.to_tushare_code(InstrumentId(Exchange.SHFE, "rb2410")) == "RB2410.SHF"
+
+
+def test_tushare_parse_daily_bars_converts_turnover_and_settlement():
+    import pandas as pd
+
+    source = TushareFuturesDataSource(token="mock-token")
+    mock_df = pd.DataFrame(
+        [
+            {
+                "trade_date": "20240910",
+                "open": 3200.0,
+                "high": 3250.0,
+                "low": 3180.0,
+                "close": 3220.0,
+                "vol": 500000,
+                "amount": 160000.0,  # 万元
+                "oi": 800000,
+                "settle": 3215.0,
+                "pre_settle": 3190.0,
+            },
+            {
+                "trade_date": "20240909",
+                "open": 3190.0,
+                "high": 3210.0,
+                "low": 3170.0,
+                "close": 3195.0,
+                "vol": 450000,
+                "amount": 140000.0,
+                "oi": 780000,
+                "settle": 3190.0,
+                "pre_settle": 3180.0,
+            },
+        ]
+    )
+    with patch.object(source.pro, "fut_daily", return_value=mock_df):
+        bars = source.fetch_daily_bars("SHFE.rb2410")
+    assert len(bars) == 2
+    # 反转为升序：2024-09-09 在前
+    first = bars[0]
+    assert first["date"] == "2024-09-09"
+    assert first["open"] == Decimal("3190.0")
+    assert first["turnover"] == Decimal("1400000000.0")  # 140000 * 10000
+    assert first["settlement_price"] == Decimal("3190.0")
+    assert first["pre_settlement_price"] == Decimal("3180.0")
+    assert first["volume"] == 450000
+    assert len(source.captures) == 1
+    assert "body" in source.captures[0]
+    assert "sha256" in source.captures[0]
+

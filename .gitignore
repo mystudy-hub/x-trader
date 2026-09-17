@@ -67,6 +67,7 @@ meta/*.db
 *.sqlite3-*
 reports/
 *.html
+docs/simnow/
 
 # Configuration & Secrets (Keep .example files tracked)
 config/settings.yaml

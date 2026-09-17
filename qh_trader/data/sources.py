@@ -156,10 +156,10 @@ class SinaFuturesDataSource(BaseDataSource):
             except urllib.error.HTTPError as exc:
                 if exc.code not in {429, 500, 502, 503, 504} or attempt == 2:
                     raise
-            except (urllib.error.URLError, TimeoutError):
+            except (urllib.error.URLError, TimeoutError, OSError, Exception):
                 if attempt == 2:
                     raise
-            time.sleep(0.25 * (attempt + 1))
+            time.sleep(0.5 * (attempt + 1))
         raise RuntimeError("market data retry loop exhausted")
 
     @staticmethod
@@ -324,11 +324,213 @@ class AkShareDataSource(BaseDataSource):
         return SinaFuturesDataSource().fetch_latest_tick(instrument)
 
 
+class TushareFuturesDataSource(BaseDataSource):
+    """基于 Tushare Pro 官方接口的期货数据源.
+
+    特点:
+    - 拥有官方权威的成交量 (vol) 与真实成交额 (amount, 万元 -> 元).
+    - 包含官方每日结算价 (settle) 与前结算价 (pre_settle).
+    - 提供合约基础元数据 (fut_basic)，用于构建标准历史合约目录.
+    """
+
+    DEFAULT_TOKEN = "cpg1VYJ6aBKU2SLkWCZcOEuAUbDSEPLT6Kvgw9f36JJyLl3BOZsiItzx"
+    DEFAULT_HTTP_URL = "https://api.886018.xyz"
+    source_timezone = "Asia/Shanghai"
+
+    def __init__(
+        self,
+        token: str | None = None,
+        http_url: str = DEFAULT_HTTP_URL,
+        timeout: float = 15.0,
+    ) -> None:
+        import os
+        try:
+            import tushare as ts
+        except ImportError as exc:
+            raise ImportError("Tushare is required for this adapter: uv pip install tushare") from exc
+
+        # 确保直连镜像 API 地址，避免受本机网络代理干扰发生连接重置
+        no_proxy = os.environ.get("NO_PROXY", "")
+        if "886018.xyz" not in no_proxy:
+            os.environ["NO_PROXY"] = f"{no_proxy},api.886018.xyz,886018.xyz".strip(",")
+
+        self.token = token or os.environ.get("TUSHARE_TOKEN") or self.DEFAULT_TOKEN
+        self.http_url = http_url
+        self.timeout = timeout
+        self.captures: list[dict[str, str]] = []
+
+        self.pro = ts.pro_api(self.token)
+        # 设置自定义代理/镜像地址
+        self.pro._DataApi__http_url = self.http_url
+
+    @property
+    def source_id(self) -> str:
+        return "tushare"
+
+    @property
+    def source_name(self) -> str:
+        return "Tushare Pro 期货官方数据源"
+
+    @staticmethod
+    def to_tushare_code(instrument: InstrumentId | str) -> str:
+        """将系统 InstrumentId 转换为 Tushare 合约代码格式.
+
+        例:
+            SHFE.rb2410 -> RB2410.SHF
+            CZCE.FG2501 -> FG2501.ZCE
+            DCE.m2409   -> M2409.DCE
+            CFFEX.IF2409 -> IF2409.CFX
+            INE.sc2409   -> SC2409.INE
+            GFEX.si2409  -> SI2409.GFE
+        """
+        if isinstance(instrument, InstrumentId):
+            sym = instrument.symbol.upper()
+            ex = instrument.exchange
+        else:
+            text = str(instrument).strip()
+            if "." in text:
+                prefix, sym_str = text.split(".", 1)
+                ex = Exchange(prefix.upper())
+                sym = sym_str.upper()
+            else:
+                sym = text.upper()
+                p_lower = "".join(c for c in sym.lower() if c.isalpha())
+                if p_lower in {"fg", "ta", "ma", "sa", "sr", "cf", "oi", "rm", "ur", "pk"}:
+                    ex = Exchange.CZCE
+                elif p_lower in {"m", "y", "a", "b", "p", "c", "i", "j", "jm", "pp", "l", "v", "eg", "eb", "pg"}:
+                    ex = Exchange.DCE
+                elif p_lower in {"if", "ih", "ic", "im", "tf", "t", "ts", "tl"}:
+                    ex = Exchange.CFFEX
+                elif p_lower in {"sc", "nr", "lu", "bc", "ec"}:
+                    ex = Exchange.INE
+                elif p_lower in {"si", "lc"}:
+                    ex = Exchange.GFEX
+                else:
+                    ex = Exchange.SHFE
+
+        exchange_suffixes = {
+            Exchange.SHFE: "SHF",
+            Exchange.DCE: "DCE",
+            Exchange.CZCE: "ZCE",
+            Exchange.CFFEX: "CFX",
+            Exchange.INE: "INE",
+            Exchange.GFEX: "GFE",
+        }
+        suffix = exchange_suffixes.get(ex, "SHF")
+        return f"{sym}.{suffix}"
+
+    def fetch_daily_bars(
+        self,
+        instrument: InstrumentId | str,
+        start_date: date | str | None = None,
+        end_date: date | str | None = None,
+    ) -> list[dict[str, Any]]:
+        ts_code = self.to_tushare_code(instrument)
+
+        # 格式化日期为 YYYYMMDD
+        def format_d(d: date | str | None) -> str | None:
+            if not d:
+                return None
+            return str(d).replace("-", "")
+
+        s_str = format_d(start_date)
+        e_str = format_d(end_date)
+
+        kwargs: dict[str, Any] = {"ts_code": ts_code}
+        if s_str:
+            kwargs["start_date"] = s_str
+        if e_str:
+            kwargs["end_date"] = e_str
+
+        df = self.pro.fut_daily(**kwargs)
+        body_str = df.to_json(orient="records", date_format="iso") if df is not None and not df.empty else "[]"
+        raw_bytes = body_str.encode("utf-8")
+        self.captures.append(
+            {
+                "url": f"{self.http_url}/fut_daily?ts_code={ts_code}",
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                "body": body_str,
+                "encoding": "utf-8",
+            }
+        )
+        if df is None or df.empty:
+            return []
+
+        # Tushare 默认按日期降序排列，需反转为升序
+        df = df.sort_values(by="trade_date", ascending=True)
+
+        records: list[dict[str, Any]] = []
+        for raw in df.to_dict(orient="records"):
+            raw_d = str(raw["trade_date"])
+            iso_date = f"{raw_d[:4]}-{raw_d[4:6]}-{raw_d[6:8]}"
+            if not _within_day(iso_date, start_date, end_date):
+                continue
+
+            # amount 单位为万元，换算为元
+            amount_val = raw.get("amount")
+            if amount_val is not None and not (isinstance(amount_val, float) and (amount_val != amount_val)):
+                turnover = Decimal(str(amount_val)) * Decimal("10000")
+            else:
+                turnover = Decimal("0.00")
+
+            records.append(
+                {
+                    "date": iso_date,
+                    "open": _decimal(raw.get("open")),
+                    "high": _decimal(raw.get("high")),
+                    "low": _decimal(raw.get("low")),
+                    "close": _decimal(raw.get("close")),
+                    "volume": _quantity(raw.get("vol")),
+                    "turnover": turnover,
+                    "open_interest": _quantity(raw.get("oi")),
+                    "settlement_price": _decimal(raw.get("settle")),
+                    "pre_settlement_price": _decimal(raw.get("pre_settle")),
+                }
+            )
+        return records
+
+    def fetch_minute_bars(
+        self,
+        instrument: InstrumentId | str,
+        period: str = "60",
+        start_time: datetime | str | None = None,
+        end_time: datetime | str | None = None,
+    ) -> list[dict[str, Any]]:
+        # 分钟线权限若未单独开通，自动平滑 fallback 到新浪/东财分钟线
+        sina_fallback = SinaFuturesDataSource()
+        return sina_fallback.fetch_minute_bars(instrument, period=period, start_time=start_time, end_time=end_time)
+
+    def fetch_latest_tick(self, instrument: InstrumentId | str) -> dict[str, Any] | None:
+        return SinaFuturesDataSource().fetch_latest_tick(instrument)
+
+    def fetch_contract_catalog(self, exchange: str = "SHFE") -> list[dict[str, Any]]:
+        """获取指定交易所的合约目录元数据 (fut_basic)."""
+        df = self.pro.fut_basic(exchange=exchange.upper())
+        body_str = df.to_json(orient="records", date_format="iso") if df is not None and not df.empty else "[]"
+        raw_bytes = body_str.encode("utf-8")
+        self.captures.append(
+            {
+                "url": f"{self.http_url}/fut_basic?exchange={exchange.upper()}",
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                "body": body_str,
+                "encoding": "utf-8",
+            }
+        )
+        if df is None or df.empty:
+            return []
+        return df.to_dict(orient="records")
+
+
 def create_data_source(source_type: str = "sina", **kwargs: Any) -> BaseDataSource:
-    if source_type.lower() in {"sina", "sina_futures"}:
+    st = source_type.lower().strip()
+    if st in {"sina", "sina_futures"}:
         return SinaFuturesDataSource(**kwargs)
-    if source_type.lower() == "akshare":
+    if st == "akshare":
         if kwargs:
             raise TypeError("AkShare adapter does not accept Sina transport options")
         return AkShareDataSource()
+    if st == "tushare":
+        return TushareFuturesDataSource(**kwargs)
     raise ValueError(f"unknown data source type: {source_type}")

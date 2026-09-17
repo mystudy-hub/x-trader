@@ -16,6 +16,7 @@ from .sources import (
     AkShareDataSource,
     BaseDataSource,
     SinaFuturesDataSource,
+    TushareFuturesDataSource,
     create_data_source,
     normalize_instrument_to_symbol,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "ParquetDataStorage",
     "QualityIssue",
     "SinaFuturesDataSource",
+    "TushareFuturesDataSource",
     "arrow_table_to_bars",
     "bars_to_arrow_table",
     "convert_daily_records_to_bars",

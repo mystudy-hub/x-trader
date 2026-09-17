@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbols")
     parser.add_argument("--intervals", default="1d,1h")
-    parser.add_argument("--source", choices=["sina", "akshare"], default="sina")
+    parser.add_argument("--source", choices=["sina", "akshare", "tushare"], default="sina")
     parser.add_argument("--storage-dir", type=Path, default=Path("data_storage"))
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")
