@@ -152,4 +152,3 @@ def test_tushare_parse_daily_bars_converts_turnover_and_settlement():
     assert len(source.captures) == 1
     assert "body" in source.captures[0]
     assert "sha256" in source.captures[0]
-

@@ -78,9 +78,16 @@ def test_runtime_files_are_ignored_but_templates_and_specs_remain_trackable(tmp_
     (tmp_path / ".gitignore").write_bytes((ROOT / ".gitignore").read_bytes())
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True, capture_output=True)
     protected = [
-        "config/settings.yaml", ".env", "config/account.credentials.yaml", "config/secrets.local.yaml",
-        "runs/result.json", "data_storage/raw/bars.parquet", "live/trading.db",
-        "config/rule_sources/rules.db", "terminal_payload.json", "terminal_system_info.bin",
+        "config/settings.yaml",
+        ".env",
+        "config/account.credentials.yaml",
+        "config/secrets.local.yaml",
+        "runs/result.json",
+        "data_storage/raw/bars.parquet",
+        "live/trading.db",
+        "config/rule_sources/rules.db",
+        "terminal_payload.json",
+        "terminal_system_info.bin",
         "terminal_payloads/capture.txt",
     ]
     for path in template["storage"].values():

@@ -344,6 +344,7 @@ class TushareFuturesDataSource(BaseDataSource):
         timeout: float = 15.0,
     ) -> None:
         import os
+
         try:
             import tushare as ts
         except ImportError as exc:

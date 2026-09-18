@@ -25,8 +25,14 @@ def git(repo, *args, check=True):
     env = os.environ.copy()
     env["QH_TRADER_PYTHON"] = sys.executable
     return subprocess.run(
-        ["git", *args], cwd=repo, env=env, check=check,
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        ["git", *args],
+        cwd=repo,
+        env=env,
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 
@@ -38,7 +44,8 @@ def repository(tmp_path):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((ROOT / relative).read_bytes())
     (tmp_path / "scripts/check_ci.py").write_text(
-        "import sys\nfrom pathlib import Path\nsys.exit(int(Path('status.txt').read_text()))\n", encoding="utf-8",
+        "import sys\nfrom pathlib import Path\nsys.exit(int(Path('status.txt').read_text()))\n",
+        encoding="utf-8",
     )
     (tmp_path / "status.txt").write_text("0", encoding="utf-8")
     git(tmp_path, "add", "--all")
@@ -48,8 +55,15 @@ def repository(tmp_path):
 
 def commit(repo):
     return git(
-        repo, "-c", "user.name=Day0 Tests", "-c", "user.email=day0@example.invalid",
-        "commit", "-m", "test: validate commit hook", check=False,
+        repo,
+        "-c",
+        "user.name=Day0 Tests",
+        "-c",
+        "user.email=day0@example.invalid",
+        "commit",
+        "-m",
+        "test: validate commit hook",
+        check=False,
     )
 
 

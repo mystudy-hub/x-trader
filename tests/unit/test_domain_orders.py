@@ -161,6 +161,7 @@ def make_trade(
     offset: Offset,
     quantity: int,
     price: Decimal = Decimal("3500"),
+    order_identity: OrderIdentity | None = None,
 ) -> Trade:
     key = TradeKey(account_id, instrument.exchange, trading_day, trade_id)
     return Trade(
@@ -175,6 +176,7 @@ def make_trade(
         event_time=datetime.now(timezone.utc),
         available_at=datetime.now(timezone.utc),
         deduplication_key=key,
+        order_identity=order_identity,
     )
 
 
@@ -239,12 +241,18 @@ def test_trade_deduplicator(sample_inst):
     assert dedup.record(tk) is False
     assert dedup.seen_count == 2
 
+    # 适配器定义的 extra_scope 参与去重键 (FR-REC-02)
+    scoped = TradeKey("acc-test", Exchange.SHFE, date(2024, 9, 10), "TR-UNIQUE-2", ("rb2410", "BUY"))
+    assert dedup.record(scoped) is True
+    assert dedup.is_duplicate(scoped) is True
+    assert dedup.seen_count == 3
+
 
 def test_order_manager_unlinked_trade_resolution(sample_intent, sample_inst):
-    """FR-ORD-05: 成交先于报单到达，暂存为待关联，报单到达后自动匹配."""
+    """FR-ORD-05: 成交先于报单到达，暂存为待关联，报单带来可唯一归属的远端标识后自动匹配."""
     mgr = OrderManager()
 
-    # 1. 真实成交先到达，当前没有任何本地订单
+    # 1. 真实成交先到达，携带 ExchangeID + OrderSysID，本地尚无映射
     early_trade = make_trade(
         account_id="acc-test",
         instrument=sample_inst,
@@ -253,6 +261,7 @@ def test_order_manager_unlinked_trade_resolution(sample_intent, sample_inst):
         side=Side.BUY,
         offset=Offset.OPEN,
         quantity=2,
+        order_identity=OrderIdentity(account_id="acc-test", exchange=Exchange.SHFE, exchange_order_id="ex-999"),
     )
     matched, is_new = mgr.process_trade(early_trade)
     assert matched is None
@@ -329,8 +338,11 @@ def test_proven_not_sent_fixture_exact_behavior(sample_intent):
 def test_old_epoch_trade_is_fact_behavior(sample_inst):
     """验证 old_epoch_trade_is_fact 规范:
 
-    旧代次的命令被拒，但旧代次发出的真实成交必须作为客观事实入账，绝不可丢弃.
+    旧代次的命令被拒 (RiskManager)，但旧代次发出的真实成交必须作为客观事实入账，绝不可丢弃.
     """
+    from qh_trader.domain.risk import EpochViolationError, RiskManager
+
+    risk = RiskManager(account_id="acc-test", initial_epoch=7)
     mgr = OrderManager()
     old_intent = OrderIntent(
         client_order_id="old-ord-1",
@@ -344,9 +356,15 @@ def test_old_epoch_trade_is_fact_behavior(sample_inst):
         limit_price_ticks=3500,
         created_at=datetime.now(timezone.utc),
     )
-    mgr.create_order(old_intent)
+    order = mgr.create_order(old_intent)
+    order.mark_submitting(command_epoch=7)
+    risk.advance_epoch(8)
 
-    # 真实成交来自旧代次
+    # 旧代次的新命令被拒
+    with pytest.raises(EpochViolationError):
+        risk.check_command_epoch(7)
+
+    # 真实成交来自旧代次的订单，仍然入账；重复到达只记一次
     trade = make_trade(
         account_id="acc-test",
         instrument=sample_inst,
@@ -359,6 +377,9 @@ def test_old_epoch_trade_is_fact_behavior(sample_inst):
     matched, is_new = mgr.process_trade(trade, target_client_order_id="old-ord-1")
     assert is_new is True
     assert matched is not None
+    assert matched.command_epoch == 7
     assert matched.accounted_filled_qty == 1
     assert matched.status == OrderStatus.FILLED
-
+    matched2, is_new2 = mgr.process_trade(trade, target_client_order_id="old-ord-1")
+    assert (matched2, is_new2) == (matched, False)
+    assert matched.accounted_filled_qty == 1

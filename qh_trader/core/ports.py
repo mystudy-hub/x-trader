@@ -49,6 +49,25 @@ class ExecutionPort(Protocol):
 
 
 @runtime_checkable
+class FeedbackNormalizerPort(Protocol):
+    """回报归一化契约 (FR-ORD-05, S2-07)。
+
+    适配器把柜台原始回调 (OnRspOrderInsert / OnErrRtnOrderInsert / OnRtnOrder / OnRtnTrade / 撤单错误)
+    转换为 CanonicalEvent[OrderUpdate] / CanonicalEvent[Trade]：
+    - 只做字段校验、标识关联与去重键构造，不做任何记账；
+    - Trade.deduplication_key 的作用域由适配器按柜台编号真实唯一性定义 (FR-REC-02)；
+    - Trade.order_identity 只填入可唯一归属的远端标识 (ExchangeID+OrderSysID 或完整原会话三元组)，
+      不得补上当前会话号猜测关联；无法归属时留空，由领域内核放入待关联队列；
+    - 无法解析的原始回报返回 None 并由适配器记录证据，不能静默丢弃真实成交。
+    """
+
+    def normalize_order(self, raw: Mapping[str, object], received_at: datetime) -> CanonicalEvent | None: ...
+    def normalize_trade(self, raw: Mapping[str, object], received_at: datetime) -> CanonicalEvent | None: ...
+    def normalize_error(self, raw: Mapping[str, object], received_at: datetime) -> CanonicalEvent | None: ...
+    def source_id(self) -> str: ...
+
+
+@runtime_checkable
 class MarketDataPort(Protocol):
     """返回值必须满足 available_at <= 查询时钟；缺失执行价格返回 None，禁止替代或插值。"""
 

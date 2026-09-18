@@ -42,6 +42,8 @@ class OrderStatus(StrEnum):
     FILLED = "FILLED"
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    UNKNOWN = "UNKNOWN"
 
 
 class SendState(StrEnum):

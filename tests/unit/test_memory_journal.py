@@ -1,5 +1,6 @@
 """Unit tests for in-memory JournalPort adapter (S2-11, FR-REC-01)."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 
 import pytest
@@ -57,7 +58,7 @@ def test_memory_journal_duplicate_trade_rejected():
     # 新事务包含相同成交键 -> 拒绝
     tx2 = JournalTransaction(
         transaction_id="tx-2",
-        events=(make_event(),),
+        events=(make_event(2),),
         cursor_before=1,
         cursor_after=2,
         deduplication_keys=(tk,),
@@ -80,7 +81,7 @@ def test_memory_journal_cursor_conflict_rejected():
     # 下一事务声明前置游标是 4 (不匹配当前游标 5)
     tx2 = JournalTransaction(
         transaction_id="tx-2",
-        events=(make_event(),),
+        events=(make_event(2),),
         cursor_before=4,
         cursor_after=6,
     )
@@ -115,3 +116,21 @@ def test_memory_journal_replay_and_checkpoint():
     cp = journal.load_checkpoint()
     assert cp.journal_seq == 2
     assert cp.cursor == 3
+
+    # 回测结束导出规范事件: 与 replay_from(0) 一致且保持提交顺序
+    exported = journal.export_events()
+    assert exported == tuple(tx1.events) + tuple(tx2.events)
+    assert list(journal.replay_from(0)) == list(exported)
+    assert [event.sequence for event in exported] == [1, 2, 3]
+
+
+def test_memory_journal_append_never_auto_snapshots_and_rejects_reused_id_with_new_contents():
+    journal = MemoryJournal(account_id="acc-test")
+    tx1 = JournalTransaction(transaction_id="tx-1", events=(make_event(1),), cursor_before=0, cursor_after=1)
+    journal.append(tx1)
+    assert journal.load_snapshot() is None
+    with pytest.raises(JournalConflictError, match="different contents"):
+        journal.append(replace(tx1, state_updates={"balance": 1}))
+    with pytest.raises(JournalConflictError, match="ingress"):
+        stale = JournalTransaction(transaction_id="tx-2", events=(make_event(1),), cursor_before=1, cursor_after=2)
+        journal.append(stale)
