@@ -109,6 +109,11 @@ class ReplayOrder(StrEnum):
     RECORDED = "RECORDED"
 
 
+class LimitLiquidityScenario(StrEnum):
+    DIRECTION_CONSERVATIVE = "DIRECTION_CONSERVATIVE"
+    TOUCH_LIMIT_NO_FILL = "TOUCH_LIMIT_NO_FILL"
+
+
 class MissingRuleError(LookupError):
     """所需版本或能力未知，调用方必须显式处置。"""
 

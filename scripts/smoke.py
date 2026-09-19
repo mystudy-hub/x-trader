@@ -86,12 +86,15 @@ def check_package_import():
     """检查 qh_trader 包基础导入."""
     try:
         import qh_trader
+        import qh_trader.analysis
         import qh_trader.core
         import qh_trader.data
         import qh_trader.domain
         import qh_trader.engine
         import qh_trader.gateway
         import qh_trader.infrastructure
+        import qh_trader.research
+        import qh_trader.strategy
 
         print(f"PASS: {qh_trader.__name__} 及其主要分层模块导入成功")
         return True
@@ -100,15 +103,77 @@ def check_package_import():
         return False
 
 
+def check_backtest_smoke():
+    """检查 S3 简化 Bar 撮合与回测链路可运行."""
+    try:
+        from datetime import date, datetime, timedelta, timezone
+        from decimal import Decimal
+
+        from qh_trader.core.constants import Exchange
+        from qh_trader.core.objects import Bar, InstrumentId, RecordMeta
+        from qh_trader.engine.backtest_engine import BacktestEngine
+        from qh_trader.gateway.simulated_gateway import SimulatedGateway
+        from qh_trader.strategy.base import StrategyBase
+
+        inst = InstrumentId(Exchange.SHFE, "rb2410")
+        start = datetime(2024, 9, 10, 1, 0, tzinfo=timezone.utc)
+        meta = RecordMeta(
+            event_time=start + timedelta(hours=1),
+            available_at=start + timedelta(hours=1),
+            ingested_at=start + timedelta(hours=1),
+            trading_day=date(2024, 9, 10),
+            source_id="smoke",
+            source_version="v1",
+            ingest_seq=1,
+        )
+        bar = Bar(
+            instrument=inst,
+            meta=meta,
+            bar_start=start,
+            bar_end=start + timedelta(hours=1),
+            open_time=start,
+            interval="1h",
+            open=Decimal("3000"),
+            high=Decimal("3050"),
+            low=Decimal("2980"),
+            close=Decimal("3020"),
+            volume=100,
+            turnover=Decimal("100000"),
+            open_interest=50000,
+            includes_auction=False,
+        )
+        gw = SimulatedGateway("smoke-acc", date(2024, 9, 10))
+        engine = BacktestEngine(account_id="smoke-acc", gateway=gw, start_time=start)
+
+        class DummyStrat(StrategyBase):
+            def on_bar(self, b):
+                pass
+
+        engine.add_strategy(DummyStrat("dummy", engine))
+        res = engine.run([bar])
+        if res.final_equity > 0:
+            print("PASS: S3 事件驱动 Bar 撮合与回测引擎冒烟通过")
+            return True
+        return False
+    except Exception as exc:
+        print(f"FAIL: 回测引擎冒烟失败: {exc}", file=sys.stderr)
+        return False
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
 
-    print("=== QH-Trader 冒烟测试 (Day 0 / S0 阶段占位) ===")
-    ok = check_python_environment() and check_config_template() and check_package_import()
+    print("=== QH-Trader 冒烟测试 (S3 阶段) ===")
+    ok = (
+        check_python_environment()
+        and check_config_template()
+        and check_package_import()
+        and check_backtest_smoke()
+    )
     if ok:
-        print("=== 冒烟测试全部通过: 工程基础骨架就绪 ===")
+        print("=== 冒烟测试全部通过: 工程基础骨架与回测引擎就绪 ===")
         sys.exit(0)
     else:
         print("=== 冒烟测试失败 ===", file=sys.stderr)

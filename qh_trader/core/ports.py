@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
-from .constants import Exchange, MarketPhase, Offset, PriceType
+from .constants import Exchange, MarketPhase, Offset, OrderType, PriceType, Side
 from .event import CanonicalEvent, JournalSnapshot, JournalTransaction, TimerEvent
 from .objects import (
     AccountFunds,
@@ -161,3 +161,50 @@ class AccountQueryPort(Protocol):
     def query_orders(self, batch: QueryBatch) -> QueryResult[OrderUpdate]: ...
     def query_trades(self, batch: QueryBatch) -> QueryResult[Trade]: ...
     def rate_limit(self) -> QueryRateLimit: ...
+
+
+@runtime_checkable
+class StrategyContextPort(Protocol):
+    """策略上下文协议：为策略提供时钟、查询与发单意图通道."""
+
+    def now(self) -> datetime: ...
+    def send_order(
+        self,
+        instrument: InstrumentId,
+        side: Side,
+        offset: Offset,
+        quantity: int,
+        order_type: OrderType = OrderType.LIMIT,
+        limit_price_ticks: int | None = None,
+    ) -> str: ...
+    def buy(
+        self,
+        instrument: InstrumentId,
+        quantity: int,
+        offset: Offset = Offset.OPEN,
+        limit_price_ticks: int | None = None,
+    ) -> str: ...
+    def sell(
+        self,
+        instrument: InstrumentId,
+        quantity: int,
+        offset: Offset = Offset.CLOSE,
+        limit_price_ticks: int | None = None,
+    ) -> str: ...
+    def cancel_order(self, client_order_id: str) -> None: ...
+    def get_position(self, instrument: InstrumentId) -> int: ...
+
+
+@runtime_checkable
+class StrategyPort(Protocol):
+    """策略端口协议 (FR-ORD-08)."""
+
+    @property
+    def strategy_id(self) -> str: ...
+    def on_init(self) -> None: ...
+    def on_start(self) -> None: ...
+    def on_stop(self) -> None: ...
+    def on_bar(self, bar: Bar) -> None: ...
+    def on_order(self, order: OrderUpdate) -> None: ...
+    def on_trade(self, trade: Trade) -> None: ...
+
