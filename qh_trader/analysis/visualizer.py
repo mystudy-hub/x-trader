@@ -1,16 +1,15 @@
-"""[Analysis 层] 绩效可视化与控制台报告格式化 (S3-06, FR-VAL-03)."""
+"""[Analysis 层] 绩效可视化与控制台报告格式化 (S3-06, S4-06, FR-VAL-03)."""
 
 from __future__ import annotations
 
 from qh_trader.analysis.performance import PerformanceMetrics
-from qh_trader.engine.backtest_engine import BacktestResult
 
 
 def format_performance_summary(metrics: PerformanceMetrics) -> str:
     """生成整洁规范的 ASCII / Markdown 绩效报告."""
     lines = [
         "==================================================",
-        "              回测绩效分析报告 (S3-06)            ",
+        "              回测绩效分析报告 (S3-06 / S4-06)    ",
         "==================================================",
         f"初始资金:           {metrics.initial_capital:>15,.2f} 元",
         f"期末总权益:         {metrics.final_equity:>15,.2f} 元",
@@ -26,6 +25,13 @@ def format_performance_summary(metrics: PerformanceMetrics) -> str:
         f"总交易记录数:       {metrics.total_trades:>15d} 笔",
         f"累计交易手续费:     {metrics.total_commission:>15,.2f} 元",
         f"手续费占盈亏比:     {metrics.commission_ratio * 100:>14.2f} %",
-        "==================================================",
     ]
+
+    if metrics.instrument_contributions:
+        lines.append("--------------------------------------------------")
+        lines.append("分品种成交贡献明细:")
+        for inst_sym, qty in metrics.instrument_contributions.items():
+            lines.append(f"  {inst_sym:<20s}: {qty:>8} 手")
+
+    lines.append("==================================================")
     return "\n".join(lines)

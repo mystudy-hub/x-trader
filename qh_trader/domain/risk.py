@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -92,6 +93,40 @@ def _epoch_value(command_epoch: int | ControlEpoch) -> int:
     return command_epoch.epoch if isinstance(command_epoch, ControlEpoch) else command_epoch
 
 
+@dataclass(frozen=True, slots=True)
+class HolidayRiskHook:
+    """长假风控钩子 (FR-RISK-06, S4-04).
+
+    在节假日前指定交易日数触发，限制新开仓或降低风险暴露。
+    """
+    days_before_holiday: int = 1
+    prevent_new_open: bool = True
+
+    def is_in_holiday_window(
+        self,
+        current_date: date,
+        holiday_start_dates: Sequence[date],
+    ) -> bool:
+        """检查当前交易日是否处于节前窗口."""
+        for h_start in holiday_start_dates:
+            diff = (h_start - current_date).days
+            if 0 < diff <= self.days_before_holiday:
+                return True
+        return False
+
+    def check_order(
+        self,
+        intent: OrderIntent,
+        current_date: date,
+        holiday_start_dates: Sequence[date],
+    ) -> None:
+        if intent.offset == Offset.OPEN and self.prevent_new_open:
+            if self.is_in_holiday_window(current_date, holiday_start_dates):
+                raise RiskViolationError(
+                    f"HolidayRiskHook: cannot open position before holiday on {current_date}"
+                )
+
+
 class RiskManager:
     """原子事前风控与风险状态机聚合根."""
 
@@ -103,6 +138,8 @@ class RiskManager:
         trading_day: date | None = None,
         initial_epoch: int | None = None,
         controller_id: str = "controller-0",
+        holiday_hook: HolidayRiskHook | None = None,
+        holiday_dates: Sequence[date] = (),
     ) -> None:
         self.account_id = account_id
         if control is None:
@@ -112,6 +149,8 @@ class RiskManager:
         self.risk_events: list[RiskEvent] = []
         self.limits: ExchangeLimits = limits or ExchangeLimits()
         self.trading_day: date | None = trading_day
+        self.holiday_hook: HolidayRiskHook | None = holiday_hook
+        self.holiday_dates: tuple[date, ...] = tuple(holiday_dates)
 
         self.open_cooldown_until: datetime | None = None
         self.flatten_requested: bool = False
@@ -387,6 +426,8 @@ class RiskManager:
             raise RiskViolationError(f"risk state is HALTED; new orders are blocked: {order.client_order_id}")
         if order.offset == Offset.OPEN:
             self._check_open_allowed(order.client_order_id, now)
+            if self.holiday_hook is not None:
+                self.holiday_hook.check_order(order, day, self.holiday_dates)
 
         # 3. 交易所硬约束 (对平仓同样生效的价格带；开仓限额含在途开仓)
         self.limits.check_order(

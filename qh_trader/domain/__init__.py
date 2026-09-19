@@ -56,12 +56,19 @@ from .recovery import (
 )
 from .risk import (
     EpochViolationError,
+    HolidayRiskHook,
     RemainingRisk,
     RiskEvent,
     RiskManager,
     RiskState,
     RiskStateTransitionError,
     RiskViolationError,
+)
+from .rollover import (
+    LegOrderPolicy,
+    RollManager,
+    RollState,
+    RollTask,
 )
 from .rules import (
     RuleEngine,
@@ -94,9 +101,11 @@ __all__ = [
     "ExternalOrderRecord",
     "FundsPolicy",
     "FundsReservation",
+    "HolidayRiskHook",
     "InstrumentLedger",
     "LedgerEntry",
     "LedgerEntryKind",
+    "LegOrderPolicy",
     "LifecyclePhase",
     "LimitKind",
     "LimitRule",
@@ -123,6 +132,9 @@ __all__ = [
     "RiskState",
     "RiskStateTransitionError",
     "RiskViolationError",
+    "RollManager",
+    "RollState",
+    "RollTask",
     "RuleEngine",
     "SendAttempt",
     "SessionClosed",
