@@ -369,10 +369,12 @@ class PositionManager:
             self._reservations.pop(client_order_id, None)
 
     # ------------------------------------------------------------------ 成交
-    def effective_offset(self, trade: Trade) -> Offset:
+    def effective_offset(self, trade: Trade, client_order_id: str | None = None) -> Offset:
         """晚到回报按其原交易日处理 (FR-CAL-06)：
 
         上一交易日的今仓在跨日后已转为昨仓，其平今成交应扣昨仓桶。
+        跨日结转也会改写预占的平今/平昨归属；若成交在结转后到达，
+        必须以预占实际冻结的仓桶为准，否则账本与持仓会各算一套桶。
         """
         if (
             self.current_trading_day is not None
@@ -380,6 +382,14 @@ class PositionManager:
             and trade.offset == Offset.CLOSE_TODAY
         ):
             return Offset.CLOSE_YESTERDAY
+        if client_order_id is not None:
+            reservation = self._reservations.get(client_order_id)
+            if (
+                reservation is not None
+                and trade.offset != reservation.offset
+                and {trade.offset, reservation.offset} <= {Offset.CLOSE_TODAY, Offset.CLOSE_YESTERDAY}
+            ):
+                return reservation.offset
         return trade.offset
 
     def apply_trade(self, trade: Trade, client_order_id: str | None = None) -> tuple[int, int]:
@@ -390,7 +400,7 @@ class PositionManager:
         inst = trade.instrument
         target_side = target_position_side(trade.side, trade.offset)
         pos = self.get_position(inst, target_side)
-        offset = self.effective_offset(trade)
+        offset = self.effective_offset(trade, client_order_id)
         qty = trade.quantity
 
         f_yd_consumed = 0

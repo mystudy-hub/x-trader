@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "fixture_id": "sessions-a25-03-auction-rule-boundary",
+  "acceptance_ids": ["A25-03"],
+  "execution_status": "executed_by_unit_tests",
+  "evidence_status": "synthetic_rules_not_exchange_announcement",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": ["docs/sources/中国期货自动交易与回测工具构建规划.md#acceptance-a25", "docs/07_测试与验收方案.md"],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "合成规则：日盘集合竞价自交易日 2023-05-26 起生效。2023-05-25 的 08:57 没有任何已登记时段，报单只能持有到 09:00；2023-05-26 的 08:57 处于竞价申报阶段，报单当即被受理。2023-05-25 晚 21:00 的夜盘属于交易日 2023-05-26，不按自然日 00:00 切换版本。本夹具不是原公告，历史制度核验仍待原文归档。"
+  },
+  "cases": [
+    {"id": "before_boundary_no_day_auction", "inputs": {"order_at": "2023-05-25T08:57:00+08:00"}, "expected": {"permissions_at_order_time": null, "accepted_at": "2023-05-25T09:00:00+08:00", "fill_at": "2023-05-25T09:00:00+08:00"}},
+    {"id": "on_boundary_day_auction_applies", "inputs": {"order_at": "2023-05-26T08:57:00+08:00"}, "expected": {"permissions_at_order_time": {"submit": true, "cancel": true, "match": false}, "accepted_at": "2023-05-26T08:57:00+08:00", "fill_at": "2023-05-26T09:00:00+08:00"}},
+    {"id": "night_before_boundary_belongs_to_new_trading_day", "inputs": {"at": "2023-05-25T21:30:00+08:00"}, "expected": {"trading_day": "2023-05-26"}},
+    {"id": "bar_with_natural_day_trading_day_is_rejected", "inputs": {"bar_open": "2023-05-25T21:00:00+08:00", "claimed_trading_day": "2023-05-25"}, "expected": {"error": "MissingRuleError"}}
+  ]
+}

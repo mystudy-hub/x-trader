@@ -349,7 +349,7 @@ class OrderManager:
     def create_order(self, intent: OrderIntent) -> Order:
         if intent.client_order_id in self._orders_by_client_id:
             raise ValueError(f"duplicate client_order_id: {intent.client_order_id}")
-        order = Order(intent=intent)
+        order = Order(intent=intent, created_at=intent.created_at, updated_at=intent.created_at)
         self._orders_by_client_id[intent.client_order_id] = order
         if intent.parent_order_id:
             parent = self._orders_by_client_id.get(intent.parent_order_id)

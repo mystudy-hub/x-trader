@@ -1,14 +1,11 @@
 """Unit tests for dominant contract resolver (S4-01, FR-CON-02, FR-CON-04)."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-import pytest
-
-from qh_trader.core.constants import Exchange, QualityFlag
+from qh_trader.core.constants import Exchange
 from qh_trader.core.objects import Bar, InstrumentId, ProductId, RecordMeta
 from qh_trader.data.dominant_contract import (
-    DominantContractResolver,
     build_dominant_mappings,
 )
 

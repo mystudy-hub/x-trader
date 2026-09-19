@@ -3,8 +3,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-import pytest
-
 from qh_trader.core.constants import Exchange, Offset, PositionSide, Side
 from qh_trader.core.objects import InstrumentId, ProductId, Trade, TradeKey
 from qh_trader.domain.rollover import (

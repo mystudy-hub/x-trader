@@ -1,17 +1,15 @@
 """Unit tests for continuous series builder (S4-02, FR-CON-03, A10)."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-import pytest
-
-from qh_trader.core.constants import Exchange, QualityFlag
+from qh_trader.core.constants import Exchange
 from qh_trader.core.objects import Bar, InstrumentId, ProductId, RecordMeta
 from qh_trader.data.continuous import (
     AdjustmentMethod,
     ContinuousSeriesBuilder,
 )
-from qh_trader.data.dominant_contract import DominantMappingEntry, DominantContractResolver
+from qh_trader.data.dominant_contract import DominantContractResolver, DominantMappingEntry
 
 PROD_RB = ProductId(Exchange.SHFE, "rb")
 RB2410 = InstrumentId(Exchange.SHFE, "rb2410")

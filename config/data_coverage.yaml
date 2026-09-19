@@ -58,6 +58,26 @@ data_sources:
       path: runs/s1-10/hourly/report-d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19.json
       sha256: d3dc0f0470008573d972cbfbb68bc8ff81cbe3a51337cca1c2b2e48ee6e0bd19
     notes: 2026-09-14 经 HTTPS 取得；旧规范文件存在 62 条周六交易日及 173 处区间重叠，保留原件并停止自动使用，待证据齐全后重新导入。
+  - dataset_id: s4_test_products_1d_raw
+    dataset_type: bar
+    period: 1d
+    available_fields: [date, open, high, low, close, volume, open_interest, settlement_price]
+    missing_fields: [turnover]
+    time_range:
+      start_date: '2023-10-17'
+      end_date: '2026-09-18'
+    record_count: 8127
+    update_delay: 待核验
+    historical_revision: 待核验
+    license: {scope: 内部研究与回测使用, local_storage: true}
+    open_semantic: 交易日日盘开盘（夜盘价格未单独取得，日线 Open 不区分夜盘与日盘）
+    auction_inclusion: null
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02, GAP-S0-03, GAP-S0-04]
+    notes: S4-05/S4-06 经 scripts/fetch_s4_test_products.py 归档 rb/FG/MA/i/m/AP/jd/au/cu/c 实际合约日线，覆盖 2024-06-03 ~ 2026-09-18；缺 turnover，按 QualityFlag.TURNOVER_UNAVAILABLE(32) 标记，不参与精确核算。
 - source_id: tushare
   source_name: Tushare Pro 期货官方数据源（真实成交额与结算价，日历与时间证据齐备）
   datasets:
@@ -235,42 +255,47 @@ test_products:
   name: 螺纹钢
   exchange: SHFE
   reason: 有夜盘、今昨仓区分、首个样例合约
-  status: 已确定为首个工程样本
+  status: 已接入（S4-05 产品登记、时段模板、实际合约日线）
 - product: MA
   name: 甲醇
   exchange: CZCE
   reason: 跨交易所、短年份代码、只撤不报窗口
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；夜盘 23:00 收盘、日盘只撤不报窗口已建模）
 - product: i
   name: 铁矿石
   exchange: DCE
   reason: 市价单与跨期指令
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；夜盘 23:00 收盘）
 - product: m
   name: 豆粕
   exchange: DCE
   reason: 市价单与跨期指令
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；夜盘 23:00 收盘）
 - product: AP
   name: 苹果
   exchange: CZCE
   reason: 无夜盘
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；无夜盘按模板显式声明）
 - product: jd
   name: 鸡蛋
   exchange: DCE
   reason: 无夜盘
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；无夜盘按模板显式声明）
 - product: au
   name: 黄金
   exchange: SHFE
   reason: 凌晨收盘
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；夜盘 02:30 收盘）
 - product: cu
   name: 铜
   exchange: SHFE
   reason: 凌晨收盘
-  status: 候选品种（S4 接入）
+  status: 已接入（S4-05；夜盘 01:00 收盘）
+- product: c
+  name: 玉米
+  exchange: DCE
+  reason: 夜盘与日线连续序列对照
+  status: 已接入（S4-05；夜盘 23:00 收盘，超出原测试组合但已登记）
 principles:
 - 缺少所选时段或时刻的价格时该执行策略不可运行
 - 研究模式不能静默借用其他时段 Open/Close 或插值补造成交价

@@ -121,6 +121,11 @@ class RollManager:
     def get_task(self, roll_id: str) -> RollTask | None:
         return self._tasks.get(roll_id)
 
+    def task_for_order(self, client_order_id: str) -> RollTask | None:
+        """由引擎生成的 client_order_id 反查移仓任务，供策略按实际成交推进两腿."""
+        roll_id = self._order_to_task.get(client_order_id)
+        return self._tasks.get(roll_id) if roll_id is not None else None
+
     def plan_next_order(
         self,
         task: RollTask,
@@ -210,6 +215,50 @@ class RollManager:
 
         return None
 
+    def bind_submitted_order(self, task: RollTask, leg: int, client_order_id: str) -> None:
+        """把引擎实际生成的 client_order_id 绑定到某一腿，供成交推进状态机 (FR-CON-06)."""
+        if leg not in (1, 2):
+            raise ValueError("leg must be 1 or 2")
+        if not isinstance(client_order_id, str) or not client_order_id:
+            raise ValueError("client_order_id is required")
+        planned = task.current_leg1_order_id if leg == 1 else task.current_leg2_order_id
+        if planned is not None:
+            self._order_to_task.pop(planned, None)
+        self._order_to_task[client_order_id] = task.roll_id
+        if leg == 1:
+            task.current_leg1_order_id = client_order_id
+        else:
+            task.current_leg2_order_id = client_order_id
+
+    def on_fill(self, task: RollTask, trade: Trade, *, leg: int) -> None:
+        """按腿记录真实成交.
+
+        引擎可能把 CLOSE 改写为 CLOSE_YESTERDAY 或拆成子单，父单号不再出现在回报里；
+        因此按合约归属确定腿序后直接记账，不依赖 client_order_id 映射 (FR-CON-06)。
+        """
+        if task.is_done:
+            return
+        if leg == 1:
+            old_qty = task.leg1_filled_qty
+            new_qty = old_qty + trade.quantity
+            task.leg1_avg_price = (
+                task.leg1_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)
+            ) / Decimal(new_qty)
+            task.leg1_filled_qty = new_qty
+            task.current_leg1_order_id = None  # 允许规划下一笔
+            task.state = RollState.LEG_1_FILLED if new_qty >= task.total_quantity else RollState.LEG_1_PARTIAL
+            return
+        if leg != 2:
+            raise ValueError("leg must be 1 or 2")
+        old_qty = task.leg2_filled_qty
+        new_qty = old_qty + trade.quantity
+        task.leg2_avg_price = (
+            task.leg2_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)
+        ) / Decimal(new_qty)
+        task.leg2_filled_qty = new_qty
+        task.current_leg2_order_id = None
+        task.state = RollState.COMPLETED if new_qty >= task.total_quantity else RollState.LEG_2_PARTIAL
+
     def on_trade(self, trade: Trade, client_order_id: str | None) -> None:
         """根据真实成交推进两腿状态机."""
         if client_order_id is None:
@@ -223,28 +272,9 @@ class RollManager:
 
         # 判断成交归属于第一腿还是第二腿
         if client_order_id == task.current_leg1_order_id:
-            old_qty = task.leg1_filled_qty
-            new_qty = old_qty + trade.quantity
-            task.leg1_avg_price = (task.leg1_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)) / Decimal(new_qty)
-            task.leg1_filled_qty = new_qty
-            task.current_leg1_order_id = None  # 允许规划下一笔
-
-            if task.leg1_filled_qty >= task.total_quantity:
-                task.state = RollState.LEG_1_FILLED
-            else:
-                task.state = RollState.LEG_1_PARTIAL
-
+            self.on_fill(task, trade, leg=1)
         elif client_order_id == task.current_leg2_order_id:
-            old_qty = task.leg2_filled_qty
-            new_qty = old_qty + trade.quantity
-            task.leg2_avg_price = (task.leg2_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)) / Decimal(new_qty)
-            task.leg2_filled_qty = new_qty
-            task.current_leg2_order_id = None
-
-            if task.leg2_filled_qty >= task.total_quantity:
-                task.state = RollState.COMPLETED
-            else:
-                task.state = RollState.LEG_2_PARTIAL
+            self.on_fill(task, trade, leg=2)
 
     def on_order_rejected_or_cancelled(self, client_order_id: str, reason: str) -> None:
         """单腿撤销或被柜台拒绝：进入 PAUSED 状态，保留已成交事实."""

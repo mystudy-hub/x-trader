@@ -477,7 +477,7 @@ class AccountLedger:
             self.position_manager.apply_trade(trade, client_order_id=client_order_id)
             ledger.add_open_lot(trade, self.current_trading_day, commission)
         else:
-            effective = self.position_manager.effective_offset(trade)
+            effective = self.position_manager.effective_offset(trade, client_order_id)
             self.position_manager.apply_trade(trade, client_order_id=client_order_id)
             record = ledger.close_lot(trade, effective, self.current_trading_day, commission)
             self.realized_mtm_pnl += record.mtm_close_pnl

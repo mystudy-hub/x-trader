@@ -1,0 +1,1242 @@
+{
+  "schema_version": 1,
+  "catalog_version": "s4-2024v1",
+  "generated_at": "2026-09-19T15:17:25.831433+00:00",
+  "source": "Observed Sina actual-contract series + product_registry research specs",
+  "entries": [
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2501",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2501",
+        "AP2501.CZCE",
+        "AP501",
+        "CZCE.AP2501"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-10",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2505",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2505",
+        "AP2505.CZCE",
+        "AP505",
+        "CZCE.AP2505"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2510",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2510",
+        "AP2510.CZCE",
+        "AP510",
+        "CZCE.AP2510"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 10,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-10-22",
+      "last_trading_day": "2025-10-22",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2601",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2601",
+        "AP2601.CZCE",
+        "AP601",
+        "CZCE.AP2601"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2605",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2605",
+        "AP2605.CZCE",
+        "AP605",
+        "CZCE.AP2605"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "AP2610",
+      "product": "AP",
+      "aliases": [
+        "AP",
+        "AP2610",
+        "AP2610.CZCE",
+        "AP610",
+        "CZCE.AP2610"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 10,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-10-23",
+      "last_trading_day": "2026-09-18",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2501",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2501",
+        "FG",
+        "FG2501",
+        "FG2501.CZCE",
+        "FG501"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2505",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2505",
+        "FG",
+        "FG2505",
+        "FG2505.CZCE",
+        "FG505"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2509",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2509",
+        "FG",
+        "FG2509",
+        "FG2509.CZCE",
+        "FG509"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2024-09-18",
+      "last_trading_day": "2025-09-12",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2601",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2601",
+        "FG",
+        "FG2601",
+        "FG2601.CZCE",
+        "FG601"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2605",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2605",
+        "FG",
+        "FG2605",
+        "FG2605.CZCE",
+        "FG605"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "FG2609",
+      "product": "fg",
+      "aliases": [
+        "CZCE.FG2609",
+        "FG",
+        "FG2609",
+        "FG2609.CZCE",
+        "FG609"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "20",
+      "price_tick": "1",
+      "listed_on": "2025-09-15",
+      "last_trading_day": "2026-09-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2501",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2501",
+        "MA",
+        "MA2501",
+        "MA2501.CZCE",
+        "MA501"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2505",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2505",
+        "MA",
+        "MA2505",
+        "MA2505.CZCE",
+        "MA505"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2509",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2509",
+        "MA",
+        "MA2509",
+        "MA2509.CZCE",
+        "MA509"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-09-18",
+      "last_trading_day": "2025-09-12",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2601",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2601",
+        "MA",
+        "MA2601",
+        "MA2601.CZCE",
+        "MA601"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2605",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2605",
+        "MA",
+        "MA2605",
+        "MA2605.CZCE",
+        "MA605"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "CZCE",
+      "symbol": "MA2609",
+      "product": "MA",
+      "aliases": [
+        "CZCE.MA2609",
+        "MA",
+        "MA2609",
+        "MA2609.CZCE",
+        "MA609"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-09-15",
+      "last_trading_day": "2026-09-11",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2501",
+      "product": "c",
+      "aliases": [
+        "DCE.c2501",
+        "c",
+        "c2501",
+        "c2501.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2505",
+      "product": "c",
+      "aliases": [
+        "DCE.c2505",
+        "c",
+        "c2505",
+        "c2505.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2509",
+      "product": "c",
+      "aliases": [
+        "DCE.c2509",
+        "c",
+        "c2509",
+        "c2509.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-09-18",
+      "last_trading_day": "2025-09-12",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2601",
+      "product": "c",
+      "aliases": [
+        "DCE.c2601",
+        "c",
+        "c2601",
+        "c2601.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2605",
+      "product": "c",
+      "aliases": [
+        "DCE.c2605",
+        "c",
+        "c2605",
+        "c2605.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "c2609",
+      "product": "c",
+      "aliases": [
+        "DCE.c2609",
+        "c",
+        "c2609",
+        "c2609.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-09-15",
+      "last_trading_day": "2026-09-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2501",
+      "product": "i",
+      "aliases": [
+        "DCE.i2501",
+        "i",
+        "i2501",
+        "i2501.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2505",
+      "product": "i",
+      "aliases": [
+        "DCE.i2505",
+        "i",
+        "i2505",
+        "i2505.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2509",
+      "product": "i",
+      "aliases": [
+        "DCE.i2509",
+        "i",
+        "i2509",
+        "i2509.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2024-09-18",
+      "last_trading_day": "2025-09-12",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2601",
+      "product": "i",
+      "aliases": [
+        "DCE.i2601",
+        "i",
+        "i2601",
+        "i2601.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2605",
+      "product": "i",
+      "aliases": [
+        "DCE.i2605",
+        "i",
+        "i2605",
+        "i2605.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "i2609",
+      "product": "i",
+      "aliases": [
+        "DCE.i2609",
+        "i",
+        "i2609",
+        "i2609.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "100",
+      "price_tick": "0.5",
+      "listed_on": "2025-09-15",
+      "last_trading_day": "2026-09-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2501",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2501",
+        "jd",
+        "jd2501",
+        "jd2501.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-22",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2505",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2505",
+        "jd",
+        "jd2505",
+        "jd2505.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-23",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2509",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2509",
+        "jd",
+        "jd2509",
+        "jd2509.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-09-26",
+      "last_trading_day": "2025-09-25",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2601",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2601",
+        "jd",
+        "jd2601",
+        "jd2601.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-23",
+      "last_trading_day": "2026-01-27",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2605",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2605",
+        "jd",
+        "jd2605",
+        "jd2605.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-28",
+      "last_trading_day": "2026-05-26",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "jd2609",
+      "product": "jd",
+      "aliases": [
+        "DCE.jd2609",
+        "jd",
+        "jd2609",
+        "jd2609.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-09-26",
+      "last_trading_day": "2026-09-18",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2501",
+      "product": "m",
+      "aliases": [
+        "DCE.m2501",
+        "m",
+        "m2501",
+        "m2501.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2505",
+      "product": "m",
+      "aliases": [
+        "DCE.m2505",
+        "m",
+        "m2505",
+        "m2505.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2509",
+      "product": "m",
+      "aliases": [
+        "DCE.m2509",
+        "m",
+        "m2509",
+        "m2509.DCE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-09-18",
+      "last_trading_day": "2025-09-12",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2601",
+      "product": "m",
+      "aliases": [
+        "DCE.m2601",
+        "m",
+        "m2601",
+        "m2601.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2605",
+      "product": "m",
+      "aliases": [
+        "DCE.m2605",
+        "m",
+        "m2605",
+        "m2605.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-20",
+      "last_trading_day": "2026-05-19",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "DCE",
+      "symbol": "m2609",
+      "product": "m",
+      "aliases": [
+        "DCE.m2609",
+        "m",
+        "m2609",
+        "m2609.DCE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-09-15",
+      "last_trading_day": "2026-09-14",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "au2412",
+      "product": "au",
+      "aliases": [
+        "SHFE.au2412",
+        "au",
+        "au2412",
+        "au2412.SHFE"
+      ],
+      "delivery_year": 2024,
+      "delivery_month": 12,
+      "multiplier": "1000",
+      "price_tick": "0.02",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2024-12-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "au2506",
+      "product": "au",
+      "aliases": [
+        "SHFE.au2506",
+        "au",
+        "au2506",
+        "au2506.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 6,
+      "multiplier": "1000",
+      "price_tick": "0.02",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-06-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "au2512",
+      "product": "au",
+      "aliases": [
+        "SHFE.au2512",
+        "au",
+        "au2512",
+        "au2512.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 12,
+      "multiplier": "1000",
+      "price_tick": "0.02",
+      "listed_on": "2024-11-18",
+      "last_trading_day": "2025-12-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "au2606",
+      "product": "au",
+      "aliases": [
+        "SHFE.au2606",
+        "au",
+        "au2606",
+        "au2606.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 6,
+      "multiplier": "1000",
+      "price_tick": "0.02",
+      "listed_on": "2025-05-16",
+      "last_trading_day": "2026-06-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "au2612",
+      "product": "au",
+      "aliases": [
+        "SHFE.au2612",
+        "au",
+        "au2612",
+        "au2612.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 12,
+      "multiplier": "1000",
+      "price_tick": "0.02",
+      "listed_on": "2025-11-18",
+      "last_trading_day": "2026-09-18",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2410",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2410",
+        "cu",
+        "cu2410",
+        "cu2410.SHFE"
+      ],
+      "delivery_year": 2024,
+      "delivery_month": 10,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2024-10-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2411",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2411",
+        "cu",
+        "cu2411",
+        "cu2411.SHFE"
+      ],
+      "delivery_year": 2024,
+      "delivery_month": 11,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2024-11-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2412",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2412",
+        "cu",
+        "cu2412",
+        "cu2412.SHFE"
+      ],
+      "delivery_year": 2024,
+      "delivery_month": 12,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2024-12-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2503",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2503",
+        "cu",
+        "cu2503",
+        "cu2503.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 3,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-03-17",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2506",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2506",
+        "cu",
+        "cu2506",
+        "cu2506.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 6,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-06-18",
+      "last_trading_day": "2025-06-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2509",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2509",
+        "cu",
+        "cu2509",
+        "cu2509.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 9,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-09-19",
+      "last_trading_day": "2025-09-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2512",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2512",
+        "cu",
+        "cu2512",
+        "cu2512.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 12,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2024-12-17",
+      "last_trading_day": "2025-12-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2603",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2603",
+        "cu",
+        "cu2603",
+        "cu2603.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 3,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2025-03-18",
+      "last_trading_day": "2026-03-16",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2606",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2606",
+        "cu",
+        "cu2606",
+        "cu2606.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 6,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2025-06-17",
+      "last_trading_day": "2026-06-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "cu2609",
+      "product": "cu",
+      "aliases": [
+        "SHFE.cu2609",
+        "cu",
+        "cu2609",
+        "cu2609.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 9,
+      "multiplier": "5",
+      "price_tick": "10",
+      "listed_on": "2025-09-16",
+      "last_trading_day": "2026-09-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2410",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2410",
+        "rb",
+        "rb2410",
+        "rb2410.SHFE"
+      ],
+      "delivery_year": 2024,
+      "delivery_month": 10,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2023-10-17",
+      "last_trading_day": "2024-10-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2501",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2501",
+        "rb",
+        "rb2501",
+        "rb2501.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2505",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2505",
+        "rb",
+        "rb2505",
+        "rb2505.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-06-03",
+      "last_trading_day": "2025-05-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2510",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2510",
+        "rb",
+        "rb2510",
+        "rb2510.SHFE"
+      ],
+      "delivery_year": 2025,
+      "delivery_month": 10,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2024-10-16",
+      "last_trading_day": "2025-10-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2601",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2601",
+        "rb",
+        "rb2601",
+        "rb2601.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 1,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-01-16",
+      "last_trading_day": "2026-01-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2605",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2605",
+        "rb",
+        "rb2605",
+        "rb2605.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 5,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-05-16",
+      "last_trading_day": "2026-05-15",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "exchange": "SHFE",
+      "symbol": "rb2610",
+      "product": "rb",
+      "aliases": [
+        "SHFE.rb2610",
+        "rb",
+        "rb2610",
+        "rb2610.SHFE"
+      ],
+      "delivery_year": 2026,
+      "delivery_month": 10,
+      "multiplier": "10",
+      "price_tick": "1",
+      "listed_on": "2025-10-16",
+      "last_trading_day": "2026-09-18",
+      "source_id": "sina_observed_series_plus_product_registry",
+      "available_at": "2024-01-01T00:00:00+00:00"
+    }
+  ]
+}

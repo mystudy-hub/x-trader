@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "version": "a25-02-synthetic-v1",
+  "source_id": "tests/fixtures/sessions/A25-02",
+  "available_at": "2024-01-01T00:00:00+00:00",
+  "coverage_start": "2024-09-10",
+  "coverage_end": "2024-09-11",
+  "trading_days": ["2024-09-10", "2024-09-11"],
+  "sessions": [
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day", "trading_day": "2024-09-10", "start": "2024-09-10T09:00:00+08:00", "end": "2024-09-10T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "night_continuous", "trading_day": "2024-09-11", "start": "2024-09-10T21:00:00+08:00", "end": "2024-09-10T23:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day_auction_submit", "trading_day": "2024-09-11", "start": "2024-09-11T08:55:00+08:00", "end": "2024-09-11T08:59:00+08:00", "phase": "AUCTION_SUBMIT", "permissions": {"submit": true, "cancel": true, "match": false}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day_auction_match", "trading_day": "2024-09-11", "start": "2024-09-11T08:59:00+08:00", "end": "2024-09-11T09:00:00+08:00", "phase": "AUCTION_MATCH", "permissions": {"submit": false, "cancel": false, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day", "trading_day": "2024-09-11", "start": "2024-09-11T09:00:00+08:00", "end": "2024-09-11T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+
+    {"exchange": "CZCE", "symbol": "MA501", "session_id": "day", "trading_day": "2024-09-10", "start": "2024-09-10T09:00:00+08:00", "end": "2024-09-10T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "CZCE", "symbol": "MA501", "session_id": "night_continuous", "trading_day": "2024-09-11", "start": "2024-09-10T21:00:00+08:00", "end": "2024-09-10T23:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "CZCE", "symbol": "MA501", "session_id": "day_cancel_only", "trading_day": "2024-09-11", "start": "2024-09-11T08:55:00+08:00", "end": "2024-09-11T08:59:00+08:00", "phase": "CANCEL_ONLY", "permissions": {"submit": false, "cancel": true, "match": false}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "CZCE", "symbol": "MA501", "session_id": "day_waiting", "trading_day": "2024-09-11", "start": "2024-09-11T08:59:00+08:00", "end": "2024-09-11T09:00:00+08:00", "phase": "WAITING", "permissions": {"submit": false, "cancel": false, "match": false}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "CZCE", "symbol": "MA501", "session_id": "day", "trading_day": "2024-09-11", "start": "2024-09-11T09:00:00+08:00", "end": "2024-09-11T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"}
+  ]
+}

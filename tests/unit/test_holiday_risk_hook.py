@@ -10,7 +10,6 @@ from qh_trader.core.objects import (
     ControlEpoch,
     InstrumentId,
     OrderIntent,
-    Position,
 )
 from qh_trader.domain.ledger import AccountFundsState
 from qh_trader.domain.positions import PositionDetail

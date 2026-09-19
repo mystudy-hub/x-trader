@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "fixture_id": "sessions-a25-02-night-residual-orders",
+  "acceptance_ids": ["A25-02"],
+  "execution_status": "executed_by_unit_tests",
+  "evidence_status": "synthetic_rules_not_exchange_announcement",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": ["docs/sources/中国期货自动交易与回测工具构建规划.md#acceptance-a25", "docs/07_测试与验收方案.md"],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "夜盘 21:00 部分成交的订单属于次一交易日，跨入日盘时保留原标识与累计成交，剩余数量在日盘开盘成交；手续费每手计一次，不重复建单或预占。郑商所样例 08:55-08:59 只撤不报：撤单被受理并释放剩余预占，新报单只能在 09:00 起送出，08:59-09:00 静默窗不撮合。"
+  },
+  "cases": [
+    {
+      "id": "shfe_night_partial_fill_carries_into_day",
+      "inputs": {"instrument": "SHFE.rb2410", "order_quantity": 3, "limit_price": "3100", "night_bar": {"open": "3000", "volume": 2}, "participation_rate": "0.5", "day_bar": {"open": "3010", "volume": 100}},
+      "expected": {"accepted_at": "2024-09-10T21:00:00+08:00", "night_fill": {"quantity": 1, "price": "3000"}, "day_fill": {"quantity": 2, "price": "3010", "at": "2024-09-11T09:00:00+08:00"}, "order_count": 1, "accepted_reports": 1, "final_status": "FILLED", "cum_filled": 3, "total_commission": "15.0", "reservations_left": 0}
+    },
+    {
+      "id": "czce_cancel_only_window",
+      "inputs": {"instrument": "CZCE.MA501", "order_quantity": 2, "limit_price": "3100", "night_bar": {"open": "3000", "volume": 2}, "participation_rate": "0.5", "cancel_and_resubmit_at": "2024-09-11T08:56:00+08:00", "day_bar": {"open": "3010", "volume": 100}},
+      "expected": {"residual_cancelled_at": "2024-09-11T08:56:00+08:00", "residual_cum_filled": 1, "new_order_accepted_at": "2024-09-11T09:00:00+08:00", "fills": [{"quantity": 1, "price": "3000"}, {"quantity": 1, "price": "3010"}], "fills_between_08_55_and_09_00": 0, "total_commission": "10.0", "reservations_left": 0}
+    }
+  ]
+}

@@ -211,3 +211,59 @@ class TradingCalendar:
             raise AmbiguousRuleError("multiple registered sessions cover this timestamp")
         self._require_coverage(matches[0].trading_day, known_at)
         return matches[0].trading_day
+
+
+def project_product_calendar(
+    config_path: Path | str,
+    product: str,
+    instruments: tuple[InstrumentId, ...],
+    *,
+    window: tuple[date, date] | None = None,
+) -> TradingCalendar:
+    """把紧凑品种模板投影到实际使用的合约集合上，得到版本化日历 (S4-05/S4-06).
+
+    逐合约展开的日历文件会随合约数线性膨胀，因此模板文件只登记每个品种一个代表合约；
+    运行时按品种模板克隆到本次真正交易的合约，日历版本、来源与可用时刻保持与模板一致。
+    """
+    from qh_trader.data.session_templates import SessionProfile, build_sessions
+
+    data = json.loads(Path(config_path).read_text(encoding="utf-8"))
+    if int(data.get("schema_version", 0)) != 2:
+        raise ValueError("project_product_calendar requires a schema_version 2 session template file")
+    match = next(
+        (row for row in data["session_profiles"] if str(row["product"]).casefold() == product.casefold()),
+        None,
+    )
+    if match is None:
+        raise ValueError(f"session template has no profile for product {product}")
+    version = str(data["version"])
+    source_id = str(data["source_id"])
+    available_at = datetime.fromisoformat(str(data["available_at"]))
+    trading_days = tuple(sorted(date.fromisoformat(str(day)) for day in data["trading_days"]))
+    if window is not None:
+        trading_days = tuple(day for day in trading_days if window[0] <= day <= window[1])
+    if not trading_days:
+        raise ValueError(f"session template has no trading day inside the requested window for {product}")
+    night_close = time.fromisoformat(str(match["night_close"])) if match.get("night_close") else None
+    profiles = tuple(
+        SessionProfile(
+            instrument=instrument,
+            product=product,
+            has_night=bool(match["has_night"]),
+            night_close=night_close,
+            day_auction_style=str(match["day_auction_style"]),
+            source_id=source_id,
+            rule_version=version,
+            available_at=available_at,
+        )
+        for instrument in instruments
+    )
+    return TradingCalendar(
+        build_sessions(profiles, trading_days),
+        trading_days=trading_days,
+        coverage_start=trading_days[0],
+        coverage_end=trading_days[-1],
+        version=version,
+        source_id=source_id,
+        available_at=available_at,
+    )

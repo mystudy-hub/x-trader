@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "fixture_id": "sessions-a25-05-holiday-announcement",
+  "acceptance_ids": ["A25-05", "A05"],
+  "execution_status": "executed_by_unit_tests",
+  "evidence_status": "synthetic_rules_not_exchange_announcement",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": ["docs/sources/中国期货自动交易与回测工具构建规划.md#acceptance-a25", "docs/07_测试与验收方案.md"],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "合成公告：2024-09-30 为长假前最后交易日，取消当晚夜盘；节后首日 2024-10-08 恢复日盘竞价。09-30 收盘信号只能在 10-08 08:55 竞价申报时送出并在 09:00 开盘成交，不能按自然日加一天或在被取消的夜盘成交；日历列出的交易日之外不存在 Bar。长假钩子启用时 09-30 的开仓意图被风控拒绝并写入报告。"
+  },
+  "cases": [
+    {"id": "signal_before_holiday_defers_to_post_holiday_auction", "inputs": {"signal_close": "2024-09-30T15:00:00+08:00"}, "expected": {"accepted_at": "2024-10-08T08:55:00+08:00", "fill_at": "2024-10-08T09:00:00+08:00", "events_between": 0, "snapshot_trading_days": ["2024-09-27", "2024-09-30", "2024-09-30", "2024-10-08"]}},
+    {"id": "holiday_risk_hook_blocks_open_before_holiday", "inputs": {"holiday_start": "2024-10-01", "days_before_holiday": 1}, "expected": {"rejected_stage": "risk", "trades": 0}},
+    {"id": "bar_on_unlisted_trading_day_is_rejected", "inputs": {"claimed_trading_day": "2024-10-01"}, "expected": {"error": "MissingRuleError"}}
+  ]
+}

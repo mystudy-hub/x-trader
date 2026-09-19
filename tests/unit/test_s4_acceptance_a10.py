@@ -1,23 +1,18 @@
 """S4 验收测试 (A10, FR-CON-02~07, FR-RISK-06, FR-VAL-03)."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-
-import pytest
 
 from qh_trader.core.constants import (
     Exchange,
     Offset,
     PositionSide,
-    QualityFlag,
     Side,
 )
 from qh_trader.core.objects import (
     Bar,
     ControlEpoch,
     InstrumentId,
-    OrderIntent,
-    OrderType,
     ProductId,
     RecordMeta,
     Trade,
@@ -28,13 +23,7 @@ from qh_trader.data.continuous import (
     ContinuousSeriesBuilder,
 )
 from qh_trader.data.dominant_contract import (
-    DominantContractResolver,
     build_dominant_mappings,
-)
-from qh_trader.domain.risk import (
-    HolidayRiskHook,
-    RiskManager,
-    RiskViolationError,
 )
 from qh_trader.domain.rollover import (
     LegOrderPolicy,

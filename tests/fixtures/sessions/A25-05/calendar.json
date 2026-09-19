@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "version": "a25-05-holiday-synthetic-v1",
+  "source_id": "tests/fixtures/sessions/A25-05",
+  "available_at": "2024-01-01T00:00:00+00:00",
+  "coverage_start": "2024-09-27",
+  "coverage_end": "2024-10-08",
+  "trading_days": ["2024-09-27", "2024-09-30", "2024-10-08"],
+  "sessions": [
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day", "trading_day": "2024-09-27", "start": "2024-09-27T09:00:00+08:00", "end": "2024-09-27T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "night_continuous", "trading_day": "2024-09-30", "start": "2024-09-27T21:00:00+08:00", "end": "2024-09-27T23:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day", "trading_day": "2024-09-30", "start": "2024-09-30T09:00:00+08:00", "end": "2024-09-30T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day_auction_submit", "trading_day": "2024-10-08", "start": "2024-10-08T08:55:00+08:00", "end": "2024-10-08T08:59:00+08:00", "phase": "AUCTION_SUBMIT", "permissions": {"submit": true, "cancel": true, "match": false}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day_auction_match", "trading_day": "2024-10-08", "start": "2024-10-08T08:59:00+08:00", "end": "2024-10-08T09:00:00+08:00", "phase": "AUCTION_MATCH", "permissions": {"submit": false, "cancel": false, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"},
+    {"exchange": "SHFE", "symbol": "rb2410", "session_id": "day", "trading_day": "2024-10-08", "start": "2024-10-08T09:00:00+08:00", "end": "2024-10-08T15:00:00+08:00", "phase": "CONTINUOUS", "permissions": {"submit": true, "cancel": true, "match": true}, "available_at": "2024-01-01T00:00:00+00:00"}
+  ]
+}
