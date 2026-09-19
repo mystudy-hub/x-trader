@@ -1,25 +1,26 @@
-"""[Gateway 适配器] 模拟撮合网关 (S3-03, FR-MATCH-01~05, FR-EXEC-01~03).
+"""[Gateway 适配器] 模拟撮合网关 (S3-03, FR-MATCH-01~05, FR-MATCH-07 基础延迟, FR-EXEC-01~03).
 
-实现 ExecutionPort 协议，支持：
-1. Bar 级确定性撮合（开盘撮合与盘中触价撮合）；
-2. 涨跌停流动性情景 (LimitLiquidityScenario: 方向保守与触板无成交)；
-3. 参与率共享预算 (participation_rate)；
-4. 严格时间因果律与滑点跳数；
-5. 生成规范的 CanonicalEvent[OrderUpdate] 与 CanonicalEvent[Trade] 事件流。
+实现 ExecutionPort 协议：
+1. 报单 / 撤单按"到达时刻"生效，到达时刻 = 请求时刻 + 配置延迟；到达时按时段权限二次核验 (FR-CAL-07)；
+2. Bar 级确定性撮合分两相：开盘候选只用开盘时点信息，盘中候选只在 Bar 结束时评估尚未成交的订单，
+   后来的收盘触板不改写已确定的开盘成交 (FR-MATCH-02/03, A20)；
+3. 涨跌停流动性情景 (方向保守 / 触板无成交)；参与率共享预算，预算为零不成交 (FR-MATCH-04)；
+4. 成交价同时满足限价、Bar 高低价、涨跌停边界与价格步长 (FR-MATCH-04)；
+5. 订单当交易日有效 (GFD)，交易日切换时未成交部分过期；
+6. 全部回报进入网关出站队列，由引擎按可见时间与显式优先级消费，网关不直接记账。
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from qh_trader.core.constants import (
+    AuctionFillPolicy,
     EventKind,
-    Exchange,
+    IntrabarTouchRule,
     LimitLiquidityScenario,
-    Offset,
     OrderStatus,
     OrderType,
     SendState,
@@ -36,6 +37,7 @@ from qh_trader.core.objects import (
     OrderIdentity,
     OrderIntent,
     OrderUpdate,
+    Permissions,
     Trade,
     TradeKey,
     VersionedValue,
@@ -44,7 +46,7 @@ from qh_trader.core.objects import (
     require_int,
     require_text,
 )
-from qh_trader.core.ports import ExecutionPort
+from qh_trader.core.ports import ClockPort, ExecutionPort, SessionGatePort
 
 
 @dataclass
@@ -52,6 +54,8 @@ class _SimulatedOrderState:
     intent: OrderIntent
     identity: OrderIdentity
     status: OrderStatus
+    effective_at: datetime
+    order_ref_int: int
     filled_quantity: int = 0
 
     @property
@@ -61,6 +65,23 @@ class _SimulatedOrderState:
     @property
     def is_active(self) -> bool:
         return self.status in (OrderStatus.ACCEPTED, OrderStatus.PARTIALLY_FILLED)
+
+
+@dataclass(frozen=True, slots=True)
+class MatchingAssumptions:
+    """写入运行清单的撮合假设 (FR-MATCH-03/05 报告要求)."""
+
+    slippage_ticks: int
+    price_tick: str
+    participation_rate: str
+    limit_liquidity_scenario: str
+    intrabar_touch_rule: str
+    auction_fill_policy: str
+    order_delay_ms: int
+    cancel_delay_ms: int
+    order_validity: str
+    open_fill_time: str
+    intrabar_fill_time: str
 
 
 class SimulatedGateway(ExecutionPort):
@@ -75,6 +96,12 @@ class SimulatedGateway(ExecutionPort):
         price_tick: Decimal = Decimal("1"),
         participation_rate: Decimal = Decimal("1.0"),
         limit_liquidity_scenario: LimitLiquidityScenario = LimitLiquidityScenario.DIRECTION_CONSERVATIVE,
+        intrabar_touch_rule: IntrabarTouchRule = IntrabarTouchRule.TOUCH,
+        auction_fill_policy: AuctionFillPolicy = AuctionFillPolicy.ASSUME_PARTICIPATION,
+        order_delay: timedelta = timedelta(0),
+        cancel_delay: timedelta = timedelta(0),
+        clock: ClockPort | None = None,
+        session_gate: SessionGatePort | None = None,
         front_id: int = 1,
         session_id: int = 1,
         source_id: str = "simulated-gateway",
@@ -83,8 +110,16 @@ class SimulatedGateway(ExecutionPort):
         require_int(slippage_ticks, "slippage_ticks", 0)
         require_decimal(price_tick, "price_tick", Decimal("0.000001"))
         require_decimal(participation_rate, "participation_rate", Decimal(0))
+        if participation_rate > 1:
+            raise ValueError("participation_rate cannot exceed the observed bar volume")
         require_enum(limit_liquidity_scenario, LimitLiquidityScenario)
+        require_enum(intrabar_touch_rule, IntrabarTouchRule)
+        require_enum(auction_fill_policy, AuctionFillPolicy)
         require_text(source_id, "source_id")
+        if not isinstance(order_delay, timedelta) or not isinstance(cancel_delay, timedelta):
+            raise TypeError("delays must be timedelta values")
+        if order_delay < timedelta(0) or cancel_delay < timedelta(0):
+            raise ValueError("delays cannot be negative")
 
         self._account_id = account_id
         self._trading_day = trading_day
@@ -92,19 +127,27 @@ class SimulatedGateway(ExecutionPort):
         self._price_tick = price_tick
         self._participation_rate = participation_rate
         self._limit_liquidity_scenario = limit_liquidity_scenario
+        self._intrabar_touch_rule = intrabar_touch_rule
+        self._auction_fill_policy = auction_fill_policy
+        self._order_delay = order_delay
+        self._cancel_delay = cancel_delay
+        self._clock = clock
+        self._session_gate = session_gate
         self._front_id = front_id
         self._session_id = session_id
         self._source_id = source_id
 
         self._seq = 0
         self._trade_counter = 0
-        self._sys_counter = 0
         self._order_ref_counter = 0
+        self._last_time: datetime | None = None
 
         self._orders: dict[str, _SimulatedOrderState] = {}  # client_order_id -> state
         self._identity_map: dict[str, str] = {}  # order_ref -> client_order_id
+        self._pending_cancels: list[tuple[datetime, int, str]] = []  # (arrival, seq, client_order_id)
         self._events: list[CanonicalEvent] = []
 
+    # ------------------------------------------------------------------ 属性
     @property
     def account_id(self) -> str:
         return self._account_id
@@ -129,16 +172,61 @@ class SimulatedGateway(ExecutionPort):
     def limit_liquidity_scenario(self) -> LimitLiquidityScenario:
         return self._limit_liquidity_scenario
 
+    def assumptions(self) -> MatchingAssumptions:
+        return MatchingAssumptions(
+            slippage_ticks=self._slippage_ticks,
+            price_tick=str(self._price_tick),
+            participation_rate=str(self._participation_rate),
+            limit_liquidity_scenario=self._limit_liquidity_scenario.value,
+            intrabar_touch_rule=self._intrabar_touch_rule.value,
+            auction_fill_policy=self._auction_fill_policy.value,
+            order_delay_ms=int(self._order_delay.total_seconds() * 1000),
+            cancel_delay_ms=int(self._cancel_delay.total_seconds() * 1000),
+            order_validity="GOOD_FOR_TRADING_DAY",
+            open_fill_time="bar.open_time",
+            intrabar_fill_time="bar.bar_end (approximation: OHLC gives no intrabar path)",
+        )
+
     def set_trading_day(self, day: date) -> None:
         self._trading_day = day
 
+    def bind_clock(self, clock: ClockPort) -> None:
+        self._clock = clock
+
+    def bind_session_gate(self, gate: SessionGatePort | None) -> None:
+        self._session_gate = gate
+
+    @property
+    def session_gate(self) -> SessionGatePort | None:
+        return self._session_gate
+
+    def active_orders(self) -> tuple[OrderIntent, ...]:
+        return tuple(st.intent for st in self._orders.values() if st.is_active)
+
+    # ------------------------------------------------------------------ 时间与权限
+    def _now(self, fallback: datetime) -> datetime:
+        now = self._clock.now() if self._clock is not None else fallback
+        if self._last_time is not None and now < self._last_time:
+            raise ValueError("simulated gateway time cannot move backwards")
+        self._last_time = now
+        return now
+
+    def _permissions(self, instrument: InstrumentId, at: datetime) -> Permissions:
+        """无时段门时视为连续交易 (工程样例)；有时段门时无登记时段不授予任何权限."""
+        if self._session_gate is None:
+            return Permissions(True, True, True)
+        found = self._session_gate.permissions_at(instrument, at)
+        return found if found is not None else Permissions(False, False, False)
+
     # ------------------------------------------------------------------ ExecutionPort 接口
     def submit(self, order: OrderIntent, epoch: ControlEpoch) -> LocalSendResult:
-        """接收订单并立即确认接受（生成 ACCEPTED 事件流）."""
+        """接收订单；到达时刻按时段权限核验，接受或拒绝均生成回报事件."""
         if not isinstance(order, OrderIntent):
             raise TypeError("order must be an OrderIntent")
         if not isinstance(epoch, ControlEpoch):
             raise TypeError("epoch must be a ControlEpoch")
+        if order.order_type == OrderType.LIMIT and order.limit_price_ticks is None:
+            return LocalSendResult(state=SendState.NOT_SENT, local_code=-4, evidence="limit order without price")
 
         client_id = order.client_order_id
         if client_id in self._orders:
@@ -148,9 +236,13 @@ class SimulatedGateway(ExecutionPort):
                 evidence="duplicate client_order_id in simulated gateway",
             )
 
+        sent_at = self._now(order.created_at)
+        if sent_at < order.created_at:
+            raise ValueError("an order cannot be sent before it was created")
+        arrival_at = sent_at + self._order_delay
+
         self._order_ref_counter += 1
         order_ref = str(self._order_ref_counter)
-
         identity = OrderIdentity(
             account_id=self._account_id,
             exchange=order.instrument.exchange,
@@ -161,48 +253,28 @@ class SimulatedGateway(ExecutionPort):
             order_ref=order_ref,
         )
 
+        permissions = self._permissions(order.instrument, arrival_at)
+        status = OrderStatus.ACCEPTED if permissions.submit else OrderStatus.REJECTED
         state = _SimulatedOrderState(
             intent=order,
             identity=identity,
-            status=OrderStatus.ACCEPTED,
-            filled_quantity=0,
+            status=status,
+            effective_at=arrival_at,
+            order_ref_int=self._order_ref_counter,
         )
         self._orders[client_id] = state
         self._identity_map[order_ref] = client_id
+        self._emit_order_update(state, arrival_at)
 
-        # 生成远端接受回报 (OrderUpdate)
-        now = order.created_at
-        self._next_seq()
-        update = OrderUpdate(
-            identity=identity,
-            instrument=order.instrument,
-            side=order.side,
-            offset=order.offset,
-            status=OrderStatus.ACCEPTED,
-            quantity=order.quantity,
-            filled_quantity=0,
-            event_time=now,
-            available_at=now,
+        evidence = (
+            "order accepted by simulated gateway"
+            if permissions.submit
+            else "order rejected on arrival: phase does not permit submission"
         )
-        event = CanonicalEvent(
-            event_id=f"ord-{self._seq}",
-            kind=EventKind.ORDER_REPORT,
-            event_time=now,
-            available_at=now,
-            sequence=self._seq,
-            source_id=self._source_id,
-            payload=update,
-        )
-        self._events.append(event)
-
-        return LocalSendResult(
-            state=SendState.SENT_UNKNOWN,
-            local_code=0,
-            evidence="order accepted by simulated gateway",
-        )
+        return LocalSendResult(state=SendState.SENT_UNKNOWN, local_code=0, evidence=evidence)
 
     def cancel(self, ref: OrderIdentity, epoch: ControlEpoch) -> LocalSendResult:
-        """撤单处理：如果订单处于活跃状态则将其置为 CANCELLED."""
+        """撤单请求：按到达时刻核验权限；被拒绝不改变原单，被接受则在到达时刻生效."""
         if not isinstance(ref, OrderIdentity):
             raise TypeError("ref must be an OrderIdentity")
         if not isinstance(epoch, ControlEpoch):
@@ -214,11 +286,9 @@ class SimulatedGateway(ExecutionPort):
         elif ref.order_ref and ref.order_ref in self._identity_map:
             client_id = self._identity_map[ref.order_ref]
 
-        if client_id is None or client_id not in self._orders:
+        if client_id is None:
             return LocalSendResult(
-                state=SendState.NOT_SENT,
-                local_code=-1,
-                evidence="order not found in simulated gateway",
+                state=SendState.NOT_SENT, local_code=-1, evidence="order not found in simulated gateway"
             )
 
         state = self._orders[client_id]
@@ -229,35 +299,24 @@ class SimulatedGateway(ExecutionPort):
                 evidence=f"order not active in simulated gateway, status={state.status}",
             )
 
-        state.status = OrderStatus.CANCELLED
-        now = datetime.now(timezone.utc)
-        self._next_seq()
-        update = OrderUpdate(
-            identity=state.identity,
-            instrument=state.intent.instrument,
-            side=state.intent.side,
-            offset=state.intent.offset,
-            status=OrderStatus.CANCELLED,
-            quantity=state.intent.quantity,
-            filled_quantity=state.filled_quantity,
-            event_time=now,
-            available_at=now,
-        )
-        event = CanonicalEvent(
-            event_id=f"ord-{self._seq}",
-            kind=EventKind.ORDER_REPORT,
-            event_time=now,
-            available_at=now,
-            sequence=self._seq,
-            source_id=self._source_id,
-            payload=update,
-        )
-        self._events.append(event)
+        sent_at = self._now(state.effective_at)
+        arrival_at = sent_at + self._cancel_delay
+        permissions = self._permissions(state.intent.instrument, arrival_at)
+        if not permissions.cancel:
+            # 到达时进入禁止撤单阶段：拒绝，不生成生效事件，原单与预占保持 (A25-04, FR-MATCH-07)
+            return LocalSendResult(
+                state=SendState.NOT_SENT,
+                local_code=-3,
+                evidence=f"cancel rejected on arrival at {arrival_at.isoformat()}: phase does not permit cancel",
+            )
 
+        self._seq += 1
+        self._pending_cancels.append((arrival_at, self._seq, client_id))
+        self._pending_cancels.sort(key=lambda item: (item[0], item[1]))
+        # 零延迟撤单立即生效；带延迟的撤单在撮合推进到到达时刻时生效
+        self.apply_pending_cancels(sent_at)
         return LocalSendResult(
-            state=SendState.SENT_UNKNOWN,
-            local_code=0,
-            evidence="cancel accepted by simulated gateway",
+            state=SendState.SENT_UNKNOWN, local_code=0, evidence="cancel accepted by simulated gateway"
         )
 
     def capabilities(self) -> VersionedValue[CapabilityProfile]:
@@ -280,6 +339,31 @@ class SimulatedGateway(ExecutionPort):
             available_at=now,
         )
 
+    # ------------------------------------------------------------------ 撤单与过期推进
+    def apply_pending_cancels(self, until: datetime) -> None:
+        """使到达时刻 <= until 的撤单生效 (到达 != 生效：生效才生成 CANCELLED 回报)."""
+        remaining: list[tuple[datetime, int, str]] = []
+        for arrival_at, seq, client_id in self._pending_cancels:
+            if arrival_at > until:
+                remaining.append((arrival_at, seq, client_id))
+                continue
+            state = self._orders[client_id]
+            if state.is_active:
+                state.status = OrderStatus.CANCELLED
+                self._emit_order_update(state, arrival_at)
+        self._pending_cancels = remaining
+
+    def expire_orders(self, at: datetime) -> list[CanonicalEvent]:
+        """交易日切换：当日有效订单的未成交部分过期 (GFD)."""
+        before = len(self._events)
+        self.apply_pending_cancels(at)
+        for state in sorted(self._orders.values(), key=lambda st: st.order_ref_int):
+            if state.is_active:
+                state.status = OrderStatus.EXPIRED
+                self._emit_order_update(state, at)
+        self._pending_cancels = []
+        return self._take_since(before)
+
     # ------------------------------------------------------------------ Bar 撮合
     def match_bar(
         self,
@@ -288,165 +372,217 @@ class SimulatedGateway(ExecutionPort):
         upper_limit: Decimal | None = None,
         lower_limit: Decimal | None = None,
     ) -> list[CanonicalEvent]:
-        """按 Bar 撮合未完成订单.
+        """按 Bar 撮合未完成订单，返回本次新增的回报事件.
 
-        按顺序处理：
-        1. 零成交量判断；
-        2. 涨跌停流动性与方向限制；
-        3. 开盘撮合 (created_at <= bar.open_time 的订单)；
-        4. 盘中撮合 (高低价触及限价的订单)；
-        5. 共享参与率预算消耗；
-        6. 返回本次撮合生成的所有事件流。
+        相一：开盘候选。只考虑在 open_time 前已生效的订单，只用 open 与开盘时点的涨跌停状态。
+        相二：Bar 结束估算。只对开盘未成交且在 open_time 前已生效的限价单，用高低价评估；
+              在 Bar 内才生效的订单延至下一完整 Bar (保守路径)。
         """
         if not isinstance(bar, Bar):
             raise TypeError("bar must be a Bar instance")
+        if bar.instrument.__class__.__name__ != "InstrumentId":
+            raise TypeError("only actual contracts can be matched")
+        if upper_limit is not None:
+            require_decimal(upper_limit, "upper_limit")
+        if lower_limit is not None:
+            require_decimal(lower_limit, "lower_limit")
 
         events_before = len(self._events)
+        self._last_time = max(self._last_time, bar.open_time) if self._last_time else bar.open_time
 
-        # 1. 零成交量：零量不成交 (A11, A20, FR-MATCH-01)
+        # 到达时刻不晚于开盘的撤单先生效
+        self.apply_pending_cancels(bar.open_time)
+
         if bar.volume <= 0:
-            return []
+            # 零成交量：不成交，也不推断盘中路径 (A11, A20)
+            self.apply_pending_cancels(bar.bar_end)
+            return self._take_since(events_before)
 
-        # 2. 参与率共享预算 (FR-MATCH-04)
-        budget = int(Decimal(bar.volume) * self._participation_rate)
-        if budget <= 0 and self._participation_rate > 0:
-            # 至少支持 1 手，若 volume 极小但 participation_rate 非零
-            budget = max(1, int(Decimal(bar.volume) * self._participation_rate))
+        budget = int((Decimal(bar.volume) * self._participation_rate).to_integral_value(rounding=ROUND_DOWN))
+        if budget <= 0:
+            self.apply_pending_cancels(bar.bar_end)
+            return self._take_since(events_before)
 
-        # 3. 涨跌停流动性判定 (FR-MATCH-03)
-        can_buy = True
-        can_sell = True
-        is_upper = (upper_limit is not None and bar.close >= upper_limit)
-        is_lower = (lower_limit is not None and bar.close <= lower_limit)
+        # ---- 相一：开盘候选 (FR-MATCH-02)
+        can_buy_open, can_sell_open = self._limit_liquidity(bar.open, upper_limit, lower_limit)
+        open_permitted = self._permissions(bar.instrument, bar.open_time).match
+        auction_blocked = bar.includes_auction and self._auction_fill_policy == AuctionFillPolicy.REJECT
 
-        if self._limit_liquidity_scenario == LimitLiquidityScenario.DIRECTION_CONSERVATIVE:
-            if is_upper:
-                can_buy = False  # 涨停封死，买单不可成交，卖单可成交
-            if is_lower:
-                can_sell = False  # 跌停封死，卖单不可成交，买单可成交
-        elif self._limit_liquidity_scenario == LimitLiquidityScenario.TOUCH_LIMIT_NO_FILL:
-            if is_upper or is_lower:
-                can_buy = False
-                can_sell = False
-
-        # 筛选与本 Bar 合约一致的活跃订单
-        active_orders = [
-            st for st in self._orders.values()
-            if st.is_active and st.intent.instrument == bar.instrument
-        ]
-        if not active_orders or budget <= 0:
-            return []
-
-        # 4. 阶段一：开盘撮合 (针对在 bar.open_time 或之前创建的订单)
-        # FR-MATCH-02: 必须在开盘时点前已生效，才能使用该 Bar 的开盘价
-        open_time = bar.open_time
-        for state in active_orders:
-            if budget <= 0:
-                break
-            order = state.intent
-            if order.created_at > open_time:
-                continue
-
-            # 撮合判定
-            fill_qty = 0
-            fill_price = Decimal(0)
-
-            if order.side == Side.BUY:
-                if not can_buy:
+        if open_permitted and not auction_blocked:
+            for state in self._ordered_active(bar.instrument):
+                if budget <= 0:
+                    break
+                if state.effective_at > bar.open_time:
                     continue
-                # 买单限价
-                if order.order_type == OrderType.LIMIT:
-                    assert order.limit_price_ticks is not None
-                    limit_p = Decimal(order.limit_price_ticks) * self._price_tick
-                    if bar.open <= limit_p:
-                        # 触及开盘价，加滑点
-                        raw_fill_p = bar.open + Decimal(self._slippage_ticks) * self._price_tick
-                        fill_price = min(limit_p, raw_fill_p)
-                        if upper_limit is not None:
-                            fill_price = min(fill_price, upper_limit)
-                        fill_qty = min(state.unfilled_quantity, budget)
-                else:
-                    # 市价
-                    fill_price = bar.open + Decimal(self._slippage_ticks) * self._price_tick
-                    if upper_limit is not None:
-                        fill_price = min(fill_price, upper_limit)
-                    fill_qty = min(state.unfilled_quantity, budget)
-
-            elif order.side == Side.SELL:
-                if not can_sell:
+                fill_price = self._open_candidate_price(state.intent, bar, upper_limit, lower_limit)
+                if fill_price is None:
                     continue
-                # 卖单限价
-                if order.order_type == OrderType.LIMIT:
-                    assert order.limit_price_ticks is not None
-                    limit_p = Decimal(order.limit_price_ticks) * self._price_tick
-                    if bar.open >= limit_p:
-                        raw_fill_p = bar.open - Decimal(self._slippage_ticks) * self._price_tick
-                        fill_price = max(limit_p, raw_fill_p)
-                        if lower_limit is not None:
-                            fill_price = max(fill_price, lower_limit)
-                        fill_qty = min(state.unfilled_quantity, budget)
-                else:
-                    # 市价
-                    fill_price = bar.open - Decimal(self._slippage_ticks) * self._price_tick
-                    if lower_limit is not None:
-                        fill_price = max(fill_price, lower_limit)
-                    fill_qty = min(state.unfilled_quantity, budget)
-
-            if fill_qty > 0:
-                self._execute_fill(state, fill_qty, fill_price, open_time)
+                if state.intent.side == Side.BUY and not can_buy_open:
+                    continue
+                if state.intent.side == Side.SELL and not can_sell_open:
+                    continue
+                fill_qty = min(state.unfilled_quantity, budget)
+                self._execute_fill(state, fill_qty, fill_price, bar.open_time)
                 budget -= fill_qty
 
-        # 5. 阶段二：盘中限价撮合 (针对未在开盘全部成交的订单，使用 high/low 撮合)
-        if budget > 0:
-            match_time = bar.bar_end
-            for state in active_orders:
-                if budget <= 0 or not state.is_active:
-                    continue
+        # 开盘之后、Bar 结束之前到达的撤单：保守地视为在盘中评估前生效
+        self.apply_pending_cancels(bar.bar_end)
+
+        # ---- 相二：Bar 结束估算 (只评估尚未成交、且整根 Bar 内均已生效的限价单)；权限看 Bar 内最后一刻
+        if budget > 0 and self._permissions(bar.instrument, bar.bar_end - timedelta(microseconds=1)).match:
+            can_buy_close, can_sell_close = self._limit_liquidity(bar.close, upper_limit, lower_limit)
+            for state in self._ordered_active(bar.instrument):
+                if budget <= 0:
+                    break
                 order = state.intent
-                if order.order_type != OrderType.LIMIT:
+                if order.order_type != OrderType.LIMIT or state.effective_at > bar.open_time:
                     continue
-                assert order.limit_price_ticks is not None
-                limit_p = Decimal(order.limit_price_ticks) * self._price_tick
+                fill_price = self._intrabar_candidate_price(order, bar, upper_limit, lower_limit)
+                if fill_price is None:
+                    continue
+                if order.side == Side.BUY and not can_buy_close:
+                    continue
+                if order.side == Side.SELL and not can_sell_close:
+                    continue
+                fill_qty = min(state.unfilled_quantity, budget)
+                self._execute_fill(state, fill_qty, fill_price, bar.bar_end)
+                budget -= fill_qty
 
-                fill_qty = 0
-                fill_price = Decimal(0)
-
-                if order.side == Side.BUY:
-                    if not can_buy:
-                        continue
-                    # 盘中触价: low <= limit_price
-                    if bar.low <= limit_p:
-                        fill_price = limit_p
-                        if upper_limit is not None:
-                            fill_price = min(fill_price, upper_limit)
-                        fill_qty = min(state.unfilled_quantity, budget)
-
-                elif order.side == Side.SELL:
-                    if not can_sell:
-                        continue
-                    # 盘中触价: high >= limit_price
-                    if bar.high >= limit_p:
-                        fill_price = limit_p
-                        if lower_limit is not None:
-                            fill_price = max(fill_price, lower_limit)
-                        fill_qty = min(state.unfilled_quantity, budget)
-
-                if fill_qty > 0:
-                    self._execute_fill(state, fill_qty, fill_price, match_time)
-                    budget -= fill_qty
-
-        return self._events[events_before:]
+        return self._take_since(events_before)
 
     def drain_events(self) -> list[CanonicalEvent]:
-        """取出所有未消费的事件流并清空内部队列."""
-        evts = list(self._events)
+        """取出所有未消费的回报事件并清空出站队列."""
+        events = list(self._events)
         self._events.clear()
-        return evts
+        return events
 
-    # ------------------------------------------------------------------ 内部辅助
+    def _take_since(self, index: int) -> list[CanonicalEvent]:
+        """取出自 index 起新增的事件并从出站队列移除，避免被 drain_events 重复投递."""
+        taken = self._events[index:]
+        del self._events[index:]
+        return taken
+
+    # ------------------------------------------------------------------ 撮合辅助
+    def _ordered_active(self, instrument: InstrumentId) -> list[_SimulatedOrderState]:
+        return sorted(
+            (st for st in self._orders.values() if st.is_active and st.intent.instrument == instrument),
+            key=lambda st: (st.effective_at, st.order_ref_int),
+        )
+
+    def _limit_liquidity(
+        self,
+        reference_price: Decimal,
+        upper_limit: Decimal | None,
+        lower_limit: Decimal | None,
+    ) -> tuple[bool, bool]:
+        """按候选时点价格与流动性情景给出 (可买, 可卖)."""
+        at_upper = upper_limit is not None and reference_price >= upper_limit
+        at_lower = lower_limit is not None and reference_price <= lower_limit
+        if self._limit_liquidity_scenario == LimitLiquidityScenario.DIRECTION_CONSERVATIVE:
+            return (not at_upper, not at_lower)
+        if at_upper or at_lower:
+            return (False, False)
+        return (True, True)
+
+    def _limit_price(self, order: OrderIntent) -> Decimal:
+        assert order.limit_price_ticks is not None
+        return Decimal(order.limit_price_ticks) * self._price_tick
+
+    def _round_to_tick(self, price: Decimal, side: Side) -> Decimal:
+        """成交价对齐价格步长：买单向上、卖单向下取整 (不利方向)."""
+        ticks = price / self._price_tick
+        rounding = ROUND_HALF_UP
+        rounded = ticks.to_integral_value(rounding=rounding)
+        if rounded != ticks:
+            rounded = ticks.to_integral_value(rounding="ROUND_CEILING" if side == Side.BUY else "ROUND_FLOOR")
+        return rounded * self._price_tick
+
+    def _bound_price(
+        self,
+        price: Decimal,
+        side: Side,
+        bar: Bar,
+        upper_limit: Decimal | None,
+        lower_limit: Decimal | None,
+    ) -> Decimal:
+        """成交价不能超出该 Bar 实际价格域与涨跌停边界."""
+        price = min(max(price, bar.low), bar.high)
+        if upper_limit is not None:
+            price = min(price, upper_limit)
+        if lower_limit is not None:
+            price = max(price, lower_limit)
+        price = self._round_to_tick(price, side)
+        return min(max(price, bar.low), bar.high)
+
+    def _open_candidate_price(
+        self,
+        order: OrderIntent,
+        bar: Bar,
+        upper_limit: Decimal | None,
+        lower_limit: Decimal | None,
+    ) -> Decimal | None:
+        slip = Decimal(self._slippage_ticks) * self._price_tick
+        if order.side == Side.BUY:
+            raw = bar.open + slip
+            if order.order_type == OrderType.LIMIT:
+                limit_p = self._limit_price(order)
+                if bar.open > limit_p:
+                    return None
+                raw = min(raw, limit_p)
+            return self._bound_price(raw, order.side, bar, upper_limit, lower_limit)
+        raw = bar.open - slip
+        if order.order_type == OrderType.LIMIT:
+            limit_p = self._limit_price(order)
+            if bar.open < limit_p:
+                return None
+            raw = max(raw, limit_p)
+        return self._bound_price(raw, order.side, bar, upper_limit, lower_limit)
+
+    def _intrabar_candidate_price(
+        self,
+        order: OrderIntent,
+        bar: Bar,
+        upper_limit: Decimal | None,
+        lower_limit: Decimal | None,
+    ) -> Decimal | None:
+        limit_p = self._limit_price(order)
+        margin = self._price_tick if self._intrabar_touch_rule == IntrabarTouchRule.CROSS_ONE_TICK else Decimal(0)
+        if order.side == Side.BUY:
+            if bar.low > limit_p - margin:
+                return None
+        elif bar.high < limit_p + margin:
+            return None
+        return self._bound_price(limit_p, order.side, bar, upper_limit, lower_limit)
+
+    # ------------------------------------------------------------------ 事件生成
     def _next_seq(self) -> int:
         self._seq += 1
         return self._seq
+
+    def _emit_order_update(self, state: _SimulatedOrderState, at: datetime) -> None:
+        seq = self._next_seq()
+        update = OrderUpdate(
+            identity=state.identity,
+            instrument=state.intent.instrument,
+            side=state.intent.side,
+            offset=state.intent.offset,
+            status=state.status,
+            quantity=state.intent.quantity,
+            filled_quantity=state.filled_quantity,
+            event_time=at,
+            available_at=at,
+        )
+        self._events.append(
+            CanonicalEvent(
+                event_id=f"ord-{seq}",
+                kind=EventKind.ORDER_REPORT,
+                event_time=at,
+                available_at=at,
+                sequence=seq,
+                source_id=self._source_id,
+                payload=update,
+            )
+        )
 
     def _execute_fill(
         self,
@@ -455,13 +591,13 @@ class SimulatedGateway(ExecutionPort):
         fill_price: Decimal,
         fill_time: datetime,
     ) -> None:
+        if fill_qty <= 0:
+            return
         state.filled_quantity += fill_qty
-        if state.filled_quantity >= state.intent.quantity:
-            state.status = OrderStatus.FILLED
-        else:
-            state.status = OrderStatus.PARTIALLY_FILLED
+        state.status = (
+            OrderStatus.FILLED if state.filled_quantity >= state.intent.quantity else OrderStatus.PARTIALLY_FILLED
+        )
 
-        # 1. 生成 Trade 事件
         self._trade_counter += 1
         trade_id = f"T{self._trade_counter}"
         day = self._trading_day
@@ -479,38 +615,16 @@ class SimulatedGateway(ExecutionPort):
             deduplication_key=TradeKey(self._account_id, state.intent.instrument.exchange, day, trade_id),
             order_identity=state.identity,
         )
-        self._next_seq()
-        trade_event = CanonicalEvent(
-            event_id=f"trd-{self._seq}",
-            kind=EventKind.TRADE_REPORT,
-            event_time=fill_time,
-            available_at=fill_time,
-            sequence=self._seq,
-            source_id=self._source_id,
-            payload=trade,
+        seq = self._next_seq()
+        self._events.append(
+            CanonicalEvent(
+                event_id=f"trd-{seq}",
+                kind=EventKind.TRADE_REPORT,
+                event_time=fill_time,
+                available_at=fill_time,
+                sequence=seq,
+                source_id=self._source_id,
+                payload=trade,
+            )
         )
-        self._events.append(trade_event)
-
-        # 2. 生成 OrderUpdate 事件
-        self._next_seq()
-        update = OrderUpdate(
-            identity=state.identity,
-            instrument=state.intent.instrument,
-            side=state.intent.side,
-            offset=state.intent.offset,
-            status=state.status,
-            quantity=state.intent.quantity,
-            filled_quantity=state.filled_quantity,
-            event_time=fill_time,
-            available_at=fill_time,
-        )
-        order_event = CanonicalEvent(
-            event_id=f"ord-{self._seq}",
-            kind=EventKind.ORDER_REPORT,
-            event_time=fill_time,
-            available_at=fill_time,
-            sequence=self._seq,
-            source_id=self._source_id,
-            payload=update,
-        )
-        self._events.append(order_event)
+        self._emit_order_update(state, fill_time)

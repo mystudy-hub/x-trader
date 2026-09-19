@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "fixture_id": "backtest-expectations-rb2410-1d",
+  "purpose": "固定工程样例 (SHFE.rb2410 1d, 双均线 5/20, 1 手, 手续费 5 元/手, 无滑点, 参与率 1.0, 方向保守) 的独立预期；scripts/replay_market_data.py --expected 与 tests/unit/test_s3_acceptance_a25_a28.py 引用。",
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "成交序列由 research/vector_backtest.py (与引擎无共享代码的独立实现) 按“Bar i 收盘信号、Bar i+1 开盘成交”推导，并对首个信号 (2023-12-18 死叉 -> 2023-12-19 开盘 3912 卖开) 人工按原始收盘价复算均线核对；权益与手续费按 23 笔 × 5 元和逐笔价差手工累加。任何数据快照、参数或撮合假设变化都必须重新生成本文件并说明来源。"
+  },
+  "dataset_snapshot_id": "4379bc819d9db69d8264309f319333cb1fd36af05c8311f6ff71409f50fccd40",
+  "parameters": {
+    "symbol": "SHFE.rb2410",
+    "interval": "1d",
+    "fast_window": 5,
+    "slow_window": 20,
+    "order_size": 1,
+    "commission_per_lot": "5.0",
+    "slippage_ticks": 0,
+    "participation_rate": "1.0",
+    "limit_liquidity_scenario": "DIRECTION_CONSERVATIVE",
+    "execution_policy": "NEXT_BAR_OPEN",
+    "settlement": "official_settlement"
+  },
+  "final_equity": "999175.00",
+  "total_trades": 23,
+  "total_commission": "115.0",
+  "first_trade": {"trading_day": "2023-12-19", "side": "SELL", "offset": "OPEN", "price": "3912"},
+  "hashes": {
+    "trades": "feeeebd55b2a8b686c12bf0d1b737624ffbc3ed22145be754597b440472241c4"
+  }
+}

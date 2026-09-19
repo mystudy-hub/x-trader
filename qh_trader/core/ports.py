@@ -25,6 +25,7 @@ from .objects import (
     OrderIdentity,
     OrderIntent,
     OrderUpdate,
+    Permissions,
     Position,
     ProductId,
     QueryBatch,
@@ -46,6 +47,33 @@ class ExecutionPort(Protocol):
     def submit(self, order: OrderIntent, epoch: ControlEpoch) -> LocalSendResult: ...
     def cancel(self, ref: OrderIdentity, epoch: ControlEpoch) -> LocalSendResult: ...
     def capabilities(self) -> VersionedValue[CapabilityProfile]: ...
+
+
+@runtime_checkable
+class SessionGatePort(Protocol):
+    """按合约与时刻给出时段权限 (FR-CAL-07)；无已登记时段返回 None，不授予任何权限。"""
+
+    def permissions_at(self, instrument: InstrumentId, at: datetime) -> Permissions | None: ...
+    def next_submit_time(self, instrument: InstrumentId, after: datetime) -> datetime | None: ...
+    def next_session_open(
+        self, instrument: InstrumentId, after: datetime, *, day_session_only: bool = False
+    ) -> datetime | None: ...
+    def version(self) -> str: ...
+
+
+@runtime_checkable
+class SimulatedExecutionPort(ExecutionPort, Protocol):
+    """模拟撮合网关在 ExecutionPort 之上暴露的回测调度接口；真实柜台适配器不实现。"""
+
+    def bind_clock(self, clock: ClockPort) -> None: ...
+    def bind_session_gate(self, gate: SessionGatePort | None) -> None: ...
+    def set_trading_day(self, day: date) -> None: ...
+    def match_bar(
+        self, bar: Bar, *, upper_limit: Decimal | None = None, lower_limit: Decimal | None = None
+    ) -> Sequence[CanonicalEvent]: ...
+    def expire_orders(self, at: datetime) -> Sequence[CanonicalEvent]: ...
+    def drain_events(self) -> Sequence[CanonicalEvent]: ...
+    def assumptions(self) -> object: ...
 
 
 @runtime_checkable
@@ -174,8 +202,10 @@ class StrategyContextPort(Protocol):
         side: Side,
         offset: Offset,
         quantity: int,
-        order_type: OrderType = OrderType.LIMIT,
+        order_type: OrderType = OrderType.MARKET,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str: ...
     def buy(
         self,
@@ -183,6 +213,8 @@ class StrategyContextPort(Protocol):
         quantity: int,
         offset: Offset = Offset.OPEN,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str: ...
     def sell(
         self,
@@ -190,9 +222,12 @@ class StrategyContextPort(Protocol):
         quantity: int,
         offset: Offset = Offset.CLOSE,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str: ...
     def cancel_order(self, client_order_id: str) -> None: ...
     def get_position(self, instrument: InstrumentId) -> int: ...
+    def schedule_timer(self, at: datetime, timer_id: str, payload: object = None) -> None: ...
 
 
 @runtime_checkable
@@ -207,4 +242,5 @@ class StrategyPort(Protocol):
     def on_bar(self, bar: Bar) -> None: ...
     def on_order(self, order: OrderUpdate) -> None: ...
     def on_trade(self, trade: Trade) -> None: ...
+    def on_timer(self, timer: TimerEvent) -> None: ...
 

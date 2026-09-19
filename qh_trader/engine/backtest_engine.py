@@ -1,38 +1,57 @@
-"""[Engine 层] BacktestEngine 单品种/多品种事件驱动 Bar 回测引擎 (S3-02, FR-MATCH-01~05, FR-EXEC-01~03).
+"""[Engine 层] BacktestEngine 事件驱动 Bar 回测引擎 (S3-02, FR-MATCH-01~05, FR-EXEC-01~03, FR-CAL-04/05, FR-VAL-06).
 
-核心特性：
-1. 确定性事件推进：通过 VirtualClock 与 Bar 时间戳严格分相推进（开盘撮合 -> 收盘行情分发 -> 策略决策）；
-2. 彻底杜绝未来信息：策略在 bar.bar_end 时刻接收行情并决策，产生的订单最早在下一时点/下一 Bar 开盘撮合；
-3. 严格集成 S2 交易内核：持仓预占、双盈亏事件账本、每日结算结转 (settle_day) 与四字段资金模型；
-4. 产出结构化 BacktestResult 与逐 Bar 资产快照，供绩效分析与报告生成使用；
-5. 架构纯洁性：仅依赖 Core 与 Domain 层，通过 ExecutionPort 与 JournalPort 注入外部适配器。
+每根 Bar 的推进分相：
+  A. 推进虚拟时钟到 open_time（途中触发到期定时器，空行情时段同样推进）；
+     对 open_time 前已生效的订单做开盘候选撮合，回报入内核；
+  B. 推进到 bar_end；网关做 Bar 结束估算，回报入内核；随后才把本 Bar 推给策略 (策略看不到本 Bar 撮合前的信息)；
+  C. 记录逐 Bar 权益快照。
+交易日切换：按日历 (若提供) 或 Bar 的交易日标记；先让未成交订单过期并释放预占，再按结算价结算全部持仓，
+缺任何持仓合约的结算价时明确失败，不静默跳过。
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from qh_trader.core.constants import (
-    EventKind,
+    ExecutionPolicy,
+    MissedExecutionPolicy,
+    MissingRuleError,
+    OrderStatus,
     PositionSide,
 )
+from qh_trader.core.event import CanonicalEvent
 from qh_trader.core.objects import Bar, InstrumentId, Trade
-from qh_trader.core.ports import ExecutionPort, JournalPort, RuleStorePort
+from qh_trader.core.ports import ExecutionPort, JournalPort, RuleStorePort, SessionGatePort
+from qh_trader.domain.ledger import ClosedTradeRecord, SettlementPendingError
+from qh_trader.domain.limits import ExchangeLimits
 from qh_trader.domain.orders import Order
-from qh_trader.engine.base_engine import BaseEngine
+from qh_trader.domain.risk import RiskManager
+from qh_trader.domain.smart_router import SmartRouter
+from qh_trader.engine.base_engine import (
+    SIMULATED_EVENT_PRIORITIES,
+    BaseEngine,
+    InstrumentEconomics,
+    MissedExecution,
+    RejectedIntent,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class EquitySnapshot:
-    """逐 Bar 资产与持仓快照."""
+    """逐 Bar 资产与持仓快照 (含未平仓估值)."""
+
     timestamp: datetime
     trading_day: date
     balance: Decimal
     total_equity: Decimal
+    margin_used: Decimal
     realized_mtm_pnl: Decimal
     realized_trade_pnl: Decimal
     total_commission: Decimal
@@ -44,6 +63,7 @@ class EquitySnapshot:
 @dataclass(frozen=True)
 class BacktestResult:
     """回测结果输出结构."""
+
     account_id: str
     initial_capital: Decimal
     final_equity: Decimal
@@ -53,6 +73,75 @@ class BacktestResult:
     equity_snapshots: tuple[EquitySnapshot, ...]
     trades: tuple[Trade, ...]
     orders: tuple[Order, ...]
+    closed_trades: tuple[ClosedTradeRecord, ...] = ()
+    rejected_intents: tuple[RejectedIntent, ...] = ()
+    missed_executions: tuple[MissedExecution, ...] = ()
+    unfilled_orders: tuple[Order, ...] = ()
+    ledger_entries: tuple[Any, ...] = ()
+    events: tuple[CanonicalEvent, ...] = ()
+    strategy_of_order: Mapping[str, str] = field(default_factory=dict)
+    first_trading_day: date | None = None
+    last_trading_day: date | None = None
+    bar_count: int = 0
+    bar_interval: str | None = None
+    settlement_source: str = "bar_close"
+    event_priorities: Mapping[str, int] = field(default_factory=dict)
+
+    def canonical_hashes(self) -> dict[str, str]:
+        """订单 / 成交 / 账本的规范化哈希 (A15, FR-VAL-07)。同环境同输入重跑必须一致."""
+        orders = [
+            {
+                "client_order_id": o.client_order_id,
+                "strategy_id": o.strategy_id,
+                "instrument": str(o.instrument),
+                "side": o.side.value,
+                "offset": o.offset.value,
+                "quantity": o.quantity,
+                "order_type": o.order_type.value,
+                "limit_price_ticks": o.limit_price_ticks,
+                "created_at": o.intent.created_at.isoformat(),
+                "status": o.status.value,
+                "send_state": o.send_state.value,
+                "cum_filled_qty": o.cum_filled_qty,
+            }
+            for o in self.orders
+        ]
+        trades = [
+            {
+                "trade_id": t.trade_id,
+                "instrument": str(t.instrument),
+                "trading_day": t.trading_day.isoformat(),
+                "side": t.side.value,
+                "offset": t.offset.value,
+                "quantity": t.quantity,
+                "price": str(t.price),
+                "event_time": t.event_time.isoformat(),
+            }
+            for t in self.trades
+        ]
+        ledger = [
+            {
+                "kind": str(getattr(e, "kind", "")),
+                "amount": str(getattr(e, "amount", "")),
+                "reference": str(getattr(e, "reference", "")),
+                "trading_day": str(getattr(e, "trading_day", "")),
+            }
+            for e in self.ledger_entries
+        ]
+        equity = [
+            {"t": s.timestamp.isoformat(), "balance": str(s.balance), "equity": str(s.total_equity)}
+            for s in self.equity_snapshots
+        ]
+
+        def digest(value: Any) -> str:
+            return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+        return {
+            "orders": digest(orders),
+            "trades": digest(trades),
+            "ledger": digest(ledger),
+            "equity_curve": digest(equity),
+        }
 
 
 class BacktestEngine(BaseEngine):
@@ -65,144 +154,255 @@ class BacktestEngine(BaseEngine):
         gateway: ExecutionPort,
         start_time: datetime | None = None,
         initial_capital: Decimal = Decimal("1000000.00"),
-        contract_multiplier: Decimal = Decimal("10"),
-        commission_per_lot: Decimal = Decimal("5.0"),
-        margin_ratio: Decimal = Decimal("0.1"),
         journal: JournalPort | None = None,
         rule_store: RuleStorePort | None = None,
+        session_gate: SessionGatePort | None = None,
+        smart_router: SmartRouter | None = None,
+        risk_manager: RiskManager | None = None,
+        exchange_limits: ExchangeLimits | None = None,
+        natural_person: bool = False,
+        default_economics: InstrumentEconomics | None = None,
+        execution_policy: ExecutionPolicy = ExecutionPolicy.NEXT_BAR_OPEN,
+        missed_execution: MissedExecutionPolicy = MissedExecutionPolicy.DEFER,
+        commission_profile: str = "default",
+        trading_days: Sequence[date] | None = None,
     ) -> None:
         init_time = start_time or datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
-
         super().__init__(
             account_id=account_id,
             start_time=init_time,
             initial_capital=initial_capital,
-            trading_day=init_time.date(),
+            trading_day=None,
             controller_id="backtest-controller",
             gateway=gateway,
             journal=journal,
             rule_store=rule_store,
-            contract_multiplier=contract_multiplier,
-            commission_per_lot=commission_per_lot,
-            margin_ratio=margin_ratio,
+            session_gate=session_gate,
+            smart_router=smart_router,
+            risk_manager=risk_manager,
+            exchange_limits=exchange_limits,
+            natural_person=natural_person,
+            default_economics=default_economics,
+            execution_policy=execution_policy,
+            missed_execution=missed_execution,
+            commission_profile=commission_profile,
         )
-
+        self._trading_days = tuple(sorted(trading_days)) if trading_days else None
         self._snapshots: list[EquitySnapshot] = []
         self._executed_trades: list[Trade] = []
+        self._last_close: dict[InstrumentId, Decimal] = {}
+        self._settlement_source = "bar_close"
 
-    def process_trade_event(self, event) -> None:
+    # ------------------------------------------------------------------ 回报钩子
+    def process_trade_event(self, event: CanonicalEvent[Trade]) -> None:
+        before = len(self.order_manager.deduplicator.snapshot())
         super().process_trade_event(event)
-        self._executed_trades.append(event.payload)
+        if len(self.order_manager.deduplicator.snapshot()) > before:
+            self._executed_trades.append(event.payload)
 
+    # ------------------------------------------------------------------ 交易日
+    def _set_trading_day(self, day: date) -> None:
+        self.ledger.current_trading_day = day
+        self.position_manager.current_trading_day = day
+        self.risk_manager.reset_daily_counters(day)
+        if self.gateway is not None and hasattr(self.gateway, "set_trading_day"):
+            self.gateway.set_trading_day(day)
+
+    def _roll_trading_day(
+        self,
+        settled_day: date,
+        new_day: date,
+        settlement_prices: Mapping[InstrumentId, Decimal],
+        at: datetime,
+    ) -> None:
+        # 1. 当日有效订单过期并释放预占 (GFD)
+        if self.gateway is not None and hasattr(self.gateway, "expire_orders"):
+            self.dispatch_gateway_events(self.gateway.expire_orders(at))
+        # 2. 结算：缺持仓合约结算价时明确失败 (FR-CAL-05, A06)
+        try:
+            self.ledger.settle_day(dict(settlement_prices), new_trading_day=new_day, trading_day=settled_day)
+        except SettlementPendingError as exc:
+            raise MissingRuleError(
+                f"settlement price missing for {[str(i) for i in exc.pending]} on {settled_day}; "
+                "supply settlement records or bar closes for every held contract"
+            ) from exc
+        self._set_trading_day(new_day)
+
+    def _settlement_prices(self, day: date, settlements: Mapping[tuple[InstrumentId, date], Decimal] | None) -> dict:
+        prices: dict[InstrumentId, Decimal] = dict(self._last_close)
+        if settlements:
+            for (inst, sday), price in settlements.items():
+                if sday == day:
+                    prices[inst] = price
+        return prices
+
+    # ------------------------------------------------------------------ 主循环
     def run(
         self,
         bars: Sequence[Bar],
         *,
         price_limits: Mapping[InstrumentId | tuple[InstrumentId, date], tuple[Decimal, Decimal]] | None = None,
+        settlement_prices: Mapping[tuple[InstrumentId, date], Decimal] | None = None,
+        on_bar_processed: Any = None,
     ) -> BacktestResult:
-        """执行完整 Bar 回测."""
+        """执行完整 Bar 回测。settlement_prices 缺省时用当日最后一根 Bar 的收盘价并在结果中标注."""
         if not bars:
             raise ValueError("bars sequence cannot be empty")
+        if settlement_prices:
+            self._settlement_source = "official_settlement"
 
-        # 1. 确保按时间先后排序
-        sorted_bars = sorted(bars, key=lambda b: (b.bar_start, b.open_time, b.bar_end))
+        sorted_bars = sorted(bars, key=lambda b: (b.open_time, b.bar_end, str(b.instrument)))
+        for bar in sorted_bars:
+            if not isinstance(bar.instrument, InstrumentId):
+                raise TypeError("backtest bars must belong to actual contracts, not derived series")
+            self.economics(bar.instrument)  # 缺经济参数时提前失败
+        intervals = {b.interval for b in sorted_bars}
 
-        # 2. 策略启动
         for strat in self.strategies.values():
             strat.on_start()
 
-        first_bar = sorted_bars[0]
-        current_trading_day = first_bar.meta.trading_day
-        self.ledger.current_trading_day = current_trading_day
-        self.position_manager.current_trading_day = current_trading_day
-        if hasattr(self.gateway, "set_trading_day"):
-            self.gateway.set_trading_day(current_trading_day)
+        current_day = sorted_bars[0].meta.trading_day
+        self._set_trading_day(current_day)
+        last_end = sorted_bars[0].bar_start
 
-        last_bar: Bar | None = None
+        # 时间线：每根 Bar 产生开盘与收盘两个事件。同一时刻先处理所有收盘 (行情可见、策略决策)，
+        # 再处理所有开盘 (撮合)，保证 Bar i 收盘产生的订单只能在 Bar i+1 开盘之后才可能成交。
+        end_phase, open_phase = 0, 1
+        timeline: list[tuple[datetime, int, int, Bar]] = []
+        for index, bar in enumerate(sorted_bars):
+            timeline.append((bar.open_time, open_phase, index, bar))
+            timeline.append((bar.bar_end, end_phase, index, bar))
+        timeline.sort(key=lambda item: (item[0], item[1], item[2]))
+        open_times = sorted({bar.open_time for bar in sorted_bars})
 
-        # 3. 逐 Bar 事件流循环
-        for bar in sorted_bars:
-            bar_trading_day = bar.meta.trading_day
+        def next_open_after(at: datetime) -> datetime | None:
+            for candidate in open_times:
+                if candidate > at:
+                    return candidate
+            return None
 
-            # 跨日检测与日终结算结转
-            if bar_trading_day > current_trading_day and last_bar is not None:
-                self.ledger.settle_day(
-                    {last_bar.instrument: last_bar.close},
-                    new_trading_day=bar_trading_day,
-                )
-                current_trading_day = bar_trading_day
-                if hasattr(self.gateway, "set_trading_day"):
-                    self.gateway.set_trading_day(current_trading_day)
+        for at, phase, _, bar in timeline:
+            bar_day = bar.meta.trading_day
+            if phase == open_phase:
+                if bar_day > current_day:
+                    # 先在旧交易日末尾过期未成交订单并结算，再推进到新日 (新日定时器随后触发)
+                    self._roll_trading_day(
+                        current_day, bar_day, self._settlement_prices(current_day, settlement_prices), last_end
+                    )
+                    current_day = bar_day
+                elif bar_day < current_day:
+                    raise ValueError(f"bars are not in trading-day order: {bar_day} after {current_day}")
 
-            # 阶段 A：时钟推进至开盘，并执行撮合 (针对在 bar.open_time 之前已存在的委托)
-            self.clock.advance_to(bar.open_time)
-            if hasattr(self.gateway, "match_bar"):
-                upper_l, lower_l = None, None
-                if price_limits is not None:
-                    lim = price_limits.get((bar.instrument, bar_trading_day)) or price_limits.get(bar.instrument)
-                    if lim is not None:
-                        upper_l, lower_l = lim
-                match_events = self.gateway.match_bar(bar, upper_limit=upper_l, lower_limit=lower_l)
-                for evt in match_events:
-                    if evt.kind == EventKind.TRADE_REPORT:
-                        self.process_trade_event(evt)
-                    elif evt.kind == EventKind.ORDER_REPORT:
-                        self.process_order_event(evt)
+                limits = self._limits_for(bar, price_limits)
+                if limits is not None:
+                    self.set_price_limits(bar.instrument, limits[0], limits[1])
+                else:
+                    self.clear_price_limits(bar.instrument)
 
-            # 阶段 B：时钟推进至 Bar 结束时刻，收盘信息完整生成，向策略推送行情
-            self.clock.advance_to(bar.bar_end)
+                # 阶段 A：开盘候选撮合
+                self.advance_clock(at, next_bar_open=at)
+                if self.gateway is not None and hasattr(self.gateway, "match_bar"):
+                    upper, lower = limits if limits is not None else (None, None)
+                    self.dispatch_gateway_events(self.gateway.match_bar(bar, upper_limit=upper, lower_limit=lower))
+                continue
+
+            # 阶段 B：Bar 结束，行情可见
+            self.advance_clock(at, next_bar_open=next_open_after(at))
+            self.dispatch_gateway_events()
+            self._last_close[bar.instrument] = bar.close
+            self.set_mark_price(bar.instrument, bar.close)
             for strat in self.strategies.values():
                 strat.on_bar(bar)
+            self.dispatch_gateway_events()
 
-            # 阶段 C：计算当前时刻动态权益并记录快照
-            mark_prices = {bar.instrument: bar.close}
-            funds_state = self.ledger.get_funds_state(current_prices=mark_prices)
-            tot_equity = funds_state.total_equity
-            pos_l = self.position_manager.get_position(bar.instrument, PositionSide.LONG)
-            pos_s = self.position_manager.get_position(bar.instrument, PositionSide.SHORT)
+            # 阶段 C：快照
+            self._snapshots.append(self._snapshot(bar, current_day))
+            last_end = max(last_end, bar.bar_end)
+            if on_bar_processed is not None:
+                on_bar_processed(bar, self._snapshots[-1])
 
-            snapshot = EquitySnapshot(
-                timestamp=bar.bar_end,
-                trading_day=bar_trading_day,
-                balance=self.ledger.balance,
-                total_equity=tot_equity,
-                realized_mtm_pnl=self.ledger.realized_mtm_pnl,
-                realized_trade_pnl=self.ledger.realized_trade_pnl,
-                total_commission=self.ledger.total_commission,
-                long_position=pos_l.total_position,
-                short_position=pos_s.total_position,
-                mark_price=bar.close,
-            )
-            self._snapshots.append(snapshot)
-            last_bar = bar
+        # 收尾：未发出的延后意图撤销、最后一日挂单过期、最后一次结算，权益口径与途中一致
+        last = sorted_bars[-1]
+        end_day = self._next_day(current_day)
+        self.advance_clock(last.bar_end, next_bar_open=None)
+        self.cancel_deferred_intents("backtest ended before the deferred execution time")
+        self._roll_trading_day(
+            current_day, end_day, self._settlement_prices(current_day, settlement_prices), last.bar_end
+        )
 
-        # 4. 回测结束日终结算
-        if last_bar is not None and self.ledger.current_trading_day is not None:
-            next_day = self.ledger.current_trading_day + timedelta(days=1)
-            try:
-                self.ledger.settle_day(
-                    {last_bar.instrument: last_bar.close},
-                    new_trading_day=next_day,
-                )
-            except Exception as exc:
-                import logging
-                logging.getLogger(__name__).warning("final backtest day settlement skipped: %s", exc)
-
-        # 5. 策略停止
         for strat in self.strategies.values():
             strat.on_stop()
 
-        final_equity = self._snapshots[-1].total_equity if self._snapshots else self.ledger.balance
-        total_pnl = final_equity - self.ledger.initial_capital
-
+        funds = self.ledger.get_funds_state(current_prices=dict(self._last_close), margin_rates=self._margin_rates())
+        final_equity = funds.total_equity
+        closed = tuple(
+            record
+            for inst in sorted(self.ledger._instrument_ledgers, key=str)  # noqa: SLF001
+            for record in self.ledger._instrument_ledgers[inst].closed_records  # noqa: SLF001
+        )
+        orders = self.order_manager.orders()
         return BacktestResult(
             account_id=self.account_id,
             initial_capital=self.ledger.initial_capital,
             final_equity=final_equity,
-            total_pnl=total_pnl,
+            total_pnl=final_equity - self.ledger.initial_capital,
             total_commission=self.ledger.total_commission,
             total_trades=len(self._executed_trades),
             equity_snapshots=tuple(self._snapshots),
             trades=tuple(self._executed_trades),
-            orders=self.order_manager.orders(),
+            orders=orders,
+            closed_trades=closed,
+            rejected_intents=tuple(self.rejected_intents),
+            missed_executions=tuple(self.missed_executions),
+            unfilled_orders=tuple(
+                o
+                for o in orders
+                if o.status in (OrderStatus.EXPIRED, OrderStatus.CANCELLED) and o.cum_filled_qty < o.quantity
+            ),
+            ledger_entries=tuple(self.ledger.entries),
+            events=tuple(self.processed_events),
+            strategy_of_order={o.client_order_id: self.strategy_of(o.client_order_id) for o in orders},
+            first_trading_day=sorted_bars[0].meta.trading_day,
+            last_trading_day=current_day,
+            bar_count=len(sorted_bars),
+            bar_interval=intervals.pop() if len(intervals) == 1 else None,
+            settlement_source=self._settlement_source,
+            event_priorities={k.value: v for k, v in SIMULATED_EVENT_PRIORITIES.items()},
+        )
+
+    # ------------------------------------------------------------------ 辅助
+    def _next_day(self, day: date) -> date:
+        if self._trading_days:
+            later = [d for d in self._trading_days if d > day]
+            if later:
+                return later[0]
+        from datetime import timedelta
+
+        return day + timedelta(days=1)
+
+    @staticmethod
+    def _limits_for(bar: Bar, price_limits: Mapping | None) -> tuple[Decimal, Decimal] | None:
+        if price_limits is None:
+            return None
+        found = price_limits.get((bar.instrument, bar.meta.trading_day))
+        if found is None:
+            found = price_limits.get(bar.instrument)
+        return found
+
+    def _snapshot(self, bar: Bar, day: date) -> EquitySnapshot:
+        funds = self.ledger.get_funds_state(current_prices=dict(self._last_close), margin_rates=self._margin_rates())
+        pos_l = self.position_manager.get_position(bar.instrument, PositionSide.LONG)
+        pos_s = self.position_manager.get_position(bar.instrument, PositionSide.SHORT)
+        return EquitySnapshot(
+            timestamp=bar.bar_end,
+            trading_day=day,
+            balance=self.ledger.balance,
+            total_equity=funds.total_equity,
+            margin_used=funds.margin_used,
+            realized_mtm_pnl=self.ledger.realized_mtm_pnl,
+            realized_trade_pnl=self.ledger.realized_trade_pnl,
+            total_commission=self.ledger.total_commission,
+            long_position=pos_l.total_position,
+            short_position=pos_s.total_position,
+            mark_price=bar.close,
         )

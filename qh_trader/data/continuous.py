@@ -11,12 +11,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from qh_trader.core.clock import utc_timestamp
-from qh_trader.core.objects import Bar, InstrumentId, ProductId
+from qh_trader.core.objects import Bar, InstrumentId
 from qh_trader.data.dominant_contract import DominantContractResolver
 
 

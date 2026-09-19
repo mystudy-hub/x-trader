@@ -3,11 +3,10 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-import pytest
-
-from qh_trader.core.constants import Exchange, Offset, OrderType, QualityFlag, Side
+from qh_trader.core.constants import Exchange, Offset, OrderType, Side
 from qh_trader.core.objects import Bar, InstrumentId, RecordMeta
-from qh_trader.strategy.base import StrategyBase, StrategyContext
+from qh_trader.core.ports import StrategyPort
+from qh_trader.strategy.base import StrategyContext
 from qh_trader.strategy.examples.trend_following import DualMovingAverageStrategy
 
 RB_INST = InstrumentId(Exchange.SHFE, "rb2410")
@@ -30,20 +29,25 @@ class MockStrategyContext(StrategyContext):
         side: Side,
         offset: Offset,
         quantity: int,
-        order_type: OrderType = OrderType.LIMIT,
+        order_type: OrderType = OrderType.MARKET,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str:
         self._counter += 1
         cid = f"order-{self._counter}"
-        self.orders.append({
-            "client_order_id": cid,
-            "instrument": instrument,
-            "side": side,
-            "offset": offset,
-            "quantity": quantity,
-            "order_type": order_type,
-            "limit_price_ticks": limit_price_ticks,
-        })
+        self.orders.append(
+            {
+                "client_order_id": cid,
+                "instrument": instrument,
+                "side": side,
+                "offset": offset,
+                "quantity": quantity,
+                "order_type": order_type,
+                "limit_price_ticks": limit_price_ticks,
+                "strategy_id": strategy_id,
+            }
+        )
         return cid
 
     def buy(
@@ -52,8 +56,13 @@ class MockStrategyContext(StrategyContext):
         quantity: int,
         offset: Offset = Offset.OPEN,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str:
-        return self.send_order(instrument, Side.BUY, offset, quantity, OrderType.LIMIT, limit_price_ticks)
+        order_type = OrderType.LIMIT if limit_price_ticks is not None else OrderType.MARKET
+        return self.send_order(
+            instrument, Side.BUY, offset, quantity, order_type, limit_price_ticks, strategy_id=strategy_id
+        )
 
     def sell(
         self,
@@ -61,14 +70,22 @@ class MockStrategyContext(StrategyContext):
         quantity: int,
         offset: Offset = Offset.CLOSE,
         limit_price_ticks: int | None = None,
+        *,
+        strategy_id: str | None = None,
     ) -> str:
-        return self.send_order(instrument, Side.SELL, offset, quantity, OrderType.LIMIT, limit_price_ticks)
+        order_type = OrderType.LIMIT if limit_price_ticks is not None else OrderType.MARKET
+        return self.send_order(
+            instrument, Side.SELL, offset, quantity, order_type, limit_price_ticks, strategy_id=strategy_id
+        )
 
     def cancel_order(self, client_order_id: str) -> None:
         pass
 
     def get_position(self, instrument: InstrumentId) -> int:
         return self.positions.get(instrument, 0)
+
+    def schedule_timer(self, at: datetime, timer_id: str, payload: object = None) -> None:
+        pass
 
 
 def make_bar_with_close(close: str, seq: int) -> Bar:
@@ -125,3 +142,5 @@ def test_dual_moving_average_crossover() -> None:
     assert ord0["side"] == Side.BUY
     assert ord0["offset"] == Offset.OPEN
     assert ord0["quantity"] == 2
+    assert ord0["strategy_id"] == "dma-test"  # 意图带策略归因
+    assert isinstance(strat, StrategyPort)

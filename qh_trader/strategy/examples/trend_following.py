@@ -2,8 +2,9 @@
 
 经典 CTA 均线金叉开多/平空、死叉开空/平多策略：
 - 严格基于当时可见的已完成 Bar 序列计算均线指标；
-- 通过 StrategyContext 提交标准下单意图；
-- 不含任何未来信息。
+- 通过 StrategyContext 提交标准下单意图；订单最早在下一 Bar 开盘撮合；
+- 不含任何未来信息。信号规则与 research/vector_backtest.py 的向量化实现一一对应，
+  两条通道的成交序列须在 FR-VAL-08 容差内一致。
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 from collections import deque
 from decimal import Decimal
 
-from qh_trader.core.constants import Offset, OrderType, Side
+from qh_trader.core.constants import Offset
 from qh_trader.core.objects import Bar, InstrumentId, require_int
 from qh_trader.strategy.base import StrategyBase, StrategyContext
 
@@ -78,36 +79,16 @@ class DualMovingAverageStrategy(StrategyBase):
             pos = self.context.get_position(self._instrument)
 
             # 金叉：前值 <= 0 且 当前 > 0
-            if prev_diff <= 0 and curr_diff > 0:
-                # 若持空仓，先买入平空
+            if prev_diff <= 0 and curr_diff > 0 and pos <= 0:
                 if pos < 0:
-                    self.context.buy(
-                        self._instrument,
-                        quantity=abs(pos),
-                        offset=Offset.CLOSE,
-                    )
-                # 买入开多
-                self.context.buy(
-                    self._instrument,
-                    quantity=self._order_size,
-                    offset=Offset.OPEN,
-                )
+                    self.buy(self._instrument, quantity=abs(pos), offset=Offset.CLOSE)
+                self.buy(self._instrument, quantity=self._order_size, offset=Offset.OPEN)
 
             # 死叉：前值 >= 0 且 当前 < 0
-            elif prev_diff >= 0 and curr_diff < 0:
-                # 若持多仓，先卖出平多
+            elif prev_diff >= 0 and curr_diff < 0 and pos >= 0:
                 if pos > 0:
-                    self.context.sell(
-                        self._instrument,
-                        quantity=pos,
-                        offset=Offset.CLOSE,
-                    )
-                # 卖出开空
-                self.context.sell(
-                    self._instrument,
-                    quantity=self._order_size,
-                    offset=Offset.OPEN,
-                )
+                    self.sell(self._instrument, quantity=pos, offset=Offset.CLOSE)
+                self.sell(self._instrument, quantity=self._order_size, offset=Offset.OPEN)
 
         self._last_fast_ma = fast_ma
         self._last_slow_ma = slow_ma

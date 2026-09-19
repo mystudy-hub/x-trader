@@ -112,6 +112,7 @@ def check_backtest_smoke():
         from qh_trader.core.constants import Exchange
         from qh_trader.core.objects import Bar, InstrumentId, RecordMeta
         from qh_trader.engine.backtest_engine import BacktestEngine
+        from qh_trader.engine.base_engine import InstrumentEconomics
         from qh_trader.gateway.simulated_gateway import SimulatedGateway
         from qh_trader.strategy.base import StrategyBase
 
@@ -143,7 +144,8 @@ def check_backtest_smoke():
             includes_auction=False,
         )
         gw = SimulatedGateway("smoke-acc", date(2024, 9, 10))
-        engine = BacktestEngine(account_id="smoke-acc", gateway=gw, start_time=start)
+        economics = InstrumentEconomics(Decimal("10"), Decimal("1"), Decimal("5.0"), Decimal("0.1"), "smoke")
+        engine = BacktestEngine(account_id="smoke-acc", gateway=gw, start_time=start, default_economics=economics)
 
         class DummyStrat(StrategyBase):
             def on_bar(self, b):

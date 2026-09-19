@@ -46,3 +46,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B"]
 ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# 报告 / 入口脚本以人类可读的单行文案为主，允许超长 f-string。
+"scripts/report.py" = ["E501"]
+"scripts/scan_params.py" = ["E501"]
+"scripts/replay_market_data.py" = ["E501"]

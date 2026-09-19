@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "sessions-a25-04-cancel-boundary",
+  "acceptance_ids": ["A25-04", "A25-01"],
+  "execution_status": "executed_by_unit_tests",
+  "evidence_status": "synthetic_rules_not_exchange_announcement",
+  "rules_status": "synthetic_test_inputs_not_production_rules",
+  "source_refs": [
+    "docs/sources/中国期货自动交易与回测工具构建规划.md#acceptance-a25",
+    "docs/07_测试与验收方案.md"
+  ],
+  "oracle": {
+    "method": "independent_specification",
+    "notes": "左闭右开：08:59:00 起进入只撮合阶段。撤单 08:58:58 发出，到达 08:58:59 被接受并生效；到达 08:59:00 / 08:59:01 被拒绝，原单与预占保留，随后竞价成交按共享预算入账一次。小节休市 10:15-10:30 的 Bar 不撮合。"
+  },
+  "cases": [
+    {
+      "id": "cancel_arrives_before_cutoff",
+      "inputs": {"order_created_at": "2024-09-10T08:56:00+08:00", "cancel_sent_at": "2024-09-10T08:58:58+08:00", "cancel_delay_seconds": 1},
+      "expected": {"cancel_accepted": true, "cancel_effective_at": "2024-09-10T08:58:59+08:00", "order_status": "CANCELLED", "reservations_released": true}
+    },
+    {
+      "id": "cancel_arrives_at_cutoff",
+      "inputs": {"order_created_at": "2024-09-10T08:56:00+08:00", "cancel_sent_at": "2024-09-10T08:58:58+08:00", "cancel_delay_seconds": 2},
+      "expected": {"cancel_accepted": false, "cancel_effective_at": null, "order_status_after_reject": "ACCEPTED", "auction_fill_quantity": 1, "order_status_after_auction": "PARTIALLY_FILLED", "unique_trade_postings": 1}
+    },
+    {
+      "id": "cancel_arrives_after_cutoff",
+      "inputs": {"order_created_at": "2024-09-10T08:56:00+08:00", "cancel_sent_at": "2024-09-10T08:58:58+08:00", "cancel_delay_seconds": 3},
+      "expected": {"cancel_accepted": false, "cancel_effective_at": null, "order_status_after_reject": "ACCEPTED", "auction_fill_quantity": 1, "order_status_after_auction": "PARTIALLY_FILLED", "unique_trade_postings": 1}
+    },
+    {
+      "id": "break_bar_never_matches",
+      "acceptance_ids": ["A25-01"],
+      "inputs": {"order_created_at": "2024-09-10T09:30:00+08:00", "limit_price": "2900", "break_bar": {"start": "10:15", "end": "10:30", "low": "2850"}, "continuous_bar": {"start": "10:30", "end": "11:30", "low": "2850"}},
+      "expected": {"fills_in_break_bar": 0, "fills_in_continuous_bar": 1, "fill_price": "2900"}
+    }
+  ]
+}

@@ -71,6 +71,13 @@ class ExecutionPolicy(StrEnum):
     NEXT_BAR_OPEN = "NEXT_BAR_OPEN"
 
 
+class MissedExecutionPolicy(StrEnum):
+    """错过目标执行时点后的处置 (FR-EXEC-03)：顺延到下一符合条件的时点，或取消本次意图."""
+
+    DEFER = "DEFER"
+    CANCEL = "CANCEL"
+
+
 class PriceType(StrEnum):
     SESSION_OPEN = "SESSION_OPEN"
     DAY_SESSION_OPEN = "DAY_SESSION_OPEN"
@@ -112,6 +119,20 @@ class ReplayOrder(StrEnum):
 class LimitLiquidityScenario(StrEnum):
     DIRECTION_CONSERVATIVE = "DIRECTION_CONSERVATIVE"
     TOUCH_LIMIT_NO_FILL = "TOUCH_LIMIT_NO_FILL"
+
+
+class IntrabarTouchRule(StrEnum):
+    """盘中限价候选成交规则 (FR-MATCH-02)：触价即候选，或必须穿价至少一个价格步长."""
+
+    TOUCH = "TOUCH"
+    CROSS_ONE_TICK = "CROSS_ONE_TICK"
+
+
+class AuctionFillPolicy(StrEnum):
+    """含竞价的 Bar 开盘价能否用作成交候选 (FR-MATCH-02, A25-07)."""
+
+    ASSUME_PARTICIPATION = "ASSUME_PARTICIPATION"
+    REJECT = "REJECT"
 
 
 class MissingRuleError(LookupError):

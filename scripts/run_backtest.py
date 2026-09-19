@@ -1,13 +1,10 @@
 #!/usr/bin/env python
-"""[S3-06 / FR-VAL-03 / FR-VAL-07] 单品种事件驱动 Bar 回测入口与实验快照生成脚本."""
+"""[S3-06 / FR-VAL-03 / FR-VAL-07] 单品种事件驱动 Bar 回测入口：装配 -> 运行 -> 绩效 -> run_manifest 与权益曲线归档."""
 
 from __future__ import annotations
 
 import argparse
-import json
-import logging
 import sys
-from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -15,171 +12,116 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qh_trader.analysis.performance import calculate_performance
-from qh_trader.analysis.visualizer import format_performance_summary
-from qh_trader.core.constants import LimitLiquidityScenario, MissingRuleError
-from qh_trader.data.contracts import ContractResolver
-from qh_trader.data.storage import ParquetDataStorage, normalize_interval
-from qh_trader.engine.backtest_engine import BacktestEngine, BacktestResult
-from qh_trader.gateway.simulated_gateway import SimulatedGateway
-from qh_trader.infrastructure.memory_journal import MemoryJournal
-from qh_trader.strategy.examples.trend_following import DualMovingAverageStrategy
-
-logger = logging.getLogger(__name__)
+from qh_trader.analysis.visualizer import format_performance_summary  # noqa: E402
+from qh_trader.core.constants import (  # noqa: E402
+    AuctionFillPolicy,
+    ExecutionPolicy,
+    IntrabarTouchRule,
+    LimitLiquidityScenario,
+    MissedExecutionPolicy,
+)
+from qh_trader.research.backtest_assembly import BacktestSpec, run_backtest, write_run_artifacts  # noqa: E402
 
 
-def run_single_backtest(
-    instrument_str: str = "SHFE.rb2410",
-    interval: str = "1d",
-    storage_dir: str | Path = "data_storage",
-    *,
-    catalog_path: str | Path = "config/contract_catalog_2024v1.json",
-    snapshot_id: str | None = None,
-    initial_capital: Decimal = Decimal("1000000"),
-    slippage_ticks: int = 0,
-    participation_rate: Decimal = Decimal("1.0"),
-    limit_liquidity_scenario: LimitLiquidityScenario = LimitLiquidityScenario.DIRECTION_CONSERVATIVE,
-    fast_window: int = 5,
-    slow_window: int = 20,
-    order_size: int = 1,
-) -> tuple[BacktestResult, dict]:
-    # 1. 加载合约与规则
-    cat_path = ROOT / catalog_path
-    if not cat_path.exists():
-        raise MissingRuleError(f"contract catalog not found at: {cat_path}")
-    catalog = ContractResolver.from_file(cat_path)
-    instrument, _, _ = catalog.resolve(instrument_str)
-    spec = catalog.get_spec(instrument_str)
+def configure_console() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
-    # 2. 从不可变存储中读取 Bar 数据
-    storage = ParquetDataStorage(ROOT / storage_dir)
-    bars = list(storage.read_bars(instrument, normalize_interval(interval), snapshot=snapshot_id))
-    if not bars:
-        raise ValueError(f"no bars found for {instrument_str} at interval {interval} in {storage_dir}")
 
-    # 3. 组装系统组件
-    start_time = bars[0].bar_start
-    gateway = SimulatedGateway(
-        account_id="backtest-account",
-        trading_day=bars[0].meta.trading_day,
-        slippage_ticks=slippage_ticks,
-        price_tick=spec.price_tick,
-        participation_rate=participation_rate,
-        limit_liquidity_scenario=limit_liquidity_scenario,
-    )
-    journal = MemoryJournal("backtest-account")
-
-    engine = BacktestEngine(
-        account_id="backtest-account",
-        gateway=gateway,
-        start_time=start_time,
-        initial_capital=initial_capital,
-        contract_multiplier=spec.multiplier,
-        commission_per_lot=Decimal("5.0"),  # 标准手续费
-        margin_ratio=Decimal("0.10"),
-        journal=journal,
+def spec_from_args(args: argparse.Namespace) -> BacktestSpec:
+    return BacktestSpec(
+        symbol=args.symbol,
+        interval=args.interval,
+        storage_dir=args.storage_dir,
+        catalog_path=args.catalog,
+        calendar_path=args.calendar or None,
+        snapshot_id=args.snapshot,
+        initial_capital=Decimal(args.capital),
+        commission_per_lot=Decimal(args.commission),
+        margin_ratio=Decimal(args.margin_ratio),
+        slippage_ticks=args.slippage_ticks,
+        participation_rate=Decimal(args.participation_rate),
+        limit_liquidity_scenario=LimitLiquidityScenario(args.limit_scenario),
+        intrabar_touch_rule=IntrabarTouchRule(args.touch_rule),
+        auction_fill_policy=AuctionFillPolicy(args.auction_policy),
+        order_delay_ms=args.order_delay_ms,
+        cancel_delay_ms=args.cancel_delay_ms,
+        execution_policy=ExecutionPolicy(args.execution_policy),
+        missed_execution=MissedExecutionPolicy(args.missed_execution),
+        use_official_settlement=not args.settle_on_close,
+        fast_window=args.fast,
+        slow_window=args.slow,
+        order_size=args.order_size,
     )
 
-    strategy = DualMovingAverageStrategy(
-        strategy_id=f"dma-{instrument.symbol}",
-        context=engine,
-        instrument=instrument,
-        fast_window=fast_window,
-        slow_window=slow_window,
-        order_size=order_size,
+
+def add_common_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--symbol", "-s", default="SHFE.rb2410", help="Contract symbol, e.g. SHFE.rb2410")
+    parser.add_argument("--interval", "-i", default="1d", help="Bar interval, e.g. 1d, 1h")
+    parser.add_argument("--storage-dir", default="data_storage")
+    parser.add_argument("--catalog", default="config/contract_catalog_2024v1.json")
+    parser.add_argument(
+        "--calendar", default="config/calendar_2024v1.json", help="Versioned calendar; empty to disable session gate"
     )
-    engine.add_strategy(strategy)
-
-    # 4. 执行回测
-    result = engine.run(bars)
-
-    # 5. 生成 run_manifest 快照
-    import subprocess
-    git_hash = "unknown"
-    try:
-        git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    except Exception:
-        pass
-
-    metrics = calculate_performance(result)
-
-    manifest = {
-        "manifest_version": "1.0",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "git_commit": git_hash,
-        "python_version": sys.version.split()[0],
-        "account_id": result.account_id,
-        "instrument": str(instrument),
-        "interval": interval,
-        "bar_count": len(bars),
-        "start_time": bars[0].bar_start.isoformat(),
-        "end_time": bars[-1].bar_end.isoformat(),
-        "catalog_version": catalog.catalog_version,
-        "snapshot_id": snapshot_id or "canonical-2024v1",
-        "parameters": {
-            "initial_capital": str(initial_capital),
-            "slippage_ticks": slippage_ticks,
-            "participation_rate": str(participation_rate),
-            "limit_liquidity_scenario": limit_liquidity_scenario.value,
-            "fast_window": fast_window,
-            "slow_window": slow_window,
-            "order_size": order_size,
-        },
-        "summary": {
-            "initial_capital": str(result.initial_capital),
-            "final_equity": str(result.final_equity),
-            "total_pnl": str(result.total_pnl),
-            "total_commission": str(result.total_commission),
-            "total_trades": result.total_trades,
-            "total_return_pct": str(metrics.total_return * 100),
-            "sharpe_ratio": str(metrics.sharpe_ratio),
-            "max_drawdown_pct": str(metrics.max_drawdown_percent * 100),
-            "win_rate_pct": str(metrics.win_rate * 100),
-            "profit_loss_ratio": str(metrics.profit_loss_ratio),
-        },
-    }
-
-    return result, manifest
+    parser.add_argument("--snapshot", default=None, help="Dataset snapshot hash; default = current publication pointer")
+    parser.add_argument("--capital", default="1000000", help="Initial capital (decimal string)")
+    parser.add_argument("--commission", default="5.0", help="Research commission per lot (decimal string)")
+    parser.add_argument("--margin-ratio", default="0.10")
+    parser.add_argument("--slippage-ticks", type=int, default=0)
+    parser.add_argument("--participation-rate", default="1.0")
+    parser.add_argument(
+        "--limit-scenario",
+        default=LimitLiquidityScenario.DIRECTION_CONSERVATIVE.value,
+        choices=[s.value for s in LimitLiquidityScenario],
+    )
+    parser.add_argument(
+        "--touch-rule", default=IntrabarTouchRule.TOUCH.value, choices=[s.value for s in IntrabarTouchRule]
+    )
+    parser.add_argument(
+        "--auction-policy",
+        default=AuctionFillPolicy.ASSUME_PARTICIPATION.value,
+        choices=[s.value for s in AuctionFillPolicy],
+    )
+    parser.add_argument("--order-delay-ms", type=int, default=0)
+    parser.add_argument("--cancel-delay-ms", type=int, default=0)
+    parser.add_argument(
+        "--execution-policy", default=ExecutionPolicy.NEXT_BAR_OPEN.value, choices=[s.value for s in ExecutionPolicy]
+    )
+    parser.add_argument(
+        "--missed-execution",
+        default=MissedExecutionPolicy.DEFER.value,
+        choices=[s.value for s in MissedExecutionPolicy],
+    )
+    parser.add_argument(
+        "--settle-on-close", action="store_true", help="Use bar close instead of official settlement price"
+    )
+    parser.add_argument("--fast", type=int, default=5)
+    parser.add_argument("--slow", type=int, default=20)
+    parser.add_argument("--order-size", type=int, default=1)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run S3 Bar Event-driven Backtest")
-    parser.add_argument("--symbol", "-s", default="SHFE.rb2410", help="Contract symbol, e.g. SHFE.rb2410")
-    parser.add_argument("--interval", "-i", default="1d", help="Bar interval, e.g. 1d, 1h")
-    parser.add_argument("--storage-dir", default="data_storage", help="Storage directory path")
-    parser.add_argument("--catalog", default="config/contract_catalog_2024v1.json", help="Contract catalog JSON path")
-    parser.add_argument("--snapshot", default=None, help="Snapshot ID")
-    parser.add_argument("--capital", type=float, default=1000000.0, help="Initial capital")
-    parser.add_argument("--output-dir", default="runs/backtest", help="Manifest and report output dir")
-
+    configure_console()
+    parser = argparse.ArgumentParser(description="Run S3 Bar event-driven backtest")
+    add_common_arguments(parser)
+    parser.add_argument("--output-dir", default="runs/backtest", help="Root directory for per-run artifacts")
     args = parser.parse_args()
 
     try:
-        result, manifest = run_single_backtest(
-            instrument_str=args.symbol,
-            interval=args.interval,
-            storage_dir=args.storage_dir,
-            catalog_path=args.catalog,
-            snapshot_id=args.snapshot,
-            initial_capital=Decimal(str(args.capital)),
-        )
-    except Exception as exc:
-        print(f"回测执行失败: {exc}", file=sys.stderr)
+        result, metrics, manifest, _ = run_backtest(spec_from_args(args), root=ROOT)
+    except Exception as exc:  # noqa: BLE001 - 入口脚本把失败原因完整报告给操作者
+        print(f"回测执行失败: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
-    # 计算绩效指标
-    metrics = calculate_performance(result)
-    summary_text = format_performance_summary(metrics)
-    print(summary_text)
-
-    # 保存快照与清单
-    out_dir = ROOT / args.output_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = out_dir / "run_manifest.json"
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=False)
-    print(f"实验快照已保存至: {manifest_path}")
-
+    summary = format_performance_summary(metrics)
+    print(summary)
+    run_dir = write_run_artifacts(ROOT / args.output_dir, manifest, result, summary)
+    print(f"实验快照已保存至: {run_dir} (run_id={manifest['run_id']})")
+    hashes = manifest["outputs"]["canonical_hashes"]
+    print(f"规范哈希: orders={hashes['orders'][:12]} trades={hashes['trades'][:12]} ledger={hashes['ledger'][:12]}")
+    if manifest.get("rerun_of"):
+        print(f"重跑对照: 与既有 run 哈希一致 = {manifest['rerun_of']['canonical_hashes_match']}")
     return 0
 
 

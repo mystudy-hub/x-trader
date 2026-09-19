@@ -9,8 +9,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -21,8 +20,6 @@ from qh_trader.core.objects import (
     OrderIntent,
     ProductId,
     Trade,
-    require_int,
-    require_text,
 )
 
 

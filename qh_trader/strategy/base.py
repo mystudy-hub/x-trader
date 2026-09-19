@@ -9,16 +9,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 
-from qh_trader.core.constants import Offset, OrderType, Side
-from qh_trader.core.objects import (
-    Bar,
-    InstrumentId,
-    OrderUpdate,
-    Trade,
-    require_text,
-)
+from qh_trader.core.constants import Offset
+from qh_trader.core.event import TimerEvent
+from qh_trader.core.objects import Bar, InstrumentId, OrderUpdate, Trade, require_text
 from qh_trader.core.ports import StrategyContextPort, StrategyPort
 
 # 保持对外类型别名兼容
@@ -70,3 +64,26 @@ class StrategyBase(StrategyPort, ABC):
     def on_trade(self, trade: Trade) -> None:
         """成交回报回调."""
         pass
+
+    def on_timer(self, timer: TimerEvent) -> None:
+        """定时器回调 (空行情时段同样触发)."""
+        pass
+
+    # ------------------------------------------------------------------ 带归因的下单便捷方法
+    def buy(
+        self,
+        instrument: InstrumentId,
+        quantity: int,
+        offset: Offset = Offset.OPEN,
+        limit_price_ticks: int | None = None,
+    ) -> str:
+        return self._context.buy(instrument, quantity, offset, limit_price_ticks, strategy_id=self._strategy_id)
+
+    def sell(
+        self,
+        instrument: InstrumentId,
+        quantity: int,
+        offset: Offset = Offset.CLOSE,
+        limit_price_ticks: int | None = None,
+    ) -> str:
+        return self._context.sell(instrument, quantity, offset, limit_price_ticks, strategy_id=self._strategy_id)
