@@ -155,7 +155,7 @@ def test_a11_zero_volume_and_causality() -> None:
 
 
 def test_a20_limit_scenario_touch_no_fill() -> None:
-    """A20 验收：触板无成交压力情景."""
+    """A20 验收：触板无成交压力情景下，触及涨停的 Bar 严禁成交."""
     bars = make_acceptance_bars()
     # 压力情景 TOUCH_LIMIT_NO_FILL
     gw = SimulatedGateway(
@@ -169,10 +169,22 @@ def test_a20_limit_scenario_touch_no_fill() -> None:
         start_time=BASE_START,
         initial_capital=Decimal("100000.00"),
     )
+    # 在 Bar 1 产生买入委托；原应在 Bar 2 开盘撮合成交
+    # 我们将 Bar 2 设为触及涨停 (close=3080, upper_limit=3080)
     strat = SignalAtBarStrategy("s-a20", eng, {1: ("BUY", 1, Offset.OPEN)})
     eng.add_strategy(strat)
-    # 将 Bar 2 设置为涨停触板：使 upper_limit = close
-    # 网关内部触发 TOUCH_LIMIT_NO_FILL
-    res = eng.run(bars)
-    # 在正常情况下 Bar 2 没触板，正常成交
+
+    # 设定当日涨跌停限制: Bar 2 所在日涨停价为 3080 (使得 bar 2 close>=upper_limit 触板)
+    limits = {
+        (RB_INST, DAY_1): (Decimal("3080"), Decimal("2800")),
+        (RB_INST, DAY_2): (Decimal("3300"), Decimal("2900")),
+    }
+    res = eng.run(bars, price_limits=limits)
+
+    # 在 TOUCH_LIMIT_NO_FILL 下，Bar 2 触板严禁成交！
+    # 顺延至 Bar 3 (未触板) 开盘价 3080 成交
     assert res.total_trades == 1
+    trade = res.trades[0]
+    assert trade.price == Decimal("3080")
+    # 确认成交时间为 Bar 3 开盘时间 (2024-09-10 03:00)
+    assert trade.event_time == bars[2].open_time

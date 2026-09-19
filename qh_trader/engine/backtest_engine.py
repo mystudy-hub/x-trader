@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -21,7 +21,7 @@ from qh_trader.core.constants import (
     PositionSide,
 )
 from qh_trader.core.objects import Bar, InstrumentId, Trade
-from qh_trader.core.ports import ExecutionPort, JournalPort
+from qh_trader.core.ports import ExecutionPort, JournalPort, RuleStorePort
 from qh_trader.domain.orders import Order
 from qh_trader.engine.base_engine import BaseEngine
 
@@ -69,6 +69,7 @@ class BacktestEngine(BaseEngine):
         commission_per_lot: Decimal = Decimal("5.0"),
         margin_ratio: Decimal = Decimal("0.1"),
         journal: JournalPort | None = None,
+        rule_store: RuleStorePort | None = None,
     ) -> None:
         init_time = start_time or datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
 
@@ -80,6 +81,7 @@ class BacktestEngine(BaseEngine):
             controller_id="backtest-controller",
             gateway=gateway,
             journal=journal,
+            rule_store=rule_store,
             contract_multiplier=contract_multiplier,
             commission_per_lot=commission_per_lot,
             margin_ratio=margin_ratio,
@@ -92,7 +94,12 @@ class BacktestEngine(BaseEngine):
         super().process_trade_event(event)
         self._executed_trades.append(event.payload)
 
-    def run(self, bars: Sequence[Bar]) -> BacktestResult:
+    def run(
+        self,
+        bars: Sequence[Bar],
+        *,
+        price_limits: Mapping[InstrumentId | tuple[InstrumentId, date], tuple[Decimal, Decimal]] | None = None,
+    ) -> BacktestResult:
         """执行完整 Bar 回测."""
         if not bars:
             raise ValueError("bars sequence cannot be empty")
@@ -130,7 +137,12 @@ class BacktestEngine(BaseEngine):
             # 阶段 A：时钟推进至开盘，并执行撮合 (针对在 bar.open_time 之前已存在的委托)
             self.clock.advance_to(bar.open_time)
             if hasattr(self.gateway, "match_bar"):
-                match_events = self.gateway.match_bar(bar)
+                upper_l, lower_l = None, None
+                if price_limits is not None:
+                    lim = price_limits.get((bar.instrument, bar_trading_day)) or price_limits.get(bar.instrument)
+                    if lim is not None:
+                        upper_l, lower_l = lim
+                match_events = self.gateway.match_bar(bar, upper_limit=upper_l, lower_limit=lower_l)
                 for evt in match_events:
                     if evt.kind == EventKind.TRADE_REPORT:
                         self.process_trade_event(evt)
@@ -172,8 +184,9 @@ class BacktestEngine(BaseEngine):
                     {last_bar.instrument: last_bar.close},
                     new_trading_day=next_day,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("final backtest day settlement skipped: %s", exc)
 
         # 5. 策略停止
         for strat in self.strategies.values():

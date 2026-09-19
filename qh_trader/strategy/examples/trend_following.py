@@ -79,14 +79,14 @@ class DualMovingAverageStrategy(StrategyBase):
 
             # 金叉：前值 <= 0 且 当前 > 0
             if prev_diff <= 0 and curr_diff > 0:
-                # 若持空仓，先平空
+                # 若持空仓，先买入平空
                 if pos < 0:
-                    self.context.sell(
+                    self.context.buy(
                         self._instrument,
                         quantity=abs(pos),
                         offset=Offset.CLOSE,
                     )
-                # 开多
+                # 买入开多
                 self.context.buy(
                     self._instrument,
                     quantity=self._order_size,
@@ -95,15 +95,15 @@ class DualMovingAverageStrategy(StrategyBase):
 
             # 死叉：前值 >= 0 且 当前 < 0
             elif prev_diff >= 0 and curr_diff < 0:
-                # 若持多仓，先平多
+                # 若持多仓，先卖出平多
                 if pos > 0:
                     self.context.sell(
                         self._instrument,
                         quantity=pos,
                         offset=Offset.CLOSE,
                     )
-                # 开空
-                self.context.buy(
+                # 卖出开空
+                self.context.sell(
                     self._instrument,
                     quantity=self._order_size,
                     offset=Offset.OPEN,

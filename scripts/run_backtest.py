@@ -94,9 +94,20 @@ def run_single_backtest(
     result = engine.run(bars)
 
     # 5. 生成 run_manifest 快照
+    import subprocess
+    git_hash = "unknown"
+    try:
+        git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        pass
+
+    metrics = calculate_performance(result)
+
     manifest = {
         "manifest_version": "1.0",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "git_commit": git_hash,
+        "python_version": sys.version.split()[0],
         "account_id": result.account_id,
         "instrument": str(instrument),
         "interval": interval,
@@ -104,6 +115,7 @@ def run_single_backtest(
         "start_time": bars[0].bar_start.isoformat(),
         "end_time": bars[-1].bar_end.isoformat(),
         "catalog_version": catalog.catalog_version,
+        "snapshot_id": snapshot_id or "canonical-2024v1",
         "parameters": {
             "initial_capital": str(initial_capital),
             "slippage_ticks": slippage_ticks,
@@ -119,6 +131,11 @@ def run_single_backtest(
             "total_pnl": str(result.total_pnl),
             "total_commission": str(result.total_commission),
             "total_trades": result.total_trades,
+            "total_return_pct": str(metrics.total_return * 100),
+            "sharpe_ratio": str(metrics.sharpe_ratio),
+            "max_drawdown_pct": str(metrics.max_drawdown_percent * 100),
+            "win_rate_pct": str(metrics.win_rate * 100),
+            "profit_loss_ratio": str(metrics.profit_loss_ratio),
         },
     }
 

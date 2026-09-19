@@ -37,6 +37,7 @@ from qh_trader.core.objects import (
 from qh_trader.core.ports import (
     ExecutionPort,
     JournalPort,
+    RuleStorePort,
     StrategyContextPort,
     StrategyPort,
 )
@@ -106,6 +107,7 @@ class BaseEngine(StrategyContextPort):
         controller_id: str = "engine-controller",
         gateway: ExecutionPort | None = None,
         journal: JournalPort | None = None,
+        rule_store: RuleStorePort | None = None,
         smart_router: SmartRouter | None = None,
         contract_multiplier: Decimal = Decimal("10"),
         commission_per_lot: Decimal = Decimal("5.0"),
@@ -132,6 +134,7 @@ class BaseEngine(StrategyContextPort):
 
         self.gateway = gateway
         self.journal = journal
+        self.rule_store = rule_store
 
         self.strategies: dict[str, StrategyPort] = {}
         self._order_id_counter = 0
@@ -279,7 +282,25 @@ class BaseEngine(StrategyContextPort):
             return
 
         cid = order.client_order_id if order else None
-        commission = self.commission_per_lot * Decimal(trade.quantity)
+        commission = Decimal("0")
+        if self.rule_store is not None:
+            try:
+                rule_val = self.rule_store.commission_rule(
+                    instrument=trade.instrument,
+                    profile="default",
+                    offset=trade.offset,
+                    effective_at=trade.event_time,
+                    known_at=trade.available_at,
+                )
+                rule = rule_val.value
+                fixed_part = rule.fixed_per_lot * Decimal(trade.quantity)
+                ratio_part = trade.price * Decimal(trade.quantity) * self.contract_multiplier * rule.ad_valorem_rate
+                commission = fixed_part + ratio_part
+            except Exception:
+                commission = self.commission_per_lot * Decimal(trade.quantity)
+        else:
+            commission = self.commission_per_lot * Decimal(trade.quantity)
+
         self.ledger.on_trade(
             trade,
             commission=commission,
