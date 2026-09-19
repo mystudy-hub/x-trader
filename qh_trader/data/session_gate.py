@@ -40,6 +40,10 @@ class CalendarSessionGate:
                 return session
         return None
 
+    def trading_day_at(self, instrument: InstrumentId, at: datetime):
+        session = self.session_at(instrument, at)
+        return session.trading_day if session is not None else None
+
     def permissions_at(self, instrument: InstrumentId, at: datetime) -> Permissions | None:
         session = self.session_at(instrument, at)
         return session.permissions if session is not None else None
@@ -55,6 +59,25 @@ class CalendarSessionGate:
                 return session.start
         return None
 
+    @staticmethod
+    def _is_day_session(session: Session) -> bool:
+        return session.phase == MarketPhase.CONTINUOUS and session.start.astimezone(CHINA_TZ).hour < 20
+
+    def next_day_session_close(self, instrument: InstrumentId, after: datetime) -> datetime | None:
+        """严格晚于 after 开始的下一个日盘 (同一交易日) 的最后收盘时刻."""
+        moment = utc_timestamp(after)
+        target_day = None
+        close: datetime | None = None
+        for session in self._sessions.get(instrument, ()):
+            if session.start <= moment or not self._is_day_session(session):
+                continue
+            if target_day is None:
+                target_day = session.trading_day
+            if session.trading_day != target_day:
+                break
+            close = session.end if close is None else max(close, session.end)
+        return close
+
     def next_session_open(
         self,
         instrument: InstrumentId,
@@ -69,7 +92,7 @@ class CalendarSessionGate:
                 continue
             if session.phase not in (MarketPhase.CONTINUOUS, MarketPhase.AUCTION_MATCH):
                 continue
-            if day_session_only and session.start.astimezone(CHINA_TZ).hour >= 20:
+            if day_session_only and not self._is_day_session(session):
                 continue
             return session.start
         return None

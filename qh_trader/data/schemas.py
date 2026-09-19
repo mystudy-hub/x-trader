@@ -108,6 +108,7 @@ def validate_ohlc_records(
     *,
     instrument: InstrumentId | SeriesId | None = None,
     source_timezone: str | None = None,
+    require_turnover: bool = True,
 ) -> DataQualityReport:
     issues: list[QualityIssue] = []
     last_time: str | None = None
@@ -151,7 +152,11 @@ def validate_ohlc_records(
             if decimal_value(record.get("turnover"), "turnover") < 0:
                 raise ValueError("negative turnover")
         except ValueError:
-            issue("turnover", "INVALID_TURNOVER", "actual turnover is required; missing values cannot become zero")
+            if require_turnover:
+                issue("turnover", "INVALID_TURNOVER", "actual turnover is required; missing values cannot become zero")
+            else:
+                # 研究模式: 来源确实不提供成交额, 记录为非阻塞质量标记而非零值 (FR-DATA-08).
+                issue("turnover", "TURNOVER_UNAVAILABLE", "source does not establish actual turnover")
         valid += len(issues) == before
     report = DataQualityReport(len(records), valid, tuple(issues))
     if strict and not report.is_clean:
@@ -223,11 +228,20 @@ def _convert_bars(
     source_version: str,
     source_timezone: str | None = None,
     ingested_at: datetime | None = None,
+    require_turnover: bool = True,
 ) -> list[Bar]:
     if interval not in {"1d", "1h", "60m", "1m", "5m", "15m", "30m"}:
         raise ValueError("unsupported bar interval")
     time_key = "date" if interval == "1d" else "datetime"
-    validate_ohlc_records(records, time_key, instrument=instrument, source_timezone=source_timezone)
+    # 研究模式 (require_turnover=False) 把来源缺成交额记为非阻塞质量标记, 精确模式仍严格失败。
+    validate_ohlc_records(
+        records,
+        time_key,
+        strict=require_turnover,
+        instrument=instrument,
+        source_timezone=source_timezone,
+        require_turnover=require_turnover,
+    )
     imported = utc_timestamp(ingested_at) if ingested_at is not None else datetime.now(timezone.utc)
     bars: list[Bar] = []
     for sequence, record in enumerate(records, 1):
@@ -261,7 +275,14 @@ def _convert_bars(
             else None,
             receive_time=parse_time(record["receive_time"]) if record.get("receive_time") is not None else None,
             schema_version=SCHEMA_VERSION,
-            quality_flags=QualityFlag.SYNTHETIC if timing.time_assumption else QualityFlag.OK,
+            quality_flags=(
+                (QualityFlag.SYNTHETIC if timing.time_assumption else QualityFlag.OK)
+                | (
+                    QualityFlag.OK
+                    if record.get("turnover") is not None
+                    else QualityFlag.TURNOVER_UNAVAILABLE
+                )
+            ),
         )
         bar = Bar(
             instrument=instrument,
@@ -274,7 +295,11 @@ def _convert_bars(
             low=decimal_value(record["low"], "low"),
             close=decimal_value(record["close"], "close"),
             volume=integer_value(record["volume"], "volume"),
-            turnover=decimal_value(record["turnover"], "turnover"),
+            turnover=(
+                decimal_value(record["turnover"], "turnover")
+                if record.get("turnover") is not None
+                else Decimal(0)
+            ),
             open_interest=integer_value(record["open_interest"], "open_interest"),
             open_time=timing.open_time,
             includes_auction=timing.includes_auction,
@@ -294,6 +319,7 @@ def convert_daily_records_to_bars(
     source_id: str,
     source_version: str,
     ingested_at: datetime | None = None,
+    require_turnover: bool = True,
 ) -> list[Bar]:
     return _convert_bars(
         records,
@@ -304,6 +330,7 @@ def convert_daily_records_to_bars(
         source_id=source_id,
         source_version=source_version,
         ingested_at=ingested_at,
+        require_turnover=require_turnover,
     )
 
 
@@ -417,6 +444,7 @@ def convert_minute_records_to_bars(
     source_version: str,
     source_timezone: str | None = None,
     ingested_at: datetime | None = None,
+    require_turnover: bool = True,
 ) -> list[Bar]:
     return _convert_bars(
         records,
@@ -428,6 +456,7 @@ def convert_minute_records_to_bars(
         source_version=source_version,
         source_timezone=source_timezone,
         ingested_at=ingested_at,
+        require_turnover=require_turnover,
     )
 
 

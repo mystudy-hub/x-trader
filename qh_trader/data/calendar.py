@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
-from datetime import date, datetime
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -67,7 +67,10 @@ class TradingCalendar:
     @classmethod
     def from_file(cls, path: Path | str) -> TradingCalendar:
         data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
-        if data.get("schema_version") != 1:
+        schema_version = data.get("schema_version")
+        if schema_version == 2:
+            return cls.from_profile_file(data, path)
+        if schema_version != 1:
             raise ValueError("unsupported calendar schema")
         sessions = []
         for row in data["sessions"]:
@@ -93,6 +96,41 @@ class TradingCalendar:
             version=data["version"],
             source_id=data["source_id"],
             available_at=datetime.fromisoformat(data["available_at"]),
+        )
+
+    @classmethod
+    def from_profile_file(cls, data: Mapping[str, object], path: Path | str) -> TradingCalendar:
+        """从紧凑模板文件展开逐日显式 Session (schema_version 2, S4-05)."""
+        from qh_trader.data.session_templates import SessionProfile, build_sessions
+
+        version = str(data["version"])
+        source_id = str(data["source_id"])
+        available_at = datetime.fromisoformat(str(data["available_at"]))
+        trading_days = tuple(sorted(date.fromisoformat(str(day)) for day in data["trading_days"]))
+        profiles = tuple(
+            SessionProfile(
+                instrument=InstrumentId(Exchange(str(row["exchange"])), str(row["symbol"])),
+                product=str(row["product"]),
+                has_night=bool(row["has_night"]),
+                night_close=(
+                    time.fromisoformat(str(row["night_close"])) if row.get("night_close") else None
+                ),
+                day_auction_style=str(row["day_auction_style"]),
+                source_id=source_id,
+                rule_version=version,
+                available_at=available_at,
+            )
+            for row in data["session_profiles"]  # type: ignore[index]
+        )
+        sessions = build_sessions(profiles, trading_days)
+        return cls(
+            sessions,
+            trading_days=trading_days,
+            coverage_start=date.fromisoformat(str(data["coverage_start"])),
+            coverage_end=date.fromisoformat(str(data["coverage_end"])),
+            version=version,
+            source_id=source_id,
+            available_at=available_at,
         )
 
     def _require_coverage(self, day: date, known_at: datetime | None = None) -> None:

@@ -26,10 +26,12 @@ from qh_trader.core.constants import (
     LimitLiquidityScenario,
     MissedExecutionPolicy,
     MissingRuleError,
+    PriceType,
 )
 from qh_trader.core.objects import Bar, InstrumentId
 from qh_trader.data.calendar import TradingCalendar
 from qh_trader.data.contracts import ContractResolver
+from qh_trader.data.replay import HistoricalMarketDataAdapter
 from qh_trader.data.session_gate import CalendarSessionGate
 from qh_trader.data.storage import ParquetDataStorage, normalize_interval
 from qh_trader.engine.backtest_engine import BacktestEngine, BacktestResult
@@ -64,6 +66,11 @@ class BacktestSpec:
     cancel_delay_ms: int = 0
     execution_policy: ExecutionPolicy = ExecutionPolicy.NEXT_BAR_OPEN
     missed_execution: MissedExecutionPolicy = MissedExecutionPolicy.DEFER
+    fixed_time_before_close_minutes: int | None = None
+    use_execution_reference: bool = True
+    execution_price_type: PriceType = PriceType.BAR_OPEN
+    strict_execution_reference: bool = False
+    strict_data_quality: bool = False
     use_official_settlement: bool = True
     strategy_name: str = "dual_moving_average"
     fast_window: int = 5
@@ -150,9 +157,15 @@ def assemble(spec: BacktestSpec, *, root: Path = ROOT, bars: Sequence[Bar] | Non
         session_gate = CalendarSessionGate(calendar)
         trading_days = tuple(sorted(calendar.trading_days))
 
+    reference_port = None
+    if spec.use_execution_reference:
+        reference_port = HistoricalMarketDataAdapter(storage, snapshot=snapshot, execution_interval=interval)
     gateway = SimulatedGateway(
         account_id=spec.account_id,
         trading_day=bars[0].meta.trading_day,
+        execution_reference_port=reference_port,
+        execution_price_type=spec.execution_price_type,
+        strict_execution_reference=spec.strict_execution_reference,
         slippage_ticks=spec.slippage_ticks,
         price_tick=contract.price_tick,
         participation_rate=spec.participation_rate,
@@ -172,7 +185,11 @@ def assemble(spec: BacktestSpec, *, root: Path = ROOT, bars: Sequence[Bar] | Non
         session_gate=session_gate,
         execution_policy=spec.execution_policy,
         missed_execution=spec.missed_execution,
+        fixed_time_before_close=(
+            timedelta(minutes=spec.fixed_time_before_close_minutes) if spec.fixed_time_before_close_minutes else None
+        ),
         trading_days=trading_days,
+        strict_data_quality=spec.strict_data_quality,
     )
     engine.register_instrument(
         instrument,
@@ -277,6 +294,19 @@ def build_manifest(
             "random_seed": spec.random_seed,
             "signal_resolution": spec.interval,
             "execution_resolution": spec.interval,
+            "fixed_time_before_close_minutes": spec.fixed_time_before_close_minutes,
+            "execution_reference": {
+                "enabled": spec.use_execution_reference,
+                "price_type": spec.execution_price_type.value,
+                "strict": spec.strict_execution_reference,
+                "dataset": f"execution_reference/{assembled.instrument}/{spec.interval}",
+                "observations_used": assembled.gateway.execution_references_used,
+            },
+            "data_quality": {
+                "strict": spec.strict_data_quality,
+                "flag_counts": dict(result.quality_flag_counts),
+                "degraded_bars": len(result.degraded_bars),
+            },
         },
         "sample_split": {"ratio": spec.sample_split_ratio} if spec.sample_split_ratio else None,
         "code": git_state(root),
@@ -310,6 +340,8 @@ def build_manifest(
                 "rejected_intents": len(result.rejected_intents),
                 "missed_executions": len(result.missed_executions),
                 "unfilled_orders": len(result.unfilled_orders),
+                "degraded_bars": len(result.degraded_bars),
+                "execution_degradations": len(result.execution_degradations),
                 "total_return_pct": str(metrics.total_return * 100),
                 "annualized_return_pct": str(metrics.annualized_return * 100),
                 "annualized_volatility_pct": str(metrics.annualized_volatility * 100),
@@ -335,6 +367,17 @@ def build_manifest(
                 "equity_includes_open_positions": True,
                 "pairing_rule": "ledger closed-trade records (FIFO by close offset bucket), net of actual commission",
             },
+            "execution_degradations": [
+                {
+                    "instrument": str(d.instrument),
+                    "at": d.at.isoformat(),
+                    "session_id": d.session_id,
+                    "price_type": d.price_type,
+                    "reason": d.reason,
+                    "action": d.action,
+                }
+                for d in result.execution_degradations[:200]
+            ],
             "rejected_intents": [
                 {
                     "client_order_id": r.client_order_id,

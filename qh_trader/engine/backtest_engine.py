@@ -15,7 +15,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -25,6 +25,7 @@ from qh_trader.core.constants import (
     MissingRuleError,
     OrderStatus,
     PositionSide,
+    QualityFlag,
 )
 from qh_trader.core.event import CanonicalEvent
 from qh_trader.core.objects import Bar, InstrumentId, Trade
@@ -60,6 +61,16 @@ class EquitySnapshot:
     mark_price: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class DegradedBar:
+    """质量标记命中拒绝集合的 Bar：不用于撮合，策略仍可见并被告知 (A16, FR-LED-09)."""
+
+    instrument: InstrumentId
+    trading_day: date
+    bar_end: datetime
+    flags: str
+
+
 @dataclass(frozen=True)
 class BacktestResult:
     """回测结果输出结构."""
@@ -86,6 +97,9 @@ class BacktestResult:
     bar_interval: str | None = None
     settlement_source: str = "bar_close"
     event_priorities: Mapping[str, int] = field(default_factory=dict)
+    degraded_bars: tuple[Any, ...] = ()
+    execution_degradations: tuple[Any, ...] = ()
+    quality_flag_counts: Mapping[str, int] = field(default_factory=dict)
 
     def canonical_hashes(self) -> dict[str, str]:
         """订单 / 成交 / 账本的规范化哈希 (A15, FR-VAL-07)。同环境同输入重跑必须一致."""
@@ -164,8 +178,11 @@ class BacktestEngine(BaseEngine):
         default_economics: InstrumentEconomics | None = None,
         execution_policy: ExecutionPolicy = ExecutionPolicy.NEXT_BAR_OPEN,
         missed_execution: MissedExecutionPolicy = MissedExecutionPolicy.DEFER,
+        fixed_time_before_close: timedelta | None = None,
         commission_profile: str = "default",
         trading_days: Sequence[date] | None = None,
+        reject_quality_flags: QualityFlag = QualityFlag.MISSING | QualityFlag.INVALID | QualityFlag.STALE,
+        strict_data_quality: bool = False,
     ) -> None:
         init_time = start_time or datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
         super().__init__(
@@ -185,9 +202,14 @@ class BacktestEngine(BaseEngine):
             default_economics=default_economics,
             execution_policy=execution_policy,
             missed_execution=missed_execution,
+            fixed_time_before_close=fixed_time_before_close,
             commission_profile=commission_profile,
         )
         self._trading_days = tuple(sorted(trading_days)) if trading_days else None
+        self._reject_quality_flags = reject_quality_flags
+        self._strict_data_quality = strict_data_quality
+        self._degraded_bars: list[DegradedBar] = []
+        self._quality_counts: dict[str, int] = {}
         self._snapshots: list[EquitySnapshot] = []
         self._executed_trades: list[Trade] = []
         self._last_close: dict[InstrumentId, Decimal] = {}
@@ -256,6 +278,8 @@ class BacktestEngine(BaseEngine):
             if not isinstance(bar.instrument, InstrumentId):
                 raise TypeError("backtest bars must belong to actual contracts, not derived series")
             self.economics(bar.instrument)  # 缺经济参数时提前失败
+            self._check_calendar_consistency(bar)
+            self._classify_quality(bar)
         intervals = {b.interval for b in sorted_bars}
 
         for strat in self.strategies.values():
@@ -299,8 +323,10 @@ class BacktestEngine(BaseEngine):
                 else:
                     self.clear_price_limits(bar.instrument)
 
-                # 阶段 A：开盘候选撮合
+                # 阶段 A：开盘候选撮合 (质量标记命中拒绝集合的 Bar 不撮合，也不推断路径)
                 self.advance_clock(at, next_bar_open=at)
+                if self._is_degraded(bar):
+                    continue
                 if self.gateway is not None and hasattr(self.gateway, "match_bar"):
                     upper, lower = limits if limits is not None else (None, None)
                     self.dispatch_gateway_events(self.gateway.match_bar(bar, upper_limit=upper, lower_limit=lower))
@@ -368,7 +394,40 @@ class BacktestEngine(BaseEngine):
             bar_interval=intervals.pop() if len(intervals) == 1 else None,
             settlement_source=self._settlement_source,
             event_priorities={k.value: v for k, v in SIMULATED_EVENT_PRIORITIES.items()},
+            degraded_bars=tuple(self._degraded_bars),
+            execution_degradations=tuple(getattr(self.gateway, "degradations", ())),
+            quality_flag_counts=dict(self._quality_counts),
         )
+
+    # ------------------------------------------------------------------ 数据质量与日历一致性
+    def _classify_quality(self, bar: Bar) -> None:
+        flags = bar.meta.quality_flags
+        label = flags.name if flags.name is not None else str(int(flags))
+        self._quality_counts[label] = self._quality_counts.get(label, 0) + 1
+        if flags & self._reject_quality_flags:
+            if self._strict_data_quality:
+                raise MissingRuleError(
+                    f"bar {bar.instrument} ending {bar.bar_end.isoformat()} carries rejected quality flags {label}"
+                )
+            self._degraded_bars.append(DegradedBar(bar.instrument, bar.meta.trading_day, bar.bar_end, label))
+
+    def _is_degraded(self, bar: Bar) -> bool:
+        return bool(bar.meta.quality_flags & self._reject_quality_flags)
+
+    def _check_calendar_consistency(self, bar: Bar) -> None:
+        """A05：Bar 的交易日与时段必须与版本化日历一致，不能按自然日推断."""
+        if self._trading_days is not None and bar.meta.trading_day not in self._trading_days:
+            raise MissingRuleError(
+                f"bar {bar.instrument} claims trading day {bar.meta.trading_day} which the calendar does not list"
+            )
+        if self.session_gate is None:
+            return
+        listed = self.session_gate.trading_day_at(bar.instrument, bar.open_time)
+        if listed is not None and listed != bar.meta.trading_day:
+            raise MissingRuleError(
+                f"bar {bar.instrument} opening {bar.open_time.isoformat()} belongs to calendar trading day "
+                f"{listed}, but the record says {bar.meta.trading_day}"
+            )
 
     # ------------------------------------------------------------------ 辅助
     def _next_day(self, day: date) -> date:

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from qh_trader.core.clock import VirtualClock
@@ -200,9 +200,14 @@ class BaseEngine(StrategyContextPort):
         default_economics: InstrumentEconomics | None = None,
         execution_policy: ExecutionPolicy = ExecutionPolicy.NEXT_BAR_OPEN,
         missed_execution: MissedExecutionPolicy = MissedExecutionPolicy.DEFER,
+        fixed_time_before_close: timedelta | None = None,
         commission_profile: str = "default",
     ) -> None:
         require_text(account_id, "account_id")
+        if execution_policy == ExecutionPolicy.NEXT_DAY_FIXED_TIME:
+            if not isinstance(fixed_time_before_close, timedelta) or fixed_time_before_close <= timedelta(0):
+                raise ValueError("NEXT_DAY_FIXED_TIME requires a positive fixed_time_before_close offset")
+        self.fixed_time_before_close = fixed_time_before_close
         self.account_id = account_id
         self.clock: VirtualClock[TimerEvent] = VirtualClock(start_time)
         self.epoch = ControlEpoch(controller_id, 1)
@@ -532,23 +537,27 @@ class BaseEngine(StrategyContextPort):
         )
 
     # ------------------------------------------------------------------ 执行时点策略 (FR-EXEC-02/03)
-    def _target_execution_time(self, intent: OrderIntent) -> datetime | None:
+    def _policy_target(self, instrument: InstrumentId, after: datetime) -> datetime | None:
+        """按执行时点策略求严格晚于 after 的目标时刻；无日历或无可见时段时明确失败."""
         policy = self.execution_policy
         if policy == ExecutionPolicy.NEXT_BAR_OPEN:
             return None
         if self.session_gate is None:
             raise MissingRuleError(f"execution policy {policy} requires a versioned session gate")
         if policy == ExecutionPolicy.NEXT_SESSION_OPEN:
-            target = self.session_gate.next_session_open(intent.instrument, intent.created_at)
+            target = self.session_gate.next_session_open(instrument, after)
         elif policy == ExecutionPolicy.NEXT_DAY_SESSION_OPEN:
-            target = self.session_gate.next_session_open(intent.instrument, intent.created_at, day_session_only=True)
+            target = self.session_gate.next_session_open(instrument, after, day_session_only=True)
         else:
-            raise MissingRuleError(f"execution policy {policy} needs intraday execution data that is not configured")
+            assert self.fixed_time_before_close is not None
+            close = self.session_gate.next_day_session_close(instrument, after)
+            target = close - self.fixed_time_before_close if close is not None else None
         if target is None:
-            raise MissingRuleError(
-                f"no visible session open after {intent.created_at.isoformat()} for {intent.instrument}"
-            )
+            raise MissingRuleError(f"no visible session after {after.isoformat()} for {instrument} under {policy}")
         return target
+
+    def _target_execution_time(self, intent: OrderIntent) -> datetime | None:
+        return self._policy_target(intent.instrument, intent.created_at)
 
     def _dispatch_intent(self, intent: OrderIntent) -> None:
         now = self.now()
@@ -608,7 +617,11 @@ class BaseEngine(StrategyContextPort):
             return
         now = self.now()
         next_open = self._next_bar_open
-        if pending.reason == "execution-policy" and next_open is not None and now < next_open:
+        missed = next_open is not None and now < next_open
+        if self.execution_policy == ExecutionPolicy.NEXT_DAY_FIXED_TIME and pending.reason == "execution-policy":
+            # 固定时刻必须有恰好在该时刻开始的执行 Bar；分辨率不足不能用更早的 Bar 或未完成的 Bar 替代 (A21)
+            missed = next_open != now
+        if pending.reason == "execution-policy" and missed:
             # 目标开盘时刻没有对应的执行数据：错过 (FR-EXEC-03)，按配置顺延或取消，不回填过去的开盘
             if (
                 self.missed_execution == MissedExecutionPolicy.CANCEL
@@ -624,11 +637,10 @@ class BaseEngine(StrategyContextPort):
                     f"target {pending.target_time.isoformat()} had no execution data",
                 )
                 return
-            retry = self.session_gate.next_session_open(
-                pending.intent.instrument,
-                now,
-                day_session_only=self.execution_policy == ExecutionPolicy.NEXT_DAY_SESSION_OPEN,
-            )
+            try:
+                retry = self._policy_target(pending.intent.instrument, now)
+            except MissingRuleError:
+                retry = None
             if retry is None:
                 self.missed_executions.append(
                     MissedExecution(client_order_id, pending.target_time, now, self.missed_execution, None)

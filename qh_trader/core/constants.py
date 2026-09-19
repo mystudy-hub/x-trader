@@ -97,6 +97,8 @@ class QualityFlag(IntFlag):
     STALE = 4
     SYNTHETIC = 8
     PARTIAL = 16
+    # 研究模式: 来源缺少成交额字段, 不能当作零成交额使用, 也不得进入精确核算 (FR-DATA-08/A16).
+    TURNOVER_UNAVAILABLE = 32
 
 
 class EventKind(StrEnum):

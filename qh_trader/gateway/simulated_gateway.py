@@ -21,8 +21,10 @@ from qh_trader.core.constants import (
     EventKind,
     IntrabarTouchRule,
     LimitLiquidityScenario,
+    MissingRuleError,
     OrderStatus,
     OrderType,
+    PriceType,
     SendState,
     Side,
 )
@@ -46,7 +48,7 @@ from qh_trader.core.objects import (
     require_int,
     require_text,
 )
-from qh_trader.core.ports import ClockPort, ExecutionPort, SessionGatePort
+from qh_trader.core.ports import ClockPort, ExecutionPort, MarketDataPort, SessionGatePort
 
 
 @dataclass
@@ -68,6 +70,18 @@ class _SimulatedOrderState:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionDegradation:
+    """开盘执行参考价缺失或分辨率不足时的降级记录 (A21, A25-07)：不回填、不插值，只记录."""
+
+    instrument: InstrumentId
+    at: datetime
+    session_id: str | None
+    price_type: str
+    reason: str
+    action: str  # "open_candidates_skipped"
+
+
+@dataclass(frozen=True, slots=True)
 class MatchingAssumptions:
     """写入运行清单的撮合假设 (FR-MATCH-03/05 报告要求)."""
 
@@ -82,6 +96,7 @@ class MatchingAssumptions:
     order_validity: str
     open_fill_time: str
     intrabar_fill_time: str
+    execution_reference: str
 
 
 class SimulatedGateway(ExecutionPort):
@@ -102,6 +117,9 @@ class SimulatedGateway(ExecutionPort):
         cancel_delay: timedelta = timedelta(0),
         clock: ClockPort | None = None,
         session_gate: SessionGatePort | None = None,
+        execution_reference_port: MarketDataPort | None = None,
+        execution_price_type: PriceType = PriceType.BAR_OPEN,
+        strict_execution_reference: bool = False,
         front_id: int = 1,
         session_id: int = 1,
         source_id: str = "simulated-gateway",
@@ -133,6 +151,12 @@ class SimulatedGateway(ExecutionPort):
         self._cancel_delay = cancel_delay
         self._clock = clock
         self._session_gate = session_gate
+        require_enum(execution_price_type, PriceType)
+        self._execution_reference_port = execution_reference_port
+        self._execution_price_type = execution_price_type
+        self._strict_execution_reference = strict_execution_reference
+        self.degradations: list[ExecutionDegradation] = []
+        self.execution_references_used = 0
         self._front_id = front_id
         self._session_id = session_id
         self._source_id = source_id
@@ -185,7 +209,14 @@ class SimulatedGateway(ExecutionPort):
             order_validity="GOOD_FOR_TRADING_DAY",
             open_fill_time="bar.open_time",
             intrabar_fill_time="bar.bar_end (approximation: OHLC gives no intrabar path)",
+            execution_reference=self._execution_reference_label(),
         )
+
+    def _execution_reference_label(self) -> str:
+        if self._execution_reference_port is None:
+            return "bar.open (no execution reference port bound)"
+        mode = "strict" if self._strict_execution_reference else "skip open candidates when missing"
+        return f"{self._execution_price_type.value} via MarketDataPort.execution_reference ({mode})"
 
     def set_trading_day(self, day: date) -> None:
         self._trading_day = day
@@ -404,17 +435,18 @@ class SimulatedGateway(ExecutionPort):
             return self._take_since(events_before)
 
         # ---- 相一：开盘候选 (FR-MATCH-02)
-        can_buy_open, can_sell_open = self._limit_liquidity(bar.open, upper_limit, lower_limit)
+        open_price = self._open_reference_price(bar)
         open_permitted = self._permissions(bar.instrument, bar.open_time).match
         auction_blocked = bar.includes_auction and self._auction_fill_policy == AuctionFillPolicy.REJECT
 
-        if open_permitted and not auction_blocked:
+        if open_price is not None and open_permitted and not auction_blocked:
+            can_buy_open, can_sell_open = self._limit_liquidity(open_price, upper_limit, lower_limit)
             for state in self._ordered_active(bar.instrument):
                 if budget <= 0:
                     break
                 if state.effective_at > bar.open_time:
                     continue
-                fill_price = self._open_candidate_price(state.intent, bar, upper_limit, lower_limit)
+                fill_price = self._open_candidate_price(state.intent, bar, upper_limit, lower_limit, open_price)
                 if fill_price is None:
                     continue
                 if state.intent.side == Side.BUY and not can_buy_open:
@@ -514,26 +546,60 @@ class SimulatedGateway(ExecutionPort):
         price = self._round_to_tick(price, side)
         return min(max(price, bar.low), bar.high)
 
+    def _open_reference_price(self, bar: Bar) -> Decimal | None:
+        """开盘候选价：绑定执行参考价端口时必须取到该时点、该时段、该类型且当时可见的观测，否则降级."""
+        if self._execution_reference_port is None:
+            return bar.open
+        session_id = bar.meta.session_id
+        reason: str | None = None
+        reference = None
+        if session_id is None:
+            reason = "bar has no session_id; cannot identify the opening observation"
+        else:
+            reference = self._execution_reference_port.execution_reference(
+                bar.instrument, session_id, bar.open_time, self._execution_price_type, bar.open_time
+            )
+            if reference is None:
+                reason = f"no visible {self._execution_price_type.value} observation at {bar.open_time.isoformat()}"
+        if reference is None:
+            assert reason is not None
+            if self._strict_execution_reference:
+                raise MissingRuleError(f"execution reference missing for {bar.instrument}: {reason}")
+            self.degradations.append(
+                ExecutionDegradation(
+                    instrument=bar.instrument,
+                    at=bar.open_time,
+                    session_id=session_id,
+                    price_type=self._execution_price_type.value,
+                    reason=reason,
+                    action="open_candidates_skipped",
+                )
+            )
+            return None
+        self.execution_references_used += 1
+        return reference.price
+
     def _open_candidate_price(
         self,
         order: OrderIntent,
         bar: Bar,
         upper_limit: Decimal | None,
         lower_limit: Decimal | None,
+        open_price: Decimal,
     ) -> Decimal | None:
         slip = Decimal(self._slippage_ticks) * self._price_tick
         if order.side == Side.BUY:
-            raw = bar.open + slip
+            raw = open_price + slip
             if order.order_type == OrderType.LIMIT:
                 limit_p = self._limit_price(order)
-                if bar.open > limit_p:
+                if open_price > limit_p:
                     return None
                 raw = min(raw, limit_p)
             return self._bound_price(raw, order.side, bar, upper_limit, lower_limit)
-        raw = bar.open - slip
+        raw = open_price - slip
         if order.order_type == OrderType.LIMIT:
             limit_p = self._limit_price(order)
-            if bar.open < limit_p:
+            if open_price < limit_p:
                 return None
             raw = max(raw, limit_p)
         return self._bound_price(raw, order.side, bar, upper_limit, lower_limit)
