@@ -59,7 +59,13 @@ def _bar(instrument: InstrumentId, day: date, price: Decimal, *, open_interest: 
     )
 
 
-def _session_template(tmp_path: Path, *, has_night: bool = True, night_close: str | None = "23:00:00") -> Path:
+def _session_template(
+    tmp_path: Path,
+    *,
+    has_night: bool = True,
+    night_close: str | None = "23:00:00",
+    day_auction_style: str = "RE_AUCTION",
+) -> Path:
     payload = {
         "schema_version": 2,
         "version": "test-sessions-v1",
@@ -75,7 +81,7 @@ def _session_template(tmp_path: Path, *, has_night: bool = True, night_close: st
                 "product": "rb",
                 "has_night": has_night,
                 "night_close": night_close if has_night else None,
-                "day_auction_style": "RE_AUCTION",
+                "day_auction_style": day_auction_style,
             }
         ],
         "assumptions": ["test fixture"],
@@ -83,6 +89,22 @@ def _session_template(tmp_path: Path, *, has_night: bool = True, night_close: st
     path = tmp_path / "sessions.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _publish_two_contracts(storage: ParquetDataStorage) -> tuple[InstrumentId, InstrumentId]:
+    """近月持仓量前 5 日领先，远月自第 6 日起领先并连续 2 日确认."""
+    near = InstrumentId(Exchange.SHFE, "rb2501")
+    far = InstrumentId(Exchange.SHFE, "rb2505")
+    for index, day in enumerate(DAYS):
+        near_oi = 5000 if index < 5 else 100
+        far_oi = 100 if index < 5 else 5000
+        storage.publish_batch(
+            near, "1d", bars=[_bar(near, day, Decimal("3000") + Decimal(index), open_interest=near_oi)]
+        )
+        storage.publish_batch(
+            far, "1d", bars=[_bar(far, day, Decimal("3100") + Decimal(index), open_interest=far_oi)]
+        )
+    return near, far
 
 
 def test_load_product_dataset_excludes_main_continuous_series(tmp_path: Path) -> None:
@@ -104,18 +126,7 @@ def test_load_product_dataset_excludes_main_continuous_series(tmp_path: Path) ->
 def test_dominant_switch_rolls_the_position_and_reports_spread(tmp_path: Path) -> None:
     """主力切换且有持仓时必须真实移仓：两腿成交、价差归因且不重复计入收益 (A10/FR-CON-06)."""
     storage = ParquetDataStorage(tmp_path)
-    near = InstrumentId(Exchange.SHFE, "rb2501")
-    far = InstrumentId(Exchange.SHFE, "rb2505")
-    # 近月持仓量在前 5 日领先，远月自第 6 日起领先并连续 2 日确认
-    for index, day in enumerate(DAYS):
-        near_price = Decimal("3000") + Decimal(index)
-        far_price = Decimal("3100") + Decimal(index)
-        storage.publish_batch(
-            near, "1d", bars=[_bar(near, day, near_price, open_interest=5000 if index < 5 else 100)]
-        )
-        storage.publish_batch(
-            far, "1d", bars=[_bar(far, day, far_price, open_interest=100 if index < 5 else 5000)]
-        )
+    near, far = _publish_two_contracts(storage)
 
     dataset = load_product_dataset("rb", storage=storage)
     calendar = project_product_calendar(
@@ -251,6 +262,63 @@ def test_project_product_calendar_respects_product_session_shape(tmp_path: Path)
         for day in DAYS
         for session in no_night_calendar.sessions_for_day(instruments[0], day)
     )
+
+
+def test_a25_cancel_only_auction_window_denies_submission(tmp_path: Path) -> None:
+    """A25-04 新增品种范围：CZCE 日盘开盘前是只撤不报窗，不得授予报单权限."""
+    instruments = (InstrumentId(Exchange.SHFE, "rb2501"),)
+    calendar = project_product_calendar(
+        _session_template(tmp_path, day_auction_style="CANCEL_ONLY"),
+        "rb",
+        instruments,
+        window=(DAYS[0], DAYS[-1]),
+    )
+    gate = CalendarSessionGate(calendar)
+    during_window = datetime(2024, 9, 5, 0, 57, tzinfo=timezone.utc)  # 08:57 中国时间
+    permissions = gate.permissions_at(instruments[0], during_window)
+    assert permissions is not None
+    assert permissions.submit is False
+    assert permissions.cancel is True
+    assert permissions.match is False
+    after_open = datetime(2024, 9, 5, 1, 5, tzinfo=timezone.utc)  # 09:05 中国时间
+    opened = gate.permissions_at(instruments[0], after_open)
+    assert opened is not None and opened.submit is True
+    # 只撤不报窗内不允许报单，下一个可报单时刻就是当日日盘连续交易开盘 09:00
+    assert gate.next_submit_time(instruments[0], during_window) == datetime(
+        2024, 9, 5, 1, 0, tzinfo=timezone.utc
+    )
+
+
+def test_no_night_product_holds_the_signal_until_the_next_day_session(tmp_path: Path) -> None:
+    """A25 新增品种范围：无夜盘品种收盘后的意图必须持有到下一交易日日盘，且成交时刻只能是日盘开盘."""
+    storage = ParquetDataStorage(tmp_path)
+    _publish_two_contracts(storage)
+    dataset = load_product_dataset("rb", storage=storage)
+    calendar = project_product_calendar(
+        _session_template(tmp_path, has_night=False, night_close=None),
+        "rb",
+        dataset.contracts,
+        window=(DAYS[0], DAYS[-1]),
+    )
+    run = run_product(
+        dataset,
+        account_id="acc-test",
+        initial_capital=Decimal("400000"),
+        fast_window=1,
+        slow_window=2,
+        order_size=1,
+        calendar=calendar,
+    )
+
+    assert run.result.trades, "无夜盘品种也必须在下一日盘开盘成交，而不是永远过期"
+    assert run.result.rejected_intents == ()
+    assert run.result.missed_executions == ()
+    day_session_opens = {datetime(day.year, day.month, day.day, 1, 0, tzinfo=timezone.utc) for day in DAYS}
+    for trade in run.result.trades:
+        assert trade.event_time in day_session_opens
+    # 移仓仍然真实发生，且第二腿也在日盘开盘成交
+    assert len(run.roll_records) == 1
+    assert run.roll_records[0].exposure_calendar_days >= 1
 
 
 def test_dataset_builder_uses_only_actual_contracts_for_the_resolver(tmp_path: Path) -> None:
