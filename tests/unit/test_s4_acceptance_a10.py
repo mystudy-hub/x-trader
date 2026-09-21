@@ -42,8 +42,6 @@ def test_a10_cross_day_order_and_spread_invariants() -> None:
     """A10: 验证主力切换交叉日时序、无虚假动量、两腿执行与状态机."""
     # 1. 连续确认机制推导映射
     day0 = BASE_TIME.date()
-    day1 = (BASE_TIME + timedelta(days=1)).date()
-    day2 = (BASE_TIME + timedelta(days=2)).date()
 
     def make_bar(inst, day_idx, oi, vol, cl):
         t_start = BASE_TIME + timedelta(days=day_idx)
@@ -91,10 +89,12 @@ def test_a10_cross_day_order_and_spread_invariants() -> None:
 
     # 2. 连续序列计算：切换日价差不计入虚假动量
     builder = ContinuousSeriesBuilder(resolver, method=AdjustmentMethod.DIFF)
-    series = builder.build_series({
-        RB2410: [b for b in bars if b.instrument == RB2410],
-        RB2501: [b for b in bars if b.instrument == RB2501],
-    })
+    series = builder.build_series(
+        {
+            RB2410: [b for b in bars if b.instrument == RB2410],
+            RB2501: [b for b in bars if b.instrument == RB2501],
+        }
+    )
     # 验证收益率均基于同合约自身变动，绝不包含 +200 点价差
     for c_bar in series:
         assert abs(c_bar.single_day_return) < Decimal("0.05")

@@ -84,6 +84,9 @@ class MockStrategyContext(StrategyContext):
     def get_position(self, instrument: InstrumentId) -> int:
         return self.positions.get(instrument, 0)
 
+    def is_order_active(self, client_order_id: str) -> bool:
+        return False
+
     def schedule_timer(self, at: datetime, timer_id: str, payload: object = None) -> None:
         pass
 

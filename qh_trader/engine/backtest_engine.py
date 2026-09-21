@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -100,6 +101,7 @@ class BacktestResult:
     degraded_bars: tuple[Any, ...] = ()
     execution_degradations: tuple[Any, ...] = ()
     quality_flag_counts: Mapping[str, int] = field(default_factory=dict)
+    offset_rewrites: tuple[Any, ...] = ()
 
     def canonical_hashes(self) -> dict[str, str]:
         """订单 / 成交 / 账本的规范化哈希 (A15, FR-VAL-07)。同环境同输入重跑必须一致."""
@@ -281,6 +283,14 @@ class BacktestEngine(BaseEngine):
             self._check_calendar_consistency(bar)
             self._classify_quality(bar)
         intervals = {b.interval for b in sorted_bars}
+        if self.session_gate is None and any(self._is_session_scale(b) for b in sorted_bars):
+            # 日线 / 时段级 Bar 的信号在收盘后产生；没有时段门时意图会被立即送出并在交易日切换时按 GFD 过期，
+            # 从未获得成交机会却不报任何错误 (A21 / A25)。明确失败，而不是静默跑出一条零成交曲线。
+            raise MissingRuleError(
+                "session-scale bars (daily) require a versioned session gate so that intents created at the "
+                "close are held until the next permitted submission time; bind a CalendarSessionGate or use "
+                "intraday bars"
+            )
 
         for strat in self.strategies.values():
             strat.on_start()
@@ -298,6 +308,9 @@ class BacktestEngine(BaseEngine):
             timeline.append((bar.bar_end, end_phase, index, bar))
         timeline.sort(key=lambda item: (item[0], item[1], item[2]))
         open_times = sorted({bar.open_time for bar in sorted_bars})
+        opens_by_instrument: dict[InstrumentId, list[datetime]] = {}
+        for bar in sorted_bars:
+            opens_by_instrument.setdefault(bar.instrument, []).append(bar.open_time)
 
         def next_open_after(at: datetime) -> datetime | None:
             """不早于 at 的下一根 Bar 开盘时刻 (含恰在 at 开盘的 Bar：同一瞬间先收盘后开盘)."""
@@ -305,6 +318,14 @@ class BacktestEngine(BaseEngine):
                 if candidate >= at:
                     return candidate
             return None
+
+        def refresh_following_opens(at: datetime) -> None:
+            """每个合约严格晚于 at 的下一根 Bar 开盘：对本瞬间回报做出反应的订单持有到该时刻 (05 §17)."""
+            self._following_open = {}
+            for instrument, times in opens_by_instrument.items():
+                index = bisect_right(times, at)
+                if index < len(times):
+                    self._following_open[instrument] = times[index]
 
         for at, phase, _, bar in timeline:
             bar_day = bar.meta.trading_day
@@ -326,6 +347,7 @@ class BacktestEngine(BaseEngine):
 
                 # 阶段 A：开盘候选撮合 (质量标记命中拒绝集合的 Bar 不撮合，也不推断路径)
                 self.advance_clock(at, next_bar_open=at)
+                refresh_following_opens(at)
                 if self._is_degraded(bar):
                     continue
                 if self.gateway is not None and hasattr(self.gateway, "match_bar"):
@@ -335,6 +357,7 @@ class BacktestEngine(BaseEngine):
 
             # 阶段 B：Bar 结束，行情可见
             self.advance_clock(at, next_bar_open=next_open_after(at))
+            refresh_following_opens(at)
             self.dispatch_gateway_events()
             self._last_close[bar.instrument] = bar.close
             self.set_mark_price(bar.instrument, bar.close)
@@ -398,6 +421,7 @@ class BacktestEngine(BaseEngine):
             degraded_bars=tuple(self._degraded_bars),
             execution_degradations=tuple(getattr(self.gateway, "degradations", ())),
             quality_flag_counts=dict(self._quality_counts),
+            offset_rewrites=tuple(self.offset_rewrites),
         )
 
     # ------------------------------------------------------------------ 数据质量与日历一致性
@@ -414,6 +438,10 @@ class BacktestEngine(BaseEngine):
 
     def _is_degraded(self, bar: Bar) -> bool:
         return bool(bar.meta.quality_flags & self._reject_quality_flags)
+
+    @staticmethod
+    def _is_session_scale(bar: Bar) -> bool:
+        return bar.interval.lower() in {"1d", "session"} or (bar.bar_end - bar.bar_start) >= timedelta(hours=5)
 
     def _check_calendar_consistency(self, bar: Bar) -> None:
         """A05：Bar 的交易日与时段必须与版本化日历一致，不能按自然日推断."""

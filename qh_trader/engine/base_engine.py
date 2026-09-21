@@ -38,6 +38,7 @@ from qh_trader.core.objects import (
     ControlEpoch,
     InstrumentId,
     LocalSendResult,
+    OrderIdentity,
     OrderIntent,
     OrderUpdate,
     Trade,
@@ -163,6 +164,16 @@ class MissedExecution:
     rescheduled_to: datetime | None
 
 
+@dataclass(frozen=True, slots=True)
+class OffsetRewrite:
+    """递延平仓意图跨交易日后在送出时刻重新规划的开平标志 (FR-CAL-06 / FR-ORD-01)."""
+
+    client_order_id: str
+    planned_offset: Offset
+    sent_offset: Offset
+    at: datetime
+
+
 @dataclass
 class _DeferredIntent:
     intent: OrderIntent
@@ -246,9 +257,14 @@ class BaseEngine(StrategyContextPort):
         self._ingress_seq = 0
         self._journal_cursor = 0
         self._tx_counter = 0
+        self._dispatch_depth = 0
+        #: 每个合约严格晚于当前瞬间的下一根可观测 Bar 开盘时刻 (由回测引擎在每个阶段前刷新)
+        self._following_open: dict[InstrumentId, datetime] = {}
 
         self.rejected_intents: list[RejectedIntent] = []
         self.missed_executions: list[MissedExecution] = []
+        self.offset_rewrites: list[OffsetRewrite] = []
+        self.local_rejection_reports: list[OrderUpdate] = []
         self.processed_events: list[CanonicalEvent] = []
 
         if isinstance(gateway, ExecutionPort) and hasattr(gateway, "bind_clock"):
@@ -299,6 +315,18 @@ class BaseEngine(StrategyContextPort):
 
     def schedule_timer(self, at: datetime, timer_id: str, payload: object = None) -> None:
         self.clock.schedule(at, TimerEvent(timer_id=timer_id, payload=payload))
+
+    def is_order_active(self, client_order_id: str) -> bool:
+        """父单或其任一子单仍可能成交时为 True；本地拒绝、终态回报、过期都使其变为 False."""
+        order = self.order_manager.get_order(client_order_id)
+        if order is None:
+            return False
+        if order.child_order_ids:
+            return any(
+                (child := self.order_manager.get_order(cid)) is not None and child.is_active
+                for cid in order.child_order_ids
+            )
+        return order.is_active
 
     def send_order(
         self,
@@ -468,6 +496,10 @@ class BaseEngine(StrategyContextPort):
         live = self.live_orders(intent.instrument, exclude=intent.client_order_id)
         pending_open = sum(o.leaves_qty for o in live if o.offset == Offset.OPEN and o.side == intent.side)
         try:
+            execution_day = self._execution_trading_day(intent)
+        except MissingRuleError as exc:
+            return ("session-gate", str(exc))
+        try:
             self.risk_manager.check_order(
                 intent,
                 self.epoch,
@@ -480,6 +512,7 @@ class BaseEngine(StrategyContextPort):
                 natural_person=self.natural_person,
                 now=self.now(),
                 pending_open_lots=pending_open,
+                execution_trading_day=execution_day,
             )
         except EpochViolationError as exc:
             return ("control-epoch", str(exc))
@@ -490,6 +523,23 @@ class BaseEngine(StrategyContextPort):
         except ValueError as exc:
             return ("risk-input", str(exc))
         return None
+
+    def _execution_trading_day(self, intent: OrderIntent) -> date | None:
+        """意图最早可能送达柜台的时刻所属交易日 (FR-RISK-06).
+
+        日线信号在 T 收盘产生、T+1 首个可报单时段送出；节前窗口必须按送出所属交易日判断，
+        否则节前最后交易日收盘的意图 (节后才成交) 被拒，而前一日收盘的意图却在节前最后交易日成交并持仓过节。
+        无时段门时返回 None，由风控退回账本当前交易日。
+        """
+        if self.session_gate is None:
+            return None
+        now = self.now()
+        target = self._policy_target(intent.instrument, now)
+        earliest = target if target is not None and target > now else now
+        submit_at = self.session_gate.next_submit_time(intent.instrument, earliest)
+        if submit_at is None:
+            return None
+        return self.session_gate.trading_day_at(intent.instrument, submit_at)
 
     def _margin_rates(self) -> dict[InstrumentId, Decimal]:
         rates = {inst: eco.margin_ratio for inst, eco in self._economics.items()}
@@ -522,9 +572,17 @@ class BaseEngine(StrategyContextPort):
             order.apply_send_result(LocalSendResult(state=SendState.NOT_SENT, local_code=-9, evidence=reason))
         else:
             order.status = OrderStatus.REJECTED
+        self._record_local_rejection(order, stage, reason)
+
+    def _record_local_rejection(self, order: Order, stage: str, reason: str) -> None:
+        """记录本地拒绝并向策略合成一条 REJECTED 回报.
+
+        本地拒绝 (风控、路由、预占、时段、错过执行、发送失败) 没有网关回报；若不通知策略，
+        策略按委托跟踪的在途状态会永久卡住，移仓状态机也停在已提交腿 (FR-CON-06, FR-RISK-03)。
+        """
         self.rejected_intents.append(
             RejectedIntent(
-                client_order_id=client_order_id,
+                client_order_id=order.client_order_id,
                 strategy_id=order.strategy_id,
                 instrument=order.instrument,
                 side=order.side,
@@ -535,6 +593,26 @@ class BaseEngine(StrategyContextPort):
                 reason=reason,
             )
         )
+        identity = order.identity or OrderIdentity(
+            account_id=self.account_id,
+            exchange=order.instrument.exchange,
+            client_order_id=order.client_order_id,
+        )
+        now = self.now()
+        update = OrderUpdate(
+            identity=identity,
+            instrument=order.instrument,
+            side=order.side,
+            offset=order.offset,
+            status=OrderStatus.REJECTED,
+            quantity=order.quantity,
+            filled_quantity=min(order.cum_filled_qty, order.quantity),
+            event_time=now,
+            available_at=now,
+        )
+        self.local_rejection_reports.append(update)
+        for strategy in self.strategies.values():
+            strategy.on_order(update)
 
     # ------------------------------------------------------------------ 执行时点策略 (FR-EXEC-02/03)
     def _policy_target(self, instrument: InstrumentId, after: datetime) -> datetime | None:
@@ -565,19 +643,29 @@ class BaseEngine(StrategyContextPort):
         if target is not None and target > now:
             self._defer(intent, target, "execution-policy")
             return
-        # 本地发送前检查 (FR-CAL-07)：当前时段不允许报单时持有到下一个允许时刻，不把订单送到必然被拒的到达时刻
-        if self.session_gate is not None:
-            permissions = self.session_gate.permissions_at(intent.instrument, now)
-            if permissions is None or not permissions.submit:
-                next_time = self.session_gate.next_submit_time(intent.instrument, now)
-                if next_time is None:
-                    self._reject_locally(
-                        intent.client_order_id, "session-gate", "no visible session permits submission"
-                    )
-                    return
-                self._defer(intent, next_time, "session-gate")
-                return
+        following = self._following_open.get(intent.instrument)
+        if self._dispatch_depth > 0 and following is not None and following > now:
+            # 对本瞬间回报 (成交 / 状态) 的反应：仅有 OHLC 时不能用本瞬间的开盘价，也不能推断盘中路径；
+            # 持有到该合约下一根可观测 Bar 的开盘再送出 (05 §17 "延至下一完整 Bar 评估" 的保守路径)
+            self._defer(intent, following, "intrabar-arrival")
+            return
+        if self._hold_for_session(intent, now):
+            return
         self._submit_to_gateway(intent)
+
+    def _hold_for_session(self, intent: OrderIntent, now: datetime) -> bool:
+        """本地发送前检查 (FR-CAL-07)：当前时段不允许报单时持有到下一个允许时刻；返回 True 表示已持有或已拒绝."""
+        if self.session_gate is None:
+            return False
+        permissions = self.session_gate.permissions_at(intent.instrument, now)
+        if permissions is not None and permissions.submit:
+            return False
+        next_time = self.session_gate.next_submit_time(intent.instrument, now)
+        if next_time is None:
+            self._reject_locally(intent.client_order_id, "session-gate", "no visible session permits submission")
+            return True
+        self._defer(intent, next_time, "session-gate")
+        return True
 
     def _defer(self, intent: OrderIntent, target: datetime, reason: str) -> None:
         self._deferred[intent.client_order_id] = _DeferredIntent(intent=intent, target_time=target, reason=reason)
@@ -589,26 +677,31 @@ class BaseEngine(StrategyContextPort):
         order = self.order_manager.get_order(intent.client_order_id)
         if order is None or not order.is_active:
             return
-        sent = replace(intent, created_at=self.now()) if intent.created_at != self.now() else intent
+        now = self.now()
+        sent = replace(intent, created_at=now) if intent.created_at != now else intent
+        # 递延到交易日切换之后才送出的平仓意图：今仓已结转为昨仓，预占桶也随之改写；
+        # 按当前预占桶重新规划开平标志，而不是把柜台必然拒绝的平今单送出再由内核静默改桶 (FR-ORD-01 / FR-CAL-06)
+        reservation = self.position_manager.get_reservation(intent.client_order_id)
+        if (
+            reservation is not None
+            and reservation.offset != sent.offset
+            and {reservation.offset, sent.offset} <= {Offset.CLOSE_TODAY, Offset.CLOSE_YESTERDAY}
+        ):
+            self.offset_rewrites.append(OffsetRewrite(intent.client_order_id, sent.offset, reservation.offset, now))
+            sent = replace(sent, offset=reservation.offset)
+            order.intent = replace(order.intent, offset=reservation.offset)
         order.mark_submitting(self.epoch.epoch)
+        if hasattr(self.gateway, "reactive_submission"):
+            # 在分发回报 (成交 / 状态) 期间由策略发出的订单是对该瞬间事件的反应：生效严格晚于该瞬间
+            self.gateway.reactive_submission = self._dispatch_depth > 0
         result = self.gateway.submit(sent, self.epoch)
+        if hasattr(self.gateway, "reactive_submission"):
+            self.gateway.reactive_submission = False
         self.order_manager.record_send_result(intent.client_order_id, result)
         if result.state == SendState.NOT_SENT:
             self.position_manager.release_reservation(intent.client_order_id)
             self.ledger.release_funds(intent.client_order_id)
-            self.rejected_intents.append(
-                RejectedIntent(
-                    client_order_id=intent.client_order_id,
-                    strategy_id=intent.strategy_id,
-                    instrument=intent.instrument,
-                    side=intent.side,
-                    offset=intent.offset,
-                    quantity=intent.quantity,
-                    at=self.now(),
-                    stage="gateway-send",
-                    reason=result.evidence,
-                )
-            )
+            self._record_local_rejection(order, "gateway-send", result.evidence)
         self.dispatch_gateway_events()
 
     def _fire_deferred(self, client_order_id: str) -> None:
@@ -654,6 +747,8 @@ class BaseEngine(StrategyContextPort):
             pending.target_time = retry
             self._deferred[client_order_id] = pending
             self.schedule_timer(retry, DEFERRED_TIMER_PREFIX + client_order_id)
+            return
+        if pending.reason != "session-gate" and self._hold_for_session(pending.intent, now):
             return
         self._submit_to_gateway(pending.intent)
 
@@ -710,14 +805,18 @@ class BaseEngine(StrategyContextPort):
         for offset, event in enumerate(events, start=1):
             queue.push(replace(event, sequence=offset))
         processed: list[CanonicalEvent] = []
-        while (popped := queue.pop()) is not None:
-            self._ingress_seq += 1
-            event = replace(popped, sequence=self._ingress_seq)
-            if event.kind == EventKind.TRADE_REPORT:
-                self.process_trade_event(event)
-            elif event.kind == EventKind.ORDER_REPORT:
-                self.process_order_event(event)
-            processed.append(event)
+        self._dispatch_depth += 1
+        try:
+            while (popped := queue.pop()) is not None:
+                self._ingress_seq += 1
+                event = replace(popped, sequence=self._ingress_seq)
+                if event.kind == EventKind.TRADE_REPORT:
+                    self.process_trade_event(event)
+                elif event.kind == EventKind.ORDER_REPORT:
+                    self.process_order_event(event)
+                processed.append(event)
+        finally:
+            self._dispatch_depth -= 1
         self.processed_events.extend(processed)
         self._journal_commit(processed)
         return processed

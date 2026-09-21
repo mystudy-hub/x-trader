@@ -12,7 +12,10 @@ CHECKS = (
     ("Unit tests", ("-m", "pytest", "tests/unit", "-q")),
     ("Smoke check", ("scripts/smoke.py",)),
     ("Documentation validation", ("scripts/check_docs.py", "--check")),
-    ("Python syntax and names", ("-m", "ruff", "check", "--select", "E9,F63,F7,F82", "qh_trader", "scripts", "tests")),
+    (
+        "Python syntax and names",
+        ("-m", "ruff", "check", "--select", "E9,F63,F7,F82,F401,F841", "qh_trader", "scripts", "tests"),
+    ),
 )
 
 

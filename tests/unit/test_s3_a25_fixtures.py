@@ -365,29 +365,41 @@ def test_a25_05_holiday_risk_hook_blocks_open_before_holiday() -> None:
     calendar, cases = load("A25-05")
     case = cases["holiday_risk_hook_blocks_open_before_holiday"]
     bars = a25_05_bars()
-    gate = CalendarSessionGate(calendar)
-    gw = SimulatedGateway("acc", date(2024, 9, 27))
-    risk = RiskManager(
-        account_id="acc",
-        control=ControlEpoch("backtest-controller", 1),
-        holiday_hook=HolidayRiskHook(days_before_holiday=case["inputs"]["days_before_holiday"], prevent_new_open=True),
-        holiday_dates=[date.fromisoformat(case["inputs"]["holiday_start"])],
-    )
-    eng = BacktestEngine(
-        account_id="acc",
-        gateway=gw,
-        start_time=bars[0].bar_start,
-        initial_capital=Decimal("1000000"),
-        default_economics=ECO,
-        session_gate=gate,
-        risk_manager=risk,
-        trading_days=sorted(calendar.trading_days),
-    )
-    eng.add_strategy(BuyAtBarIndex("s", eng, 3))
-    res = eng.run(bars)
-    assert res.total_trades == case["expected"]["trades"]
-    assert res.rejected_intents[0].stage == case["expected"]["rejected_stage"]
-    assert "HolidayRiskHook" in res.rejected_intents[0].reason
+
+    def run_with_signal_at(index: int):
+        gate = CalendarSessionGate(calendar)
+        gw = SimulatedGateway("acc", date(2024, 9, 27), session_gate=gate)
+        risk = RiskManager(
+            account_id="acc",
+            control=ControlEpoch("backtest-controller", 1),
+            holiday_hook=HolidayRiskHook(
+                days_before_holiday=case["inputs"]["days_before_holiday"], prevent_new_open=True
+            ),
+            holiday_dates=[date.fromisoformat(case["inputs"]["holiday_start"])],
+        )
+        eng = BacktestEngine(
+            account_id="acc",
+            gateway=gw,
+            start_time=bars[0].bar_start,
+            initial_capital=Decimal("1000000"),
+            default_economics=ECO,
+            session_gate=gate,
+            risk_manager=risk,
+            trading_days=sorted(calendar.trading_days),
+        )
+        eng.add_strategy(BuyAtBarIndex("s", eng, index))
+        return eng.run(bars)
+
+    # 09-30 夜盘收盘 (09-27 23:00) 的开仓意图会在节前最后交易日 09-30 日盘送出并成交 -> 被钩子拒绝
+    blocked = run_with_signal_at(case["inputs"]["blocked_signal_bar_index"])
+    assert blocked.total_trades == case["expected"]["blocked_trades"]
+    assert blocked.rejected_intents[0].stage == case["expected"]["rejected_stage"]
+    assert "HolidayRiskHook" in blocked.rejected_intents[0].reason
+    assert blocked.rejected_intents[0].at == cst(case["inputs"]["blocked_signal_close"])
+    # 09-30 日盘收盘的意图要到节后 10-08 才送出：不在节前窗口内，不得被拒
+    allowed = run_with_signal_at(case["inputs"]["allowed_signal_bar_index"])
+    assert list(allowed.rejected_intents) == []
+    assert [t.event_time for t in allowed.trades] == [cst(case["expected"]["allowed_fill_at"])]
 
 
 def test_a25_05_bar_on_unlisted_trading_day_is_rejected() -> None:

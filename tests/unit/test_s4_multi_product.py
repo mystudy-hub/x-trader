@@ -101,9 +101,7 @@ def _publish_two_contracts(storage: ParquetDataStorage) -> tuple[InstrumentId, I
         storage.publish_batch(
             near, "1d", bars=[_bar(near, day, Decimal("3000") + Decimal(index), open_interest=near_oi)]
         )
-        storage.publish_batch(
-            far, "1d", bars=[_bar(far, day, Decimal("3100") + Decimal(index), open_interest=far_oi)]
-        )
+        storage.publish_batch(far, "1d", bars=[_bar(far, day, Decimal("3100") + Decimal(index), open_interest=far_oi)])
     return near, far
 
 
@@ -116,7 +114,7 @@ def test_load_product_dataset_excludes_main_continuous_series(tmp_path: Path) ->
     for day in DAYS:
         storage.publish_batch(near, "1d", bars=[_bar(near, day, Decimal("3000"), open_interest=1000)])
 
-    dataset = load_product_dataset("rb", storage=storage)
+    dataset = load_product_dataset("rb", storage=storage, contract_catalog=None)
 
     assert dataset.contracts == (near,)
     assert all(str(instrument) != "SHFE.rb0" for instrument in dataset.contracts)
@@ -128,7 +126,7 @@ def test_dominant_switch_rolls_the_position_and_reports_spread(tmp_path: Path) -
     storage = ParquetDataStorage(tmp_path)
     near, far = _publish_two_contracts(storage)
 
-    dataset = load_product_dataset("rb", storage=storage)
+    dataset = load_product_dataset("rb", storage=storage, contract_catalog=None)
     calendar = project_product_calendar(
         _session_template(tmp_path), "rb", dataset.contracts, window=(DAYS[0], DAYS[-1])
     )
@@ -238,9 +236,7 @@ def test_slice_metrics_split_is_disjoint_and_starts_from_slice_capital() -> None
 def test_project_product_calendar_respects_product_session_shape(tmp_path: Path) -> None:
     """按品种投影日历：无夜盘品种不生成夜盘，夜盘收盘时间来自模板 (FR-CON-04/05)."""
     instruments = (InstrumentId(Exchange.SHFE, "rb2501"), InstrumentId(Exchange.SHFE, "rb2505"))
-    calendar = project_product_calendar(
-        _session_template(tmp_path), "rb", instruments, window=(DAYS[0], DAYS[-1])
-    )
+    calendar = project_product_calendar(_session_template(tmp_path), "rb", instruments, window=(DAYS[0], DAYS[-1]))
     gate = CalendarSessionGate(calendar)
     assert set(calendar.trading_days) == set(DAYS)
     # 首日没有更早的交易日证据，不生成夜盘
@@ -249,14 +245,10 @@ def test_project_product_calendar_respects_product_session_shape(tmp_path: Path)
     assert not any(session_id.startswith("night_") for session_id in first_day_ids)
     later_ids = {session.session_id for session in calendar.sessions_for_day(instruments[0], DAYS[3])}
     assert "night_continuous" in later_ids
-    assert gate.permissions_at(
-        instruments[0], datetime(2024, 9, 5, 13, 30, tzinfo=timezone.utc)
-    ) is not None
+    assert gate.permissions_at(instruments[0], datetime(2024, 9, 5, 13, 30, tzinfo=timezone.utc)) is not None
 
     no_night_template = _session_template(tmp_path, has_night=False, night_close=None)
-    no_night_calendar = project_product_calendar(
-        no_night_template, "rb", instruments, window=(DAYS[0], DAYS[-1])
-    )
+    no_night_calendar = project_product_calendar(no_night_template, "rb", instruments, window=(DAYS[0], DAYS[-1]))
     assert all(
         not session.session_id.startswith("night_")
         for day in DAYS
@@ -284,16 +276,14 @@ def test_a25_cancel_only_auction_window_denies_submission(tmp_path: Path) -> Non
     opened = gate.permissions_at(instruments[0], after_open)
     assert opened is not None and opened.submit is True
     # 只撤不报窗内不允许报单，下一个可报单时刻就是当日日盘连续交易开盘 09:00
-    assert gate.next_submit_time(instruments[0], during_window) == datetime(
-        2024, 9, 5, 1, 0, tzinfo=timezone.utc
-    )
+    assert gate.next_submit_time(instruments[0], during_window) == datetime(2024, 9, 5, 1, 0, tzinfo=timezone.utc)
 
 
 def test_no_night_product_holds_the_signal_until_the_next_day_session(tmp_path: Path) -> None:
     """A25 新增品种范围：无夜盘品种收盘后的意图必须持有到下一交易日日盘，且成交时刻只能是日盘开盘."""
     storage = ParquetDataStorage(tmp_path)
     _publish_two_contracts(storage)
-    dataset = load_product_dataset("rb", storage=storage)
+    dataset = load_product_dataset("rb", storage=storage, contract_catalog=None)
     calendar = project_product_calendar(
         _session_template(tmp_path, has_night=False, night_close=None),
         "rb",
@@ -328,11 +318,9 @@ def test_dataset_builder_uses_only_actual_contracts_for_the_resolver(tmp_path: P
     for day in DAYS:
         storage.publish_batch(contracts[0], "1d", bars=[_bar(contracts[0], day, Decimal("3000"), open_interest=100)])
         storage.publish_batch(contracts[1], "1d", bars=[_bar(contracts[1], day, Decimal("3100"), open_interest=900)])
-    dataset = load_product_dataset("rb", storage=storage)
+    dataset = load_product_dataset("rb", storage=storage, contract_catalog=None)
     resolver = build_dominant_mappings(get_product_spec("rb").product_id, dataset.bars, confirm_days=2)
-    resolved = resolver.dominant(
-        get_product_spec("rb").product_id, datetime(2024, 9, 9, 8, 0, tzinfo=timezone.utc)
-    )
+    resolved = resolver.dominant(get_product_spec("rb").product_id, datetime(2024, 9, 9, 8, 0, tzinfo=timezone.utc))
     assert resolved.value in contracts
     spec = get_product_spec("rb")
     assert spec.multiplier > 0

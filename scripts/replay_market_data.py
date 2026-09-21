@@ -105,12 +105,24 @@ def main() -> int:
     if args.expected:
         path = Path(args.expected)
         expected = json.loads((path if path.is_absolute() else ROOT / path).read_text(encoding="utf-8"))
-        actual_snapshot = first["manifest"]["inputs"]["data"]["dataset_snapshot"].get("snapshot_id")
+        snapshot = first["manifest"]["inputs"]["data"]["dataset_snapshot"]
+        actual_snapshot = snapshot.get("snapshot_id")
+        actual_datasets = snapshot.get("datasets", {})
+        pinned_datasets = expected.get("dataset_hashes") or {}
+        mismatched = {
+            key: (digest, actual_datasets.get(key, {}).get("sha256"))
+            for key, digest in pinned_datasets.items()
+            if actual_datasets.get(key, {}).get("sha256") != digest
+        }
         pinned = expected.get("dataset_snapshot_id")
-        if pinned and pinned != actual_snapshot:
+        if mismatched or (not pinned_datasets and pinned and pinned != actual_snapshot):
+            detail = (
+                "; ".join(f"{key}: 预期 {str(exp)[:12]} 当前 {str(act)[:12]}" for key, (exp, act) in mismatched.items())
+                if mismatched
+                else f"预期固定于数据快照 {str(pinned)[:12]}，当前发布为 {str(actual_snapshot)[:12]}"
+            )
             print(
-                f"独立预期比对: 不可比 (预期固定于数据快照 {pinned[:12]}，当前发布为 {str(actual_snapshot)[:12]}；"
-                "请以 --snapshot 指定预期对应的快照，或按新快照重新生成并核对预期文件)"
+                f"独立预期比对: 不可比 ({detail}；请以 --snapshot 指定预期对应的快照，或按新数据重新生成并核对预期文件)"
             )
             expected = None
         for key in ("final_equity", "total_trades", "total_commission") if expected is not None else ():

@@ -97,6 +97,7 @@ class MatchingAssumptions:
     open_fill_time: str
     intrabar_fill_time: str
     execution_reference: str
+    reactive_orders: str = ""
 
 
 class SimulatedGateway(ExecutionPort):
@@ -165,6 +166,8 @@ class SimulatedGateway(ExecutionPort):
         self._trade_counter = 0
         self._order_ref_counter = 0
         self._last_time: datetime | None = None
+        #: 引擎在分发回报期间置 True：此时提交的订单是对该瞬间事件的反应，生效严格晚于该瞬间
+        self.reactive_submission = False
 
         self._orders: dict[str, _SimulatedOrderState] = {}  # client_order_id -> state
         self._identity_map: dict[str, str] = {}  # order_ref -> client_order_id
@@ -209,6 +212,8 @@ class SimulatedGateway(ExecutionPort):
             order_validity="GOOD_FOR_TRADING_DAY",
             open_fill_time="bar.open_time",
             intrabar_fill_time="bar.bar_end (approximation: OHLC gives no intrabar path)",
+            reactive_orders="orders submitted while reports of instant t are being processed become effective "
+            "strictly after t; with OHLC-only data they are evaluated from the next bar",
             execution_reference=self._execution_reference_label(),
         )
 
@@ -271,6 +276,10 @@ class SimulatedGateway(ExecutionPort):
         if sent_at < order.created_at:
             raise ValueError("an order cannot be sent before it was created")
         arrival_at = sent_at + self._order_delay
+        if self.reactive_submission:
+            # 对同一瞬间的回报做出反应而发出的订单：生效时刻严格晚于该瞬间。仅有 OHLC 时，
+            # 它不能参与该瞬间开盘的候选成交，而是延至下一完整 Bar 评估 (05 §17 保守路径)。
+            arrival_at = arrival_at + timedelta(microseconds=1)
 
         self._order_ref_counter += 1
         order_ref = str(self._order_ref_counter)

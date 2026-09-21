@@ -31,7 +31,17 @@ def test_success_runs_all_required_checks_with_the_current_interpreter(ci_runner
         [ci_runner.sys.executable, "-m", "pytest", "tests/unit", "-q"],
         [ci_runner.sys.executable, "scripts/smoke.py"],
         [ci_runner.sys.executable, "scripts/check_docs.py", "--check"],
-        [ci_runner.sys.executable, "-m", "ruff", "check", "--select", "E9,F63,F7,F82", "qh_trader", "scripts", "tests"],
+        [
+            ci_runner.sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--select",
+            "E9,F63,F7,F82,F401,F841",
+            "qh_trader",
+            "scripts",
+            "tests",
+        ],
     ]
     assert all(call.kwargs["cwd"] == ROOT for call in run.call_args_list)
     assert "PASS: All CI checks passed." in capsys.readouterr().out

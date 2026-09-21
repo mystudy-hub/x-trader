@@ -500,7 +500,12 @@ def test_engineering_sample_replay_matches_recorded_independent_expectation() ->
     from qh_trader.research.backtest_assembly import BacktestSpec, run_backtest
 
     result, _, manifest, assembled = run_backtest(BacktestSpec(), root=ROOT)
-    if assembled.snapshot.get("snapshot_id") != expected["dataset_snapshot_id"]:
+    pinned_datasets = expected.get("dataset_hashes") or {}
+    actual_datasets = assembled.snapshot.get("datasets", {})
+    if pinned_datasets:
+        if any(actual_datasets.get(key, {}).get("sha256") != digest for key, digest in pinned_datasets.items()):
+            pytest.skip("published datasets differ from the recorded expectation (see dataset_hashes)")
+    elif assembled.snapshot.get("snapshot_id") != expected["dataset_snapshot_id"]:
         pytest.skip("dataset snapshot differs from the recorded expectation")
     assert str(result.final_equity) == expected["final_equity"]
     assert result.total_trades == expected["total_trades"]

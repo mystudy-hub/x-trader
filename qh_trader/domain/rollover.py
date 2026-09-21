@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -24,8 +24,8 @@ from qh_trader.core.objects import (
 
 
 class LegOrderPolicy(StrEnum):
-    CLOSE_FIRST = "CLOSE_FIRST"      # 先平旧仓，后开新仓 (资金优先)
-    OPEN_FIRST = "OPEN_FIRST"        # 先开新仓，后平旧仓 (敞口优先)
+    CLOSE_FIRST = "CLOSE_FIRST"  # 先平旧仓，后开新仓 (资金优先)
+    OPEN_FIRST = "OPEN_FIRST"  # 先开新仓，后平旧仓 (敞口优先)
 
 
 class RollState(StrEnum):
@@ -43,12 +43,13 @@ class RollState(StrEnum):
 @dataclass
 class RollTask:
     """单个主力移仓任务状态聚合."""
+
     roll_id: str
     account_id: str
     product: ProductId
     from_instrument: InstrumentId
     to_instrument: InstrumentId
-    position_side: PositionSide      # 移仓的持仓方向 (LONG / SHORT)
+    position_side: PositionSide  # 移仓的持仓方向 (LONG / SHORT)
     total_quantity: int
     batch_size: int
     policy: LegOrderPolicy = LegOrderPolicy.CLOSE_FIRST
@@ -64,6 +65,15 @@ class RollTask:
     current_leg1_order_id: str | None = None
     current_leg2_order_id: str | None = None
     failure_reason: str | None = None
+    retry_count: int = 0
+    # 当前在途一批的计划量与已成交量：只有一批全部成交才允许规划下一批 (部分成交不重复下单)
+    current_leg1_batch_qty: int = 0
+    current_leg1_batch_filled: int = 0
+    current_leg2_batch_qty: int = 0
+    current_leg2_batch_filled: int = 0
+    # 引擎实际生成的两腿委托号 (含重试)，供归因从账本成交事实取手续费 (FR-CON-07)
+    leg1_order_ids: list[str] = field(default_factory=list)
+    leg2_order_ids: list[str] = field(default_factory=list)
 
     @property
     def is_done(self) -> bool:
@@ -73,6 +83,11 @@ class RollTask:
     def remaining_exposure_qty(self) -> int:
         """两腿未配平暴露的手数."""
         return abs(self.leg1_filled_qty - self.leg2_filled_qty)
+
+    @property
+    def is_incomplete(self) -> bool:
+        """已开始但未完成：需要在报告中列出实际剩余持仓与暴露 (FR-CON-06)."""
+        return self.state not in (RollState.COMPLETED, RollState.PLANNED)
 
 
 class RollManager:
@@ -140,6 +155,8 @@ class RollManager:
             batch = min(task.batch_size, task.total_quantity - task.leg1_filled_qty)
             order_id = f"{task.roll_id}-leg1-{task.leg1_filled_qty + 1}"
             task.current_leg1_order_id = order_id
+            task.current_leg1_batch_qty = batch
+            task.current_leg1_batch_filled = 0
             self._order_to_task[order_id] = task.roll_id
 
             if task.policy == LegOrderPolicy.CLOSE_FIRST:
@@ -179,6 +196,8 @@ class RollManager:
             needed = task.leg1_filled_qty - task.leg2_filled_qty
             order_id = f"{task.roll_id}-leg2-{task.leg2_filled_qty + 1}"
             task.current_leg2_order_id = order_id
+            task.current_leg2_batch_qty = needed
+            task.current_leg2_batch_filled = 0
             self._order_to_task[order_id] = task.roll_id
 
             if task.policy == LegOrderPolicy.CLOSE_FIRST:
@@ -227,14 +246,54 @@ class RollManager:
         self._order_to_task[client_order_id] = task.roll_id
         if leg == 1:
             task.current_leg1_order_id = client_order_id
+            task.leg1_order_ids.append(client_order_id)
         else:
             task.current_leg2_order_id = client_order_id
+            task.leg2_order_ids.append(client_order_id)
+
+    def on_leg_failed(self, task: RollTask, leg: int, reason: str) -> None:
+        """某一腿被拒绝 / 撤销 / 过期：进入 PAUSED，保留已成交事实，等待调用方决定重试或放弃 (FR-CON-06)."""
+        if leg not in (1, 2):
+            raise ValueError("leg must be 1 or 2")
+        if task.is_done:
+            return
+        task.state = RollState.PAUSED
+        task.failure_reason = reason
+        if leg == 1:
+            task.current_leg1_order_id = None
+            task.current_leg1_batch_qty = 0
+            task.current_leg1_batch_filled = 0
+        else:
+            task.current_leg2_order_id = None
+            task.current_leg2_batch_qty = 0
+            task.current_leg2_batch_filled = 0
+
+    def resume(self, task: RollTask, *, max_retries: int = 3) -> bool:
+        """从 PAUSED 恢复：按已成交事实回到相应阶段以便重新规划下一腿；超过重试上限进入 FAILED.
+
+        返回 True 表示可继续规划；False 表示任务已 FAILED (或本来就已完成)。
+        """
+        if task.state != RollState.PAUSED:
+            return not task.is_done
+        if task.retry_count >= max_retries:
+            task.state = RollState.FAILED
+            task.failure_reason = f"retry limit {max_retries} exhausted: {task.failure_reason}"
+            return False
+        task.retry_count += 1
+        if task.leg1_filled_qty >= task.total_quantity:
+            task.state = RollState.LEG_2_PARTIAL if task.leg2_filled_qty > 0 else RollState.LEG_1_FILLED
+        elif task.leg1_filled_qty > 0:
+            task.state = RollState.LEG_1_PARTIAL
+        else:
+            task.state = RollState.PLANNED
+        return True
 
     def on_fill(self, task: RollTask, trade: Trade, *, leg: int) -> None:
         """按腿记录真实成交.
 
         引擎可能把 CLOSE 改写为 CLOSE_YESTERDAY 或拆成子单，父单号不再出现在回报里；
         因此按合约归属确定腿序后直接记账，不依赖 client_order_id 映射 (FR-CON-06)。
+        当前一批全部成交后才清空该腿的在途单号；部分成交时不重复规划同一腿。
         """
         if task.is_done:
             return
@@ -245,7 +304,9 @@ class RollManager:
                 task.leg1_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)
             ) / Decimal(new_qty)
             task.leg1_filled_qty = new_qty
-            task.current_leg1_order_id = None  # 允许规划下一笔
+            task.current_leg1_batch_filled += trade.quantity
+            if task.current_leg1_batch_filled >= task.current_leg1_batch_qty:
+                task.current_leg1_order_id = None  # 本批完成，允许规划下一批
             task.state = RollState.LEG_1_FILLED if new_qty >= task.total_quantity else RollState.LEG_1_PARTIAL
             return
         if leg != 2:
@@ -256,7 +317,9 @@ class RollManager:
             task.leg2_avg_price * Decimal(old_qty) + trade.price * Decimal(trade.quantity)
         ) / Decimal(new_qty)
         task.leg2_filled_qty = new_qty
-        task.current_leg2_order_id = None
+        task.current_leg2_batch_filled += trade.quantity
+        if task.current_leg2_batch_filled >= task.current_leg2_batch_qty:
+            task.current_leg2_order_id = None
         task.state = RollState.COMPLETED if new_qty >= task.total_quantity else RollState.LEG_2_PARTIAL
 
     def on_trade(self, trade: Trade, client_order_id: str | None) -> None:
@@ -284,10 +347,5 @@ class RollManager:
         task = self._tasks.get(roll_id)
         if not task:
             return
-
-        task.state = RollState.PAUSED
-        task.failure_reason = reason
-        if client_order_id == task.current_leg1_order_id:
-            task.current_leg1_order_id = None
-        elif client_order_id == task.current_leg2_order_id:
-            task.current_leg2_order_id = None
+        leg = 1 if client_order_id == task.current_leg1_order_id else 2
+        self.on_leg_failed(task, leg, reason)

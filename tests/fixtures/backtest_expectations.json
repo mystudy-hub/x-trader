@@ -4,9 +4,14 @@
   "purpose": "固定工程样例 (SHFE.rb2410 1d, 双均线 5/20, 1 手, 手续费 5 元/手, 无滑点, 参与率 1.0, 方向保守) 的独立预期；scripts/replay_market_data.py --expected 与 tests/unit/test_s3_acceptance_a25_a28.py 引用。",
   "oracle": {
     "method": "independent_specification",
-    "notes": "成交序列由 research/vector_backtest.py (与引擎无共享代码的独立实现) 按“Bar i 收盘信号、Bar i+1 开盘成交”推导，并对首个信号 (2023-12-18 死叉 -> 2023-12-19 开盘 3912 卖开) 人工按原始收盘价复算均线核对；权益与手续费按 23 笔 × 5 元和逐笔价差手工累加。任何数据快照、参数或撮合假设变化都必须重新生成本文件并说明来源。"
+    "notes": "成交序列由 research/vector_backtest.py (与引擎无共享代码的独立实现) 按“Bar i 收盘信号、Bar i+1 开盘成交”推导，并对首个信号 (2023-12-18 死叉 -> 2023-12-19 开盘 3912 卖开) 人工按原始收盘价复算均线核对；权益与手续费按 23 笔 × 5 元和逐笔价差手工累加。任何数据快照、参数或撮合假设变化都必须重新生成本文件并说明来源。预期固定于回测实际读取的三个数据集 (dataset_hashes) 而不是整个存储的快照 ID：其他品种的发布不影响可比性，rb2410 任一数据集变化即不可比。"
   },
   "dataset_snapshot_id": "4379bc819d9db69d8264309f319333cb1fd36af05c8311f6ff71409f50fccd40",
+  "dataset_hashes": {
+    "bar/SHFE.rb2410/1d": "91f856f59b05a903d92d2a50e9de90b7cca01446edfa23077d391eb71e4b8546",
+    "settlement/SHFE.rb2410/1d": "b22bdad37b0d369c20b99ab24b07a8da32e152b5669d11af21d1a81a5cc3afb2",
+    "execution_reference/SHFE.rb2410/1d": "55ba6329e3ce49f3b863c4fdc3bb5d022fe5ba8aeed3160c1a1b1cbce8f13727"
+  },
   "parameters": {
     "symbol": "SHFE.rb2410",
     "interval": "1d",

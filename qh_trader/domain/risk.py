@@ -98,9 +98,16 @@ class HolidayRiskHook:
     """长假风控钩子 (FR-RISK-06, S4-04).
 
     在节假日前指定交易日数触发，限制新开仓或降低风险暴露。
+    给定 ``trading_days`` (版本化日历的交易日序列) 时按交易日计窗：节前最后一个交易日距当前
+    交易日不足 ``days_before_holiday`` 个交易日即在窗口内；未给定时退化为自然日计窗。
     """
+
     days_before_holiday: int = 1
     prevent_new_open: bool = True
+    trading_days: tuple[date, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trading_days", tuple(sorted(set(self.trading_days))))
 
     def is_in_holiday_window(
         self,
@@ -108,6 +115,19 @@ class HolidayRiskHook:
         holiday_start_dates: Sequence[date],
     ) -> bool:
         """检查当前交易日是否处于节前窗口."""
+        if self.trading_days:
+            from bisect import bisect_left
+
+            days = self.trading_days
+            index = bisect_left(days, current_date)
+            if index < len(days) and days[index] == current_date:
+                for h_start in holiday_start_dates:
+                    if h_start <= current_date:
+                        continue
+                    eve_index = bisect_left(days, h_start) - 1  # 节前最后一个交易日
+                    if eve_index >= index and eve_index - index < self.days_before_holiday:
+                        return True
+                return False
         for h_start in holiday_start_dates:
             diff = (h_start - current_date).days
             if 0 < diff <= self.days_before_holiday:
@@ -122,9 +142,7 @@ class HolidayRiskHook:
     ) -> None:
         if intent.offset == Offset.OPEN and self.prevent_new_open:
             if self.is_in_holiday_window(current_date, holiday_start_dates):
-                raise RiskViolationError(
-                    f"HolidayRiskHook: cannot open position before holiday on {current_date}"
-                )
+                raise RiskViolationError(f"HolidayRiskHook: cannot open position before holiday on {current_date}")
 
 
 class RiskManager:
@@ -412,10 +430,13 @@ class RiskManager:
         natural_person: bool = False,
         now: datetime | None = None,
         pending_open_lots: int = 0,
+        execution_trading_day: date | None = None,
     ) -> None:
         """事前风控统一校验入口 (FR-RISK-01)，无副作用.
 
         若未通过校验，抛出 RiskViolationError / EpochViolationError / LimitViolationError.
+        ``execution_trading_day`` 为意图最早送达柜台所属的交易日 (收盘后产生的意图落在下一交易日)；
+        长假钩子按它判断节前窗口，未给定时退回 ``trading_day``。
         """
         # 1. 控制代次
         self.check_command_epoch(command_epoch, "order")
@@ -427,7 +448,7 @@ class RiskManager:
         if order.offset == Offset.OPEN:
             self._check_open_allowed(order.client_order_id, now)
             if self.holiday_hook is not None:
-                self.holiday_hook.check_order(order, day, self.holiday_dates)
+                self.holiday_hook.check_order(order, execution_trading_day or day, self.holiday_dates)
 
         # 3. 交易所硬约束 (对平仓同样生效的价格带；开仓限额含在途开仓)
         self.limits.check_order(
