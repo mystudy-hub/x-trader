@@ -80,21 +80,44 @@ def day_bar(
     )
 
 
-def session_bar(instrument: InstrumentId, day: date, kind: str, open_: str, *, volume: int = 100, claimed_day=None) -> Bar:
+def session_bar(
+    instrument: InstrumentId, day: date, kind: str, open_: str, *, volume: int = 100, claimed_day=None
+) -> Bar:
     """kind: 'day' (09:00-15:00, 属于 day) 或 'night' (前一自然日 21:00-23:00, 属于 day)."""
     if kind == "day":
         start = datetime.combine(day, time(9), CHINA_TZ)
         end = datetime.combine(day, time(15), CHINA_TZ)
-        return day_bar(instrument, day, start=start, end=end, session_id="day", open_=open_, volume=volume, auction=True, claimed_day=claimed_day)
+        return day_bar(
+            instrument,
+            day,
+            start=start,
+            end=end,
+            session_id="day",
+            open_=open_,
+            volume=volume,
+            auction=True,
+            claimed_day=claimed_day,
+        )
     natural = day - timedelta(days=1)
     while natural.weekday() >= 5:
         natural -= timedelta(days=1)
     start = datetime.combine(natural, time(21), CHINA_TZ)
     end = datetime.combine(natural, time(23), CHINA_TZ)
-    return day_bar(instrument, day, start=start, end=end, session_id="night_continuous", open_=open_, volume=volume, claimed_day=claimed_day)
+    return day_bar(
+        instrument,
+        day,
+        start=start,
+        end=end,
+        session_id="night_continuous",
+        open_=open_,
+        volume=volume,
+        claimed_day=claimed_day,
+    )
 
 
-def make_engine(calendar: TradingCalendar, start: datetime, **gateway_kwargs) -> tuple[SimulatedGateway, BacktestEngine]:
+def make_engine(
+    calendar: TradingCalendar, start: datetime, **gateway_kwargs
+) -> tuple[SimulatedGateway, BacktestEngine]:
     gate = CalendarSessionGate(calendar)
     gw = SimulatedGateway("acc", sorted(calendar.trading_days)[0], **gateway_kwargs)
     engine = BacktestEngine(
@@ -118,7 +141,9 @@ def order_reports(result, status: OrderStatus | None = None):
 
 
 class BuyOnFirstBar(StrategyBase):
-    def __init__(self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, qty: int, limit: int) -> None:
+    def __init__(
+        self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, qty: int, limit: int
+    ) -> None:
         super().__init__(strategy_id, context)
         self.instrument, self.qty, self.limit = instrument, qty, limit
         self.cid: str | None = None
@@ -168,7 +193,9 @@ def test_a25_02_shfe_night_partial_fill_carries_into_day_session() -> None:
 class NightThenCancelResubmit(StrategyBase):
     """夜盘挂单；次日 08:56 (只撤不报窗) 撤掉残留单并重新报单."""
 
-    def __init__(self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, qty: int, limit: int, at: datetime) -> None:
+    def __init__(
+        self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, qty: int, limit: int, at: datetime
+    ) -> None:
         super().__init__(strategy_id, context)
         self.instrument, self.qty, self.limit, self.at = instrument, qty, limit, at
         self.first: str | None = None
@@ -196,14 +223,18 @@ def test_a25_02_czce_cancel_only_window_accepts_cancel_but_holds_new_orders() ->
         session_bar(MA, d2, "day", inp["day_bar"]["open"], volume=inp["day_bar"]["volume"]),
     ]
     gw, eng = make_engine(calendar, bars[0].bar_start, participation_rate=Decimal(inp["participation_rate"]))
-    strat = NightThenCancelResubmit("s", eng, MA, inp["order_quantity"], int(inp["limit_price"]), cst(inp["cancel_and_resubmit_at"]))
+    strat = NightThenCancelResubmit(
+        "s", eng, MA, inp["order_quantity"], int(inp["limit_price"]), cst(inp["cancel_and_resubmit_at"])
+    )
     eng.add_strategy(strat)
     res = eng.run(bars)
 
     by_id = {o.client_order_id: o for o in res.orders}
     residual = by_id[strat.first]
     assert residual.status == OrderStatus.CANCELLED and residual.cum_filled_qty == exp["residual_cum_filled"]
-    assert order_reports(res, OrderStatus.CANCELLED) == [(strat.first, OrderStatus.CANCELLED, cst(exp["residual_cancelled_at"]))]
+    assert order_reports(res, OrderStatus.CANCELLED) == [
+        (strat.first, OrderStatus.CANCELLED, cst(exp["residual_cancelled_at"]))
+    ]
     new_accepted = [r for r in order_reports(res, OrderStatus.ACCEPTED) if r[0] == strat.second]
     assert new_accepted[0][2] == cst(exp["new_order_accepted_at"])  # 08:56 不能报单，持有到 09:00
     assert [(t.quantity, t.price) for t in res.trades] == [(f["quantity"], Decimal(f["price"])) for f in exp["fills"]]
@@ -217,7 +248,9 @@ def test_a25_02_czce_cancel_only_window_accepts_cancel_but_holds_new_orders() ->
 
 
 class OrderAtTimes(StrategyBase):
-    def __init__(self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, times: list[datetime]) -> None:
+    def __init__(
+        self, strategy_id: str, context: StrategyContext, instrument: InstrumentId, times: list[datetime]
+    ) -> None:
         super().__init__(strategy_id, context)
         self.instrument, self.times = instrument, times
         self.orders: dict[datetime, str] = {}
@@ -278,7 +311,9 @@ def test_a25_03_bar_claiming_natural_day_as_trading_day_is_rejected() -> None:
     calendar, cases = load("A25-03")
     case = cases["bar_with_natural_day_trading_day_is_rejected"]
     bars = a25_03_bars()
-    wrong = session_bar(RB, date(2023, 5, 26), "night", "3020", claimed_day=date.fromisoformat(case["inputs"]["claimed_trading_day"]))
+    wrong = session_bar(
+        RB, date(2023, 5, 26), "night", "3020", claimed_day=date.fromisoformat(case["inputs"]["claimed_trading_day"])
+    )
     _, eng = make_engine(calendar, bars[0].bar_start)
     eng.add_strategy(OrderAtTimes("s", eng, RB, []))
     with pytest.raises(MissingRuleError):
@@ -360,7 +395,14 @@ def test_a25_05_bar_on_unlisted_trading_day_is_rejected() -> None:
     case = cases["bar_on_unlisted_trading_day_is_rejected"]
     bars = a25_05_bars()
     holiday = date.fromisoformat(case["inputs"]["claimed_trading_day"])
-    bogus = day_bar(RB, holiday, start=datetime.combine(holiday, time(9), CHINA_TZ), end=datetime.combine(holiday, time(15), CHINA_TZ), session_id="day", open_="3020")
+    bogus = day_bar(
+        RB,
+        holiday,
+        start=datetime.combine(holiday, time(9), CHINA_TZ),
+        end=datetime.combine(holiday, time(15), CHINA_TZ),
+        session_id="day",
+        open_="3020",
+    )
     _, eng = make_engine(calendar, bars[0].bar_start)
     eng.add_strategy(BuyAtBarIndex("s", eng, 99))
     with pytest.raises(MissingRuleError):

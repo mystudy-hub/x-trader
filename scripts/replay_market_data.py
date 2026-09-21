@@ -105,15 +105,24 @@ def main() -> int:
     if args.expected:
         path = Path(args.expected)
         expected = json.loads((path if path.is_absolute() else ROOT / path).read_text(encoding="utf-8"))
-        for key in ("final_equity", "total_trades", "total_commission"):
+        actual_snapshot = first["manifest"]["inputs"]["data"]["dataset_snapshot"].get("snapshot_id")
+        pinned = expected.get("dataset_snapshot_id")
+        if pinned and pinned != actual_snapshot:
+            print(
+                f"独立预期比对: 不可比 (预期固定于数据快照 {pinned[:12]}，当前发布为 {str(actual_snapshot)[:12]}；"
+                "请以 --snapshot 指定预期对应的快照，或按新快照重新生成并核对预期文件)"
+            )
+            expected = None
+        for key in ("final_equity", "total_trades", "total_commission") if expected is not None else ():
             if key in expected and str(expected[key]) != str(first[key]):
                 ok = False
                 print(f"独立预期不一致: {key} 预期 {expected[key]} 实际 {first[key]}")
-        for key, digest in (expected.get("hashes") or {}).items():
+        for key, digest in ((expected or {}).get("hashes") or {}).items():
             if first["hashes"].get(key) != digest:
                 ok = False
                 print(f"独立预期哈希不一致: {key}")
-        print(f"独立预期比对: {'通过' if ok else '失败'}")
+        if expected is not None:
+            print(f"独立预期比对: {'通过' if ok else '失败'}")
     if args.output:
         out = Path(args.output)
         out = out if out.is_absolute() else ROOT / out

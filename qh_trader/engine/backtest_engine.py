@@ -300,8 +300,9 @@ class BacktestEngine(BaseEngine):
         open_times = sorted({bar.open_time for bar in sorted_bars})
 
         def next_open_after(at: datetime) -> datetime | None:
+            """不早于 at 的下一根 Bar 开盘时刻 (含恰在 at 开盘的 Bar：同一瞬间先收盘后开盘)."""
             for candidate in open_times:
-                if candidate > at:
+                if candidate >= at:
                     return candidate
             return None
 

@@ -435,17 +435,17 @@ class SimulatedGateway(ExecutionPort):
             return self._take_since(events_before)
 
         # ---- 相一：开盘候选 (FR-MATCH-02)
-        open_price = self._open_reference_price(bar)
         open_permitted = self._permissions(bar.instrument, bar.open_time).match
         auction_blocked = bar.includes_auction and self._auction_fill_policy == AuctionFillPolicy.REJECT
+        candidates = [st for st in self._ordered_active(bar.instrument) if st.effective_at <= bar.open_time]
+        # 只有存在开盘候选时才需要开盘执行参考价；没有候选不查询、不记录降级
+        open_price = self._open_reference_price(bar) if candidates and open_permitted and not auction_blocked else None
 
         if open_price is not None and open_permitted and not auction_blocked:
             can_buy_open, can_sell_open = self._limit_liquidity(open_price, upper_limit, lower_limit)
-            for state in self._ordered_active(bar.instrument):
+            for state in candidates:
                 if budget <= 0:
                     break
-                if state.effective_at > bar.open_time:
-                    continue
                 fill_price = self._open_candidate_price(state.intent, bar, upper_limit, lower_limit, open_price)
                 if fill_price is None:
                     continue
