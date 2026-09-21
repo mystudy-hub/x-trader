@@ -3,14 +3,20 @@
 核心逻辑：
 1. 基于决策时点可见的历史日线持仓量 (open_interest) 与成交量 (volume) 识别主力合约；
 2. 引入防假突破机制 (consecutive_days 连续确认天数，默认 2 天)；
-3. 严格遵循时间因果律：T 日日盘结束生成的决策，默认在 T+1 日开盘生效 (effective_from)，绝不反向改写 T 日；
+3. 严格遵循时间因果律：T 日日盘结束生成的决策 (`decision_time`)，默认不早于 T+1 交易日首个可交易时段生效
+   (`effective_from`)；绝不反向改写 T 日；
 4. 产出带版本与有效时间区间的 VersionedValue[InstrumentId]。
+
+`effective_from` 的来源 (写入映射记录 `effective_basis`)：
+- ``session_gate``：调用方提供的版本化时段查询给出 T 日收盘后的下一个可撮合时段开始时刻；
+- ``next_observed_bar``：无时段查询时，用同品种下一交易日首根可观测 Bar 的开始时刻；
+- ``decision_time``：覆盖区间最后一日没有后续 Bar，只能记为决策时刻 (此时不再有后续切换)。
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -25,10 +31,13 @@ from qh_trader.core.objects import (
     require_text,
 )
 
+SessionOpenAfter = Callable[[datetime], datetime | None]
+
 
 @dataclass(frozen=True, slots=True)
 class DominantMappingEntry:
     """单条主力合约映射记录."""
+
     product: ProductId
     instrument: InstrumentId
     trading_day: date
@@ -38,6 +47,7 @@ class DominantMappingEntry:
     open_interest: int
     volume: int
     version: str
+    effective_basis: str = "decision_time"
 
 
 class DominantContractResolver:
@@ -63,13 +73,11 @@ class DominantContractResolver:
             raise MissingRuleError(f"resolver is for {self.product}, requested {product}")
         t = utc_timestamp(at)
 
-        # 查找 effective_from <= t < effective_to 的记录
         active: DominantMappingEntry | None = None
         for entry in self._entries:
-            if entry.effective_from <= t:
-                if entry.effective_to is None or t < entry.effective_to:
-                    active = entry
-                    break
+            if entry.effective_from <= t and (entry.effective_to is None or t < entry.effective_to):
+                active = entry
+                break
 
         if active is None:
             raise MissingRuleError(f"no dominant contract mapping for {product} at {at} (version {self.version})")
@@ -90,20 +98,20 @@ def build_dominant_mappings(
     *,
     confirm_days: int = 2,
     version: str = "v1.0-auto",
+    session_open_after: SessionOpenAfter | None = None,
 ) -> DominantContractResolver:
     """从各合约日线数据推导主力合约映射序列.
 
     规则：
     - 按交易日分组统计同品种各合约持仓量；
     - 当新合约持仓量连续 confirm_days 天超过当前主力合约时，确认切换主力；
-    - 切换在最后一次确认日的下一个自然日/交易日 00:00 (UTC) 生效；
+    - 切换在确认日 T 收盘后的下一个可交易时段生效 (FR-CON-02)：优先由 ``session_open_after`` 给出，
+      否则取同品种 T+1 交易日首根可观测 Bar 的开始时刻；
     - 严格保持无未来信息渗透。
     """
     require_int(confirm_days, "confirm_days", 1)
     require_text(version, "version")
 
-    # 按 (trading_day, instrument) 汇总量仓
-    # day -> list of (instrument, open_interest, volume)
     bars_by_day: dict[date, list[Bar]] = defaultdict(list)
     for b in daily_bars:
         bars_by_day[b.meta.trading_day].append(b)
@@ -112,24 +120,37 @@ def build_dominant_mappings(
     if not sorted_days:
         return DominantContractResolver(product, (), version=version)
 
+    next_day_start: dict[date, datetime] = {}
+    for current, following in zip(sorted_days, sorted_days[1:], strict=False):
+        next_day_start[current] = min(b.bar_start for b in bars_by_day[following])
+
+    def switch_effective(day: date, decision_bar: Bar) -> tuple[datetime, str]:
+        if session_open_after is not None:
+            target = session_open_after(decision_bar.bar_end)
+            if target is not None:
+                return utc_timestamp(target), "session_gate"
+        following = next_day_start.get(day)
+        if following is not None:
+            return following, "next_observed_bar"
+        return decision_bar.bar_end, "decision_time"
+
     entries: list[DominantMappingEntry] = []
     current_dominant: InstrumentId | None = None
     challenger: InstrumentId | None = None
     challenger_days = 0
 
     current_entry_start: datetime | None = None
+    current_entry_basis = "first_observation"
     current_entry_oi = 0
     current_entry_vol = 0
 
     for day in sorted_days:
         day_bars = bars_by_day[day]
-        # 按 open_interest 降序排序
         top_bar = max(day_bars, key=lambda b: (b.open_interest, b.volume))
         day_leader = top_bar.instrument
         assert isinstance(day_leader, InstrumentId)
 
         if current_dominant is None:
-            # 初始主力
             current_dominant = day_leader
             current_entry_start = top_bar.bar_start
             current_entry_oi = top_bar.open_interest
@@ -146,9 +167,7 @@ def build_dominant_mappings(
                 challenger_days = 1
 
             if challenger_days >= confirm_days:
-                # 确认切换！旧主力在次日生效前截止
-                # 切换生效时间：当前交易日 end 之后（即下一日开盘）
-                switch_time = top_bar.bar_end
+                switch_time, basis = switch_effective(day, top_bar)
                 entries.append(
                     DominantMappingEntry(
                         product=product,
@@ -160,26 +179,25 @@ def build_dominant_mappings(
                         open_interest=current_entry_oi,
                         volume=current_entry_vol,
                         version=version,
+                        effective_basis=current_entry_basis,
                     )
                 )
                 current_dominant = challenger
                 current_entry_start = switch_time
+                current_entry_basis = basis
                 current_entry_oi = top_bar.open_interest
                 current_entry_vol = top_bar.volume
                 challenger = None
                 challenger_days = 0
         else:
-            # 保持原主力，挑战者计数清零
             challenger = None
             challenger_days = 0
             current_entry_oi = max(current_entry_oi, top_bar.open_interest)
             current_entry_vol += top_bar.volume
 
-    # 封存最后一条主力映射
     if current_dominant is not None and current_entry_start is not None:
         last_day = sorted_days[-1]
-        last_bars = bars_by_day[last_day]
-        last_bar = max(last_bars, key=lambda b: b.bar_end)
+        last_bar = max(bars_by_day[last_day], key=lambda b: b.bar_end)
         entries.append(
             DominantMappingEntry(
                 product=product,
@@ -187,10 +205,11 @@ def build_dominant_mappings(
                 trading_day=last_day,
                 decision_time=last_bar.meta.available_at,
                 effective_from=current_entry_start,
-                effective_to=None,  # 持续有效
+                effective_to=None,
                 open_interest=current_entry_oi,
                 volume=current_entry_vol,
                 version=version,
+                effective_basis=current_entry_basis,
             )
         )
 

@@ -2,11 +2,12 @@
 """[脚本工具] 构建 S4 测试品种组合的版本化 Session 模板文件 (S4-05, FR-CAL-08).
 
 输入：已入库实际合约的交易日集合（union）+ `product_registry` 的品种属性。
-输出：`config/sessions_s4_2024v1.json`（schema_version 2 紧凑模板：交易序列 + 逐合约时段模板），
-      由 `TradingCalendar.from_file` 按需展开为显式 Session。
+输出：`config/sessions_s4_2024v2.json`（schema_version 2 紧凑模板：交易序列 + 逐合约时段模板 +
+      公告例外），由 `TradingCalendar.from_file` / `project_product_calendar` 按需展开为显式 Session。
 
-交易日来自可观测行情而不是推算的节假日表；长假识别与公告例外在文件中显式声明为假设，
-对应缺口登记在 `config/data_coverage.yaml`。
+交易日来自可观测行情而不是推算的节假日表。夜盘取消规则 (A05/A25-05)：相邻交易日之间若存在
+非交易的工作日，视为法定假日间隔，前一交易日晚不生成夜盘；只隔周末仍有夜盘。交易所公告的
+额外例外 (临时取消夜盘、节后竞价安排) 写入 `night_session_exceptions`，归档后再填。
 """
 
 from __future__ import annotations
@@ -75,15 +76,16 @@ def observed_trading_days(storage: ParquetDataStorage, codes: set[str], *, start
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建 S4 Session 模板文件")
-    parser.add_argument("--version", default="s4-2024v1", help="日历版本号")
-    parser.add_argument("--output", default="config/sessions_s4_2024v1.json", help="输出路径")
+    parser.add_argument("--version", default="s4-2024v2-heuristic", help="日历版本号")
+    parser.add_argument("--output", default="config/sessions_s4_2024v2.json", help="输出路径")
+    parser.add_argument("--storage", default="data_storage/s4_research", help="研究数据存储目录")
     parser.add_argument("--start", default="2024-06-01", help="覆盖区间起始交易日")
     parser.add_argument("--end", default=None, help="覆盖区间结束交易日")
+    parser.add_argument("--keep-exceptions-from", default=None, help="沿用既有模板文件里的 night_session_exceptions")
     args = parser.parse_args()
 
-    storage = ParquetDataStorage(root_dir=ROOT / "data_storage")
+    storage = ParquetDataStorage(root_dir=ROOT / args.storage)
     profiles: list[dict] = []
-    instruments: list[InstrumentId] = []
     for spec in registered_products():
         symbol = TEMPLATE_CONTRACTS.get(spec.product)
         if symbol is None:
@@ -91,7 +93,6 @@ def main() -> int:
         instrument = InstrumentId(spec.exchange, symbol)
         if not storage.has_bar_data(instrument, "1d"):
             continue
-        instruments.append(instrument)
         profiles.append(
             {
                 "exchange": spec.exchange.value,
@@ -108,6 +109,11 @@ def main() -> int:
         print("no observed trading days; ingest data first", file=sys.stderr)
         return 1
 
+    exceptions: list[dict] = []
+    if args.keep_exceptions_from:
+        previous = json.loads((ROOT / args.keep_exceptions_from).read_text(encoding="utf-8"))
+        exceptions = list(previous.get("night_session_exceptions", []))
+
     payload = {
         "schema_version": 2,
         "version": args.version,
@@ -117,11 +123,13 @@ def main() -> int:
         "coverage_end": days[-1],
         "trading_days": days,
         "session_profiles": profiles,
+        "night_session_exceptions": exceptions,
         "assumptions": [
             "交易日序列来自已入库实际合约日线的可观测交易日集合，不是推算的节假日表。",
             "夜盘收盘档位与日盘竞价风格取自交易所公开交易时间规则 (docs/references)。",
-            "长假识别: 相邻交易日自然日间隔 > 3 视为长假并取消该交易日夜盘；"
-            "法定节假日前第一个工作日无夜盘、节后竞价顺延等公告例外待归档核验 (A05/A25-05)。",
+            "夜盘取消: 相邻交易日之间存在非交易工作日 (法定假日) 时，前一交易日晚不生成夜盘；只隔周末仍有夜盘。"
+            "交易所公告的临时例外写入 night_session_exceptions [{eve, has_night, source}]，归档后再填 (A05/A25-05)。",
+            "节后日盘竞价按常规模板处理；公告要求的特殊竞价安排待归档核验。",
         ],
     }
 

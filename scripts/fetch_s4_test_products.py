@@ -4,8 +4,10 @@
 覆盖第二章第 4 项的测试品种组合：螺纹钢 (rb, 有夜盘) / 甲醇 (MA, 跨交易所) /
 铁矿或豆粕 (i/m, 大商所) / 苹果或鸡蛋 (AP/jd, 无夜盘) / 黄金或铜 (au/cu, 凌晨收盘)。
 
-流程：抓取实际合约日线(与可选小时线) -> 字段标准化 -> 质量校验 -> 不可变 Parquet 归档。
-只用实际合约，绝不把主连序列当作成交标的 (FR-CON-01/A29)。
+流程：抓取实际合约日线(与可选小时线) -> 字段标准化 -> 质量校验 -> 按版本化时段模板重标日线开盘时段
+      -> 不可变 Parquet 归档到**独立研究存储** (默认 data_storage/s4_research，与工程样本分开，07 §4.4)。
+只用实际合约，绝不把主连序列当作成交标的 (FR-CON-01/A29)。目标存储中已有不同来源的数据集不会被覆盖，
+除非显式 --allow-source-override。
 
 数据来源为新浪公开行情 (research mode)。该来源缺少成交额字段，质量标记与
 "待核验"语义按 FR-DATA-08 显式登记，不静默放宽为精确核算。
@@ -24,6 +26,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from qh_trader.core.objects import InstrumentId  # noqa: E402
+from qh_trader.data.calendar import project_product_calendar  # noqa: E402
+from qh_trader.data.daily_timing import DAILY_OPEN_TIMING_ASSUMPTION, retime_daily_bars  # noqa: E402
 from qh_trader.data.product_registry import get_product_spec, normalize_product  # noqa: E402
 from qh_trader.data.schemas import (  # noqa: E402
     build_standard_calendar_and_timings,
@@ -71,14 +75,30 @@ def fetch_product_contracts(
     start_date: str | None,
     end_date: str | None,
     sleep_seconds: float,
+    session_template: Path | None = None,
+    allow_source_override: bool = False,
 ) -> list[dict]:
     ds = create_data_source("sina")
     spec = get_product_spec(product)
     rows: list[dict] = []
+    existing = storage.capture_snapshot()
     for code in contracts:
         instrument = InstrumentId(spec.exchange, code)
         for interval in intervals:
             try:
+                entry = existing.datasets.get(f"bar/{instrument}/{interval}")
+                if entry is not None and not allow_source_override:
+                    previous = storage.read_bars(instrument, interval, snapshot=existing)
+                    if previous and previous[0].meta.source_id != ds.source_id:
+                        rows.append(
+                            {
+                                "instrument": str(instrument),
+                                "interval": interval,
+                                "count": 0,
+                                "status": f"SKIPPED: existing dataset from {previous[0].meta.source_id}",
+                            }
+                        )
+                        continue
                 if interval == "1d":
                     raw = ds.fetch_daily_bars(instrument, start_date=start_date, end_date=end_date)
                     time_key = "date"
@@ -99,10 +119,9 @@ def fetch_product_contracts(
 
                 timings, calendar = build_standard_calendar_and_timings(raw, instrument, interval=interval)
                 source_version = (
-                    (start_date or "earliest").replace("-", "")
-                    + "_"
-                    + (end_date or "latest").replace("-", "")
+                    (start_date or "earliest").replace("-", "") + "_" + (end_date or "latest").replace("-", "")
                 )
+                provenance: dict = {"source": ds.source_id, "turnover": "TURNOVER_UNAVAILABLE"}
                 if interval == "1d":
                     bars = convert_daily_records_to_bars(
                         raw,
@@ -113,6 +132,19 @@ def fetch_product_contracts(
                         source_version=source_version,
                         require_turnover=False,
                     )
+                    if session_template is not None:
+                        days = sorted({bar.meta.trading_day for bar in bars})
+                        projected = project_product_calendar(
+                            session_template, spec.product, (instrument,), window=(days[0], days[-1])
+                        )
+                        bars = retime_daily_bars(bars, projected, instrument)
+                        provenance.update(
+                            {
+                                "timing_assumption": DAILY_OPEN_TIMING_ASSUMPTION,
+                                "session_template": str(session_template),
+                                "session_template_version": projected.version,
+                            }
+                        )
                 else:
                     bars = convert_minute_records_to_bars(
                         raw,
@@ -126,7 +158,7 @@ def fetch_product_contracts(
                         require_turnover=False,
                     )
 
-                storage.save_bars(bars, instrument=instrument, interval=interval)
+                storage.publish_batch(instrument, interval, bars=bars, provenance=provenance)
                 rows.append(
                     {
                         "instrument": str(instrument),
@@ -161,9 +193,15 @@ def main() -> int:
     parser.add_argument("--start", default="2024-06-01", help="日线起始日期")
     parser.add_argument("--end", default=None, help="日线结束日期")
     parser.add_argument("--sleep", type=float, default=0.3, help="请求间隔秒数")
+    parser.add_argument("--storage", default="data_storage/s4_research", help="研究数据存储目录 (与工程样本分开)")
+    parser.add_argument(
+        "--session-template", default="config/sessions_s4_2024v2.json", help="日线开盘时段重标所用模板；空串关闭"
+    )
+    parser.add_argument("--allow-source-override", action="store_true", help="允许覆盖目标存储中来源不同的数据集")
     args = parser.parse_args()
 
-    storage = ParquetDataStorage(root_dir=ROOT / "data_storage")
+    storage = ParquetDataStorage(root_dir=ROOT / args.storage)
+    template = (ROOT / args.session_template) if args.session_template else None
     products = [normalize_product(p.strip()) for p in args.products.split(",") if p.strip()]
     intervals = tuple(x.strip() for x in args.intervals.split(",") if x.strip())
 
@@ -183,16 +221,21 @@ def main() -> int:
                 start_date=args.start,
                 end_date=args.end,
                 sleep_seconds=args.sleep,
+                session_template=template,
+                allow_source_override=args.allow_source_override,
             )
         )
 
     succeeded = sum(1 for r in all_rows if r["status"] == "SUCCESS")
-    failed = [r for r in all_rows if r["status"] not in ("SUCCESS", "NO_DATA")]
+    failed = [
+        r for r in all_rows if r["status"] not in ("SUCCESS", "NO_DATA") and not r["status"].startswith("SKIPPED")
+    ]
     logger.info(
-        "完成: 成功 %d 项, 失败 %d 项, 无数据 %d 项",
+        "完成: 成功 %d 项, 失败 %d 项, 无数据 %d 项, 跳过 %d 项",
         succeeded,
         len(failed),
         sum(1 for row in all_rows if row["status"] == "NO_DATA"),
+        sum(1 for row in all_rows if row["status"].startswith("SKIPPED")),
     )
     for row in failed:
         print(f"FAILED {row['instrument']} {row['interval']}: {row['status']}")

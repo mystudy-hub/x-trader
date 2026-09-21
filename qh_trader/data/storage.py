@@ -379,3 +379,30 @@ class ParquetDataStorage:
         interval: str,
     ) -> DataSnapshot:
         return self.publish_batch(instrument, interval, execution_references=records)
+
+    def retire_datasets(self, keys: Sequence[str]) -> DataSnapshot:
+        """发布一个不再引用给定数据集键的新清单指针；内容寻址文件与旧清单原样保留，旧快照仍可按 ID 读取.
+
+        用于把误入工程样本存储的研究数据集从当前指针移除 (07 §4.4 工程样本与研究数据集分开管理)。
+        """
+        with self._writer():
+            old = self.capture_snapshot()
+            missing = [key for key in keys if key not in old.datasets]
+            if missing:
+                raise KeyError(f"datasets not present in the current publication: {missing}")
+            datasets = {key: dict(value) for key, value in old.datasets.items() if key not in set(keys)}
+            payload = _json_bytes({"schema_version": 2, "datasets": datasets})
+            snapshot_id = hashlib.sha256(payload).hexdigest()
+            self._write_immutable(self.root_dir / "manifests" / f"{snapshot_id}.json", payload)
+            pointer = _json_bytes({"schema_version": 2, "snapshot_id": snapshot_id})
+            temporary = self.root_dir / f".tmp-current-{uuid4().hex}.json"
+            try:
+                with temporary.open("wb") as stream:
+                    stream.write(pointer)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.manifest_path)
+                _sync_directory(self.root_dir)
+            finally:
+                temporary.unlink(missing_ok=True)
+            return self.capture_snapshot(snapshot_id)

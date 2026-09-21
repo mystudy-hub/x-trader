@@ -14,7 +14,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,8 +46,12 @@ def _clean_symbol(exchange: Exchange, code: str) -> str:
     return code.upper() if exchange == Exchange.CZCE else code.lower()
 
 
-def build_catalog(output_path: str = "config/contract_catalog_s4_2024v1.json") -> Path:
-    storage = ParquetDataStorage(root_dir=ROOT / "data_storage")
+def build_catalog(
+    output_path: str = "config/contract_catalog_s4_2024v1.json",
+    storage_dir: str = "data_storage/s4_research",
+) -> Path:
+    # 研究数据集与工程样本分开存放 (07 §4.4)；目录必须从研究存储推导，否则只剩工程样本一条
+    storage = ParquetDataStorage(root_dir=ROOT / storage_dir)
     snapshot = storage.capture_snapshot()
     registered = {spec.product.casefold(): spec for spec in registered_products()}
 
@@ -67,7 +71,6 @@ def build_catalog(output_path: str = "config/contract_catalog_s4_2024v1.json") -
             continue
         observed[symbol] = (Exchange(exchange_name), code, product)
 
-    available_at = datetime(2024, 1, 1, tzinfo=timezone.utc).isoformat()
     entries: list[dict] = []
     for symbol in sorted(observed):
         exchange, code, product = observed[symbol]
@@ -80,6 +83,7 @@ def build_catalog(output_path: str = "config/contract_catalog_s4_2024v1.json") -
         if not bars:
             continue
         listed_on = min(bar.meta.trading_day for bar in bars).isoformat()
+        available_at = datetime.combine(date.fromisoformat(listed_on), time(), tzinfo=timezone.utc).isoformat()
         last_trading_day = max(bar.meta.trading_day for bar in bars).isoformat()
         clean = _clean_symbol(exchange, code)
         aliases = {code, clean, f"{clean}.{exchange.value}", f"{exchange.value}.{clean}", product}
@@ -119,8 +123,9 @@ def build_catalog(output_path: str = "config/contract_catalog_s4_2024v1.json") -
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建 S4 测试品种组合合约目录")
     parser.add_argument("--output", default="config/contract_catalog_s4_2024v1.json", help="输出路径")
+    parser.add_argument("--storage", default="data_storage/s4_research", help="研究数据存储目录 (与工程样本分开)")
     args = parser.parse_args()
-    build_catalog(args.output)
+    build_catalog(args.output, args.storage)
     return 0
 
 

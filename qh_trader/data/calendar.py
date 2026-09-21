@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -101,20 +101,19 @@ class TradingCalendar:
     @classmethod
     def from_profile_file(cls, data: Mapping[str, object], path: Path | str) -> TradingCalendar:
         """从紧凑模板文件展开逐日显式 Session (schema_version 2, S4-05)."""
-        from qh_trader.data.session_templates import SessionProfile, build_sessions
+        from qh_trader.data.session_templates import SessionProfile, build_sessions, parse_night_exceptions
 
         version = str(data["version"])
         source_id = str(data["source_id"])
         available_at = datetime.fromisoformat(str(data["available_at"]))
         trading_days = tuple(sorted(date.fromisoformat(str(day)) for day in data["trading_days"]))
+        night_exceptions = parse_night_exceptions(data.get("night_session_exceptions"))  # type: ignore[arg-type]
         profiles = tuple(
             SessionProfile(
                 instrument=InstrumentId(Exchange(str(row["exchange"])), str(row["symbol"])),
                 product=str(row["product"]),
                 has_night=bool(row["has_night"]),
-                night_close=(
-                    time.fromisoformat(str(row["night_close"])) if row.get("night_close") else None
-                ),
+                night_close=(time.fromisoformat(str(row["night_close"])) if row.get("night_close") else None),
                 day_auction_style=str(row["day_auction_style"]),
                 source_id=source_id,
                 rule_version=version,
@@ -122,7 +121,7 @@ class TradingCalendar:
             )
             for row in data["session_profiles"]  # type: ignore[index]
         )
-        sessions = build_sessions(profiles, trading_days)
+        sessions = build_sessions(profiles, trading_days, night_exceptions=night_exceptions)
         return cls(
             sessions,
             trading_days=trading_days,
@@ -159,6 +158,22 @@ class TradingCalendar:
         if not candidates:
             raise MissingRuleError("previous trading day is outside supplied calendar coverage")
         return max(candidates)
+
+    def holiday_starts(self) -> tuple[date, ...]:
+        """覆盖区间内每段法定假日的首日 (相邻交易日之间第一个非交易的工作日)；只隔周末不算假日.
+
+        供长假钩子 (FR-RISK-06) 使用：节前最后一个交易日 = 该假日首日之前的最后一个交易日。
+        """
+        days = sorted(self.trading_days)
+        starts: list[date] = []
+        for previous, following in zip(days, days[1:], strict=False):
+            probe = previous + timedelta(days=1)
+            while probe < following:
+                if probe.weekday() < 5:
+                    starts.append(probe)
+                    break
+                probe += timedelta(days=1)
+        return tuple(starts)
 
     def sessions_for_day(
         self,
@@ -225,7 +240,7 @@ def project_product_calendar(
     逐合约展开的日历文件会随合约数线性膨胀，因此模板文件只登记每个品种一个代表合约；
     运行时按品种模板克隆到本次真正交易的合约，日历版本、来源与可用时刻保持与模板一致。
     """
-    from qh_trader.data.session_templates import SessionProfile, build_sessions
+    from qh_trader.data.session_templates import SessionProfile, build_sessions, parse_night_exceptions
 
     data = json.loads(Path(config_path).read_text(encoding="utf-8"))
     if int(data.get("schema_version", 0)) != 2:
@@ -240,6 +255,7 @@ def project_product_calendar(
     source_id = str(data["source_id"])
     available_at = datetime.fromisoformat(str(data["available_at"]))
     trading_days = tuple(sorted(date.fromisoformat(str(day)) for day in data["trading_days"]))
+    night_exceptions = parse_night_exceptions(data.get("night_session_exceptions"))
     if window is not None:
         trading_days = tuple(day for day in trading_days if window[0] <= day <= window[1])
     if not trading_days:
@@ -259,7 +275,7 @@ def project_product_calendar(
         for instrument in instruments
     )
     return TradingCalendar(
-        build_sessions(profiles, trading_days),
+        build_sessions(profiles, trading_days, night_exceptions=night_exceptions),
         trading_days=trading_days,
         coverage_start=trading_days[0],
         coverage_end=trading_days[-1],

@@ -64,20 +64,21 @@ data_sources:
     available_fields: [date, open, high, low, close, volume, open_interest, settlement_price]
     missing_fields: [turnover]
     time_range:
-      start_date: '2023-10-17'
+      start_date: '2024-06-03'
       end_date: '2026-09-18'
-    record_count: 8127
+    record_count: 13955
     update_delay: 待核验
     historical_revision: 待核验
     license: {scope: 内部研究与回测使用, local_storage: true}
-    open_semantic: 交易日日盘开盘（夜盘价格未单独取得，日线 Open 不区分夜盘与日盘）
-    auction_inclusion: null
+    storage_root: data_storage/s4_research
+    open_semantic: 来源未说明日线 Open 的时段归属；入库时按交易所日线惯例重标为当日首个可撮合时段的开始（有夜盘且日历列出夜盘的交易日 = 前一自然日 21:00 夜盘首笔，否则 09:00 日盘），标记 QualityFlag.SYNTHETIC，假设文本写入数据集 provenance.timing_assumption（A21 待核验）
+    auction_inclusion: true
     verification_status: 登记缺口
     verified_at: null
     verified_by: null
     evidence: null
     gap_ids: [GAP-S0-02, GAP-S0-03, GAP-S0-04]
-    notes: S4-05/S4-06 经 scripts/fetch_s4_test_products.py 归档 rb/FG/MA/i/m/AP/jd/au/cu/c 实际合约日线，覆盖 2024-06-03 ~ 2026-09-18；缺 turnover，按 QualityFlag.TURNOVER_UNAVAILABLE(32) 标记，不参与精确核算。
+    notes: S4-05/S4-06 经 scripts/fetch_s4_test_products.py 归档 rb/FG/MA/i/m/AP/jd/au/cu/c 实际合约日线（64 个合约）；缺 turnover，按 QualityFlag.TURNOVER_UNAVAILABLE(32) 标记，不参与精确核算。2026-09-21 起研究数据集与工程样本分开存放于 data_storage/s4_research（07 §4.4）；此前误写入 data_storage 并覆盖工程样本 SHFE.rb2410 的 89 根日线已回退（scripts/publish_s4_research_dataset.py：rb2410 恢复为 tushare 版本，研究数据集键从工程存储当前指针移除，旧快照与内容寻址文件保留）。
 - source_id: tushare
   source_name: Tushare Pro 期货官方数据源（真实成交额与结算价，日历与时间证据齐备）
   datasets:
@@ -208,8 +209,13 @@ engineering_sample:
   - contract_info
   - sessions
   - rules
-  artifacts: {}
-  notes: 原始行情已取得并登记在 data_sources；当前尚无通过字段、时间及规则核验的完整规范工程样本。
+  artifacts:
+    sessions: {path: config/sessions_s4_2024v2.json, sha256: c3310aa20e8842311b2d3453581fbbd04d421645d08141db45e7783ccc527257}
+    contract_catalog: {path: config/contract_catalog_s4_2024v1.json, sha256: 2b5ba98515befc45932fb36b2db013198f3efa4cda175b01635902bf0d8ea934}
+  notes: |
+    原始行情已取得并登记在 data_sources；当前尚无通过字段、时间及规则核验的完整规范工程样本。
+    sessions_s4_2024v2-heuristic 由 sina 观测交易日启发式推断，版本号已标注 heuristic 表明非官方公告日历。
+    contract_catalog_s4_2024v1 的 available_at 等于 listed_on（合约在上市日即可入目录），来源为观测序列 + 研究登记。
   artifact_template:
     path: null
     sha256: null

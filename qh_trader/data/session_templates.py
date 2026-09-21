@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -97,74 +98,157 @@ def _at(day: date, moment: time) -> datetime:
 
 
 def holiday_gap_days(trading_day: date, previous_trading_day: date) -> int:
-    """两个相邻交易日之间的自然日间隔；> 3 视为长假 (含周末最多 3 天)."""
+    """两个相邻交易日之间的自然日间隔."""
     require_date(trading_day, "trading_day")
     require_date(previous_trading_day, "previous_trading_day")
     return (trading_day - previous_trading_day).days
 
 
-def has_night_session(trading_day: date, previous_trading_day: date) -> bool:
-    """长假后首个交易日没有夜盘 (法定节假日前第一个工作日无夜盘)."""
-    return holiday_gap_days(trading_day, previous_trading_day) <= 3
+def has_night_session(
+    trading_day: date,
+    previous_trading_day: date,
+    *,
+    night_exceptions: Mapping[date, bool] | None = None,
+) -> bool:
+    """交易日 ``trading_day`` 的夜盘 (发生在 ``previous_trading_day`` 晚间) 是否存在.
+
+    规则：法定节假日前最后一个交易日晚无夜盘。两个相邻交易日之间若存在任何非交易的工作日
+    (周一至周五)，即视为法定节假日间隔；只隔周末的仍有夜盘 (周五晚夜盘归属下周一)。
+    ``night_exceptions`` 为公告归档给出的显式覆盖 {前一交易日: 是否有夜盘}，优先级最高。
+    自然日间隔阈值 (旧规则 "> 3 天") 会把元旦等短假前夜错生成夜盘，已弃用 (A05 / A25-05)。
+    """
+    if night_exceptions and previous_trading_day in night_exceptions:
+        return bool(night_exceptions[previous_trading_day])
+    day = previous_trading_day + timedelta(days=1)
+    while day < trading_day:
+        if day.weekday() < 5:
+            return False
+        day += timedelta(days=1)
+    return True
 
 
 def build_sessions_for_trading_day(
     profile: SessionProfile,
     trading_day: date,
     previous_trading_day: date,
+    *,
+    night_exceptions: Mapping[date, bool] | None = None,
 ) -> tuple[Session, ...]:
     """生成一个合约在一个交易日下的全部显式时段 (夜盘 + 日盘)."""
     sessions: list[Session] = []
 
-    if profile.has_night and has_night_session(trading_day, previous_trading_day):
+    if profile.has_night and has_night_session(trading_day, previous_trading_day, night_exceptions=night_exceptions):
         night_day = previous_trading_day
         close = profile.night_close
         assert close is not None  # 由 SessionProfile 保证
         # 23:00 收盘与开市同日；01:00 / 02:30 为次日凌晨。
         close_day = night_day if close.hour >= 20 else night_day + timedelta(days=1)
         sessions.append(
-            _session(profile, trading_day, _at(night_day, time(20, 55)), _at(night_day, time(20, 59)),
-                     "night_auction_submit", MarketPhase.AUCTION_SUBMIT, _SUBMIT)
+            _session(
+                profile,
+                trading_day,
+                _at(night_day, time(20, 55)),
+                _at(night_day, time(20, 59)),
+                "night_auction_submit",
+                MarketPhase.AUCTION_SUBMIT,
+                _SUBMIT,
+            )
         )
         sessions.append(
-            _session(profile, trading_day, _at(night_day, time(20, 59)), _at(night_day, time(21, 0)),
-                     "night_auction_match", MarketPhase.AUCTION_MATCH, _MATCH)
+            _session(
+                profile,
+                trading_day,
+                _at(night_day, time(20, 59)),
+                _at(night_day, time(21, 0)),
+                "night_auction_match",
+                MarketPhase.AUCTION_MATCH,
+                _MATCH,
+            )
         )
         sessions.append(
-            _session(profile, trading_day, _at(night_day, time(21, 0)), _at(close_day, close),
-                     "night_continuous", MarketPhase.CONTINUOUS, _CONTINUOUS)
+            _session(
+                profile,
+                trading_day,
+                _at(night_day, time(21, 0)),
+                _at(close_day, close),
+                "night_continuous",
+                MarketPhase.CONTINUOUS,
+                _CONTINUOUS,
+            )
         )
 
     # 日盘开盘前的竞价/撤单窗
     style = profile.day_auction_style
     if style == "CANCEL_ONLY":
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, time(8, 55)), _at(trading_day, time(8, 59)),
-                     "day_cancel_only", MarketPhase.CANCEL_ONLY, _CANCEL_ONLY)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, time(8, 55)),
+                _at(trading_day, time(8, 59)),
+                "day_cancel_only",
+                MarketPhase.CANCEL_ONLY,
+                _CANCEL_ONLY,
+            )
         )
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, time(8, 59)), _at(trading_day, time(9, 0)),
-                     "day_waiting", MarketPhase.WAITING, _NONE)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, time(8, 59)),
+                _at(trading_day, time(9, 0)),
+                "day_waiting",
+                MarketPhase.WAITING,
+                _NONE,
+            )
         )
     else:
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, time(8, 55)), _at(trading_day, time(8, 59)),
-                     "day_auction_submit", MarketPhase.AUCTION_SUBMIT, _SUBMIT)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, time(8, 55)),
+                _at(trading_day, time(8, 59)),
+                "day_auction_submit",
+                MarketPhase.AUCTION_SUBMIT,
+                _SUBMIT,
+            )
         )
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, time(8, 59)), _at(trading_day, time(9, 0)),
-                     "day_auction_match", MarketPhase.AUCTION_MATCH, _MATCH)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, time(8, 59)),
+                _at(trading_day, time(9, 0)),
+                "day_auction_match",
+                MarketPhase.AUCTION_MATCH,
+                _MATCH,
+            )
         )
 
     for start, end, session_id in _DAY_CONTINUOUS_BLOCKS:
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, start), _at(trading_day, end),
-                     session_id, MarketPhase.CONTINUOUS, _CONTINUOUS)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, start),
+                _at(trading_day, end),
+                session_id,
+                MarketPhase.CONTINUOUS,
+                _CONTINUOUS,
+            )
         )
     for start, end, session_id in _DAY_BREAKS:
         sessions.append(
-            _session(profile, trading_day, _at(trading_day, start), _at(trading_day, end),
-                     session_id, MarketPhase.BREAK, _NONE)
+            _session(
+                profile,
+                trading_day,
+                _at(trading_day, start),
+                _at(trading_day, end),
+                session_id,
+                MarketPhase.BREAK,
+                _NONE,
+            )
         )
 
     return tuple(sorted(sessions, key=lambda item: item.start))
@@ -173,6 +257,8 @@ def build_sessions_for_trading_day(
 def build_sessions(
     profiles: tuple[SessionProfile, ...],
     trading_days: tuple[date, ...],
+    *,
+    night_exceptions: Mapping[date, bool] | None = None,
 ) -> tuple[Session, ...]:
     """按交易序列展开全部合约时段；`trading_days` 必须严格递增."""
     ordered = tuple(sorted(trading_days))
@@ -182,10 +268,21 @@ def build_sessions(
             if index == 0:
                 # 覆盖区间首日没有更早的交易日证据时，不生成夜盘，避免凭猜测归因。
                 previous = day - timedelta(days=1)
-                sessions = build_sessions_for_trading_day(profile, day, previous)
+                sessions = build_sessions_for_trading_day(profile, day, previous, night_exceptions=night_exceptions)
                 expanded.extend(s for s in sessions if not s.session_id.startswith("night_"))
                 continue
-            expanded.extend(build_sessions_for_trading_day(profile, day, ordered[index - 1]))
+            expanded.extend(
+                build_sessions_for_trading_day(profile, day, ordered[index - 1], night_exceptions=night_exceptions)
+            )
     return tuple(
         sorted(expanded, key=lambda item: (item.instrument.exchange.value, item.instrument.symbol, item.start))
     )
+
+
+def parse_night_exceptions(rows: Sequence[Mapping[str, object]] | None) -> dict[date, bool]:
+    """解析模板文件的 ``night_session_exceptions``: [{"eve": "YYYY-MM-DD", "has_night": bool, "source": ...}]."""
+    exceptions: dict[date, bool] = {}
+    for row in rows or ():
+        eve = date.fromisoformat(str(row["eve"]))
+        exceptions[eve] = bool(row["has_night"])
+    return exceptions

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "catalog_version": "s4-2024v1",
-  "generated_at": "2026-09-19T15:17:25.831433+00:00",
+  "generated_at": "2026-09-21T11:14:14.726018+00:00",
   "source": "Observed Sina actual-contract series + product_registry research specs",
   "entries": [
     {
@@ -22,7 +22,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-10",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -42,7 +42,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -62,7 +62,7 @@
       "listed_on": "2024-10-22",
       "last_trading_day": "2025-10-22",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-10-22T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -82,7 +82,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -102,7 +102,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -122,7 +122,7 @@
       "listed_on": "2025-10-23",
       "last_trading_day": "2026-09-18",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-10-23T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -142,7 +142,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -162,7 +162,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -182,7 +182,7 @@
       "listed_on": "2024-09-18",
       "last_trading_day": "2025-09-12",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-18T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -202,7 +202,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -222,7 +222,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -242,7 +242,7 @@
       "listed_on": "2025-09-15",
       "last_trading_day": "2026-09-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-15T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -262,7 +262,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -282,7 +282,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -302,7 +302,7 @@
       "listed_on": "2024-09-18",
       "last_trading_day": "2025-09-12",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-18T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -322,7 +322,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -342,7 +342,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "CZCE",
@@ -362,7 +362,7 @@
       "listed_on": "2025-09-15",
       "last_trading_day": "2026-09-11",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-15T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -381,7 +381,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -400,7 +400,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -419,7 +419,7 @@
       "listed_on": "2024-09-18",
       "last_trading_day": "2025-09-12",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-18T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -438,7 +438,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -457,7 +457,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -476,7 +476,7 @@
       "listed_on": "2025-09-15",
       "last_trading_day": "2026-09-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-15T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -495,7 +495,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -514,7 +514,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -533,7 +533,7 @@
       "listed_on": "2024-09-18",
       "last_trading_day": "2025-09-12",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-18T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -552,7 +552,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -571,7 +571,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -590,7 +590,7 @@
       "listed_on": "2025-09-15",
       "last_trading_day": "2026-09-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-15T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -609,7 +609,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-22",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -628,7 +628,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-23",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -647,7 +647,7 @@
       "listed_on": "2024-09-26",
       "last_trading_day": "2025-09-25",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-26T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -666,7 +666,7 @@
       "listed_on": "2025-01-23",
       "last_trading_day": "2026-01-27",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-23T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -685,7 +685,7 @@
       "listed_on": "2025-05-28",
       "last_trading_day": "2026-05-26",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-28T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -704,7 +704,7 @@
       "listed_on": "2025-09-26",
       "last_trading_day": "2026-09-18",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-26T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -723,7 +723,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -742,7 +742,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -761,7 +761,7 @@
       "listed_on": "2024-09-18",
       "last_trading_day": "2025-09-12",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-18T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -780,7 +780,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -799,7 +799,7 @@
       "listed_on": "2025-05-20",
       "last_trading_day": "2026-05-19",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-20T00:00:00+00:00"
     },
     {
       "exchange": "DCE",
@@ -818,7 +818,7 @@
       "listed_on": "2025-09-15",
       "last_trading_day": "2026-09-14",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-15T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -837,7 +837,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2024-12-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -856,7 +856,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-06-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -875,7 +875,7 @@
       "listed_on": "2024-11-18",
       "last_trading_day": "2025-12-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-11-18T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -894,7 +894,7 @@
       "listed_on": "2025-05-16",
       "last_trading_day": "2026-06-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-16T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -913,7 +913,7 @@
       "listed_on": "2025-11-18",
       "last_trading_day": "2026-09-18",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-11-18T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -932,7 +932,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2024-10-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -951,7 +951,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2024-11-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -970,7 +970,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2024-12-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -989,7 +989,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-03-17",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1008,7 +1008,7 @@
       "listed_on": "2024-06-18",
       "last_trading_day": "2025-06-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-18T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1027,7 +1027,7 @@
       "listed_on": "2024-09-19",
       "last_trading_day": "2025-09-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-09-19T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1046,7 +1046,7 @@
       "listed_on": "2024-12-17",
       "last_trading_day": "2025-12-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-12-17T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1065,7 +1065,7 @@
       "listed_on": "2025-03-18",
       "last_trading_day": "2026-03-16",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-03-18T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1084,7 +1084,7 @@
       "listed_on": "2025-06-17",
       "last_trading_day": "2026-06-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-06-17T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1103,7 +1103,7 @@
       "listed_on": "2025-09-16",
       "last_trading_day": "2026-09-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-09-16T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1119,10 +1119,10 @@
       "delivery_month": 10,
       "multiplier": "10",
       "price_tick": "1",
-      "listed_on": "2023-10-17",
+      "listed_on": "2024-06-03",
       "last_trading_day": "2024-10-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1141,7 +1141,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1160,7 +1160,7 @@
       "listed_on": "2024-06-03",
       "last_trading_day": "2025-05-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-06-03T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1179,7 +1179,7 @@
       "listed_on": "2024-10-16",
       "last_trading_day": "2025-10-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2024-10-16T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1198,7 +1198,7 @@
       "listed_on": "2025-01-16",
       "last_trading_day": "2026-01-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-01-16T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1217,7 +1217,7 @@
       "listed_on": "2025-05-16",
       "last_trading_day": "2026-05-15",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-05-16T00:00:00+00:00"
     },
     {
       "exchange": "SHFE",
@@ -1236,7 +1236,7 @@
       "listed_on": "2025-10-16",
       "last_trading_day": "2026-09-18",
       "source_id": "sina_observed_series_plus_product_registry",
-      "available_at": "2024-01-01T00:00:00+00:00"
+      "available_at": "2025-10-16T00:00:00+00:00"
     }
   ]
 }
