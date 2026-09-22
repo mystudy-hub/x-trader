@@ -3865,26 +3865,37 @@
     {
       "id": "FR-REC-06",
       "title": "进程模型与 IPC、CTP 回调汇入",
-      "status": "pending",
+      "status": "formal",
       "source": {
-        "file": "docs/00_文档索引.md",
-        "citation": "评审补充（PROP-06，待确认）",
+        "file": "docs/sources/中国期货自动交易与回测工具构建规划.md",
+        "citation": "规划 §3.4、§4.5.5（S5-13 设计评审细化 ADR-X1/X2，见 docs/reviews/S5_进程模型_IPC_回调汇入_时钟同步设计评审.md）",
         "anchors": [
-          "prop-06"
+          "section-3-4",
+          "section-4-5"
         ]
       },
-      "source_requirements": [],
-      "priority": "待确认",
-      "applicability": "待确认议题，不进入正式阶段出口",
-      "deliveries": [],
-      "proposed_stages": [
-        "S2",
-        "S5"
+      "source_requirements": [
+        "R-17",
+        "R-67"
       ],
-      "acceptance_ids": [],
+      "priority": "P0",
+      "applicability": "已启用运行模式的进程模型、IPC、命令代次校验与 CTP 回调汇入执行序列",
+      "deliveries": [
+        {
+          "stage": "S5",
+          "scope": "适用部分",
+          "priority": "P0"
+        }
+      ],
+      "proposed_stages": [],
+      "acceptance_ids": [
+        "A02",
+        "A04",
+        "A23"
+      ],
       "acceptance_scope": {},
       "checks": [],
-      "proposal_id": "PROP-06"
+      "proposal_id": null
     },
     {
       "id": "FR-MATCH-01",
@@ -5501,17 +5512,6 @@
       "architecture": "ADR-X4",
       "plan": "S3-08（待确认部分）",
       "test": "X01",
-      "operations": "无",
-      "status": "pending"
-    },
-    {
-      "id": "PROP-06",
-      "title": "进程、IPC 与回调汇入执行序列",
-      "requirement_id": "FR-REC-06",
-      "product": "D-6",
-      "architecture": "ADR-X1、ADR-X2",
-      "plan": "S5-13",
-      "test": "无",
       "operations": "无",
       "status": "pending"
     },
