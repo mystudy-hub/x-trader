@@ -9,6 +9,7 @@ from typing import Protocol, runtime_checkable
 
 from .constants import Exchange, MarketPhase, Offset, OrderType, PriceType, Side
 from .event import CanonicalEvent, JournalSnapshot, JournalTransaction, TimerEvent
+from .execution import CommandPlan, CommandStatus, ExecutionCommand, QueuedCommand
 from .objects import (
     AccountFunds,
     Bar,
@@ -132,6 +133,58 @@ class JournalPort(Protocol):
     def load_checkpoint(self) -> JournalSnapshot: ...
     def load_snapshot(self, seq: int | None = None) -> JournalSnapshot | None: ...
     def contains_trade(self, key: TradeKey) -> bool: ...
+
+
+@runtime_checkable
+class ExecutionStorePort(Protocol):
+    """One local writer; command acknowledgements and account changes commit together."""
+
+    account_id: str
+
+    def assert_owner(self) -> None: ...
+    def checkpoint(self) -> JournalSnapshot: ...
+    def control(self) -> ControlRecord | None: ...
+    def next_ingress_sequence(self) -> int: ...
+    def get(self, command_id: str) -> QueuedCommand | None: ...
+    def next_pending(self) -> QueuedCommand | None: ...
+    def interrupted(self) -> Sequence[QueuedCommand]: ...
+    def contains_trade(self, key: TradeKey) -> bool: ...
+    def event(self, event_id: str) -> CanonicalEvent | None: ...
+    def commit(
+        self,
+        transaction: JournalTransaction,
+        *,
+        expected_control: ControlEpoch | None,
+        command: QueuedCommand | None = None,
+        status: CommandStatus | None = None,
+    ) -> int: ...
+
+
+@runtime_checkable
+class ExecutionModelPort(Protocol):
+    """Stage on private state, then publish only the committed checkpoint.
+
+    Staging must not mutate the published account, send requests, call strategy
+    callbacks or do I/O. It applies the shared domain risk/ledger rules. A failed
+    commit discards staged changes. Restarts restore the same checkpoint through
+    publish; a model cannot assume that a command's local send succeeded.
+    """
+
+    def stage_command(self, command: ExecutionCommand) -> CommandPlan: ...
+    def stage_fact(self, event: CanonicalEvent) -> Mapping[str, object]: ...
+    def stage_send_result(self, command: ExecutionCommand, result: LocalSendResult) -> Mapping[str, object]: ...
+    def publish(self, checkpoint: JournalSnapshot) -> None: ...
+
+
+@runtime_checkable
+class ExecutionIsolationPort(Protocol):
+    """Assembly supplies verified isolation of the former trading connection.
+
+    A local file lock or expired heartbeat alone does not satisfy this contract.
+    No database write transaction may be held while this check contacts a broker.
+    """
+
+    def isolate(self, previous: ControlRecord | None, request: ExecutionCommand) -> bool: ...
 
 
 @runtime_checkable

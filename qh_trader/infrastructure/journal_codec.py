@@ -14,6 +14,7 @@ from typing import Any
 from qh_trader.core import constants, objects
 from qh_trader.core.clock import utc_timestamp
 from qh_trader.core.event import CanonicalEvent, JournalSnapshot, JournalTransaction, TimerEvent
+from qh_trader.core.execution import CommandKind, CommandStatus, ExecutionCommand, TakeoverRequest
 from qh_trader.infrastructure.private_fields import contains_private_assignment, is_private_field
 
 _VALUES = {
@@ -55,6 +56,8 @@ _VALUES.update(
     JournalTransaction=JournalTransaction,
     JournalSnapshot=JournalSnapshot,
     TimerEvent=TimerEvent,
+    ExecutionCommand=ExecutionCommand,
+    TakeoverRequest=TakeoverRequest,
 )
 _ENUMS = {
     name: getattr(constants, name)
@@ -75,6 +78,7 @@ _ENUMS = {
         "ReplayOrder",
     )
 }
+_ENUMS.update(CommandKind=CommandKind, CommandStatus=CommandStatus)
 
 
 def _json(value: Any) -> str:

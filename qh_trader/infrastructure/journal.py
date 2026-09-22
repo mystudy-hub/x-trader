@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -165,6 +165,20 @@ class SQLiteJournal:
         return row is not None
 
     def append(self, transaction: JournalTransaction) -> int:
+        return self._append_atomic(transaction)
+
+    def _append_atomic(
+        self,
+        transaction: JournalTransaction,
+        *,
+        precondition: Callable[[], None] | None = None,
+        before_commit: Callable[[int], None] | None = None,
+    ) -> int:
+        """Infrastructure extension for an atomic command acknowledgement.
+
+        Hooks run inside the same short write transaction; they must only access
+        local SQLite state. Public JournalPort callers continue to use append().
+        """
         if not isinstance(transaction, JournalTransaction):
             raise TypeError("append requires a normalized JournalTransaction")
         self._check_account(transaction)
@@ -189,6 +203,8 @@ class SQLiteJournal:
             raise JournalConflictError("cursor advancement requires persisted event evidence")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            if precondition is not None:
+                precondition()
             head = self._head()
             existing = self.connection.execute(
                 "SELECT journal_seq, sha256, payload FROM journal_transactions WHERE transaction_id=?",
@@ -197,6 +213,8 @@ class SQLiteJournal:
             if existing is not None:
                 if existing["sha256"] != digest or existing["payload"] != payload:
                     raise JournalConflictError("transaction ID was reused with different contents")
+                if before_commit is not None:
+                    before_commit(existing["journal_seq"])
                 self._commit()
                 return existing["journal_seq"]
             if transaction.cursor_before != head["cursor"]:
@@ -265,6 +283,8 @@ class SQLiteJournal:
                 "UPDATE journal_meta SET head_seq=?, cursor=?, last_ingress_seq=? WHERE singleton=1",
                 (sequence, transaction.cursor_after, ingress),
             )
+            if before_commit is not None:
+                before_commit(sequence)
             self._commit()
             return sequence
         except Exception:
