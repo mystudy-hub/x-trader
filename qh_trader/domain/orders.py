@@ -458,6 +458,12 @@ class OrderManager:
         if not order:
             raise KeyError(f"unknown client_order_id: {client_order_id}")
         order.apply_send_result(result)
+        # 本地已分配的柜台标识 (原会话三元组) 在此登记归属索引，使第一条 OnRtnOrder / OnRtnTrade
+        # 能按 (FrontID, SessionID, OrderRef) 找到本地委托；标识不是远端确认的证据 (FR-ORD-05)。
+        if result.remote_identity is not None:
+            if order.identity is None:
+                order.identity = result.remote_identity
+            self._index_identity(order, result.remote_identity)
         return order
 
     # ------------------------------------------------------------------ 回报

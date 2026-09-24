@@ -957,6 +957,21 @@ wheels = [
 ]
 
 [[package]]
+name = "openctp-ctp"
+version = "6.7.11.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/81/a4a95867b9d9e4dc8bc32e865b8a98f0b74d2c28d25ce4dcda6e3893f0b7/openctp_ctp-6.7.11.0-cp312-cp312-win32.whl", hash = "sha256:c674447e158de9add5e54287dc827f068e22e4d8d55fd8450c112879c2acdc4e", size = 5687731, upload-time = "2025-08-18T13:52:23.942Z" },
+    { url = "https://files.pythonhosted.org/packages/51/bd/ee024f9ef93a7441dc9dafab3ea22359ff8979cd4e3967e357abf70bacf3/openctp_ctp-6.7.11.0-cp312-cp312-win_amd64.whl", hash = "sha256:a831b95570850076c001687941b1d62c2f4d09abd87ddc670f1ea10eb0d7eb29", size = 8136136, upload-time = "2025-08-18T13:52:41.398Z" },
+    { url = "https://files.pythonhosted.org/packages/29/64/b119ae4fe7ca110d31b0ef5a4cec3e292f4e8216364143b8507caa9cbe36/openctp_ctp-6.7.11.0-cp313-cp313-win32.whl", hash = "sha256:0d1ffa282fa16d2a080d5f154254f6b960a01c3fc9d6ec40dceab22157697551", size = 5713338, upload-time = "2025-08-18T13:53:04.522Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/45/5c04e775b1b8c2a7a1112753519db3eb331569dd3c2378c83505119831c0/openctp_ctp-6.7.11.0-cp313-cp313-win_amd64.whl", hash = "sha256:68fb8af3bb1d8c797a1dee6a1b8b8ddd2a14f285204044e822a521a68e4cbfe1", size = 8136435, upload-time = "2025-08-18T13:53:59.937Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/5c/021e318c1f2f1c53cf5188cdaf502038d6affe2922bd1a9be356360fdbe6/openctp_ctp-6.7.11.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:a55309c6de687223e893523b59ec567680860909e88a3e9d1188bb4bcba4550d", size = 9612415, upload-time = "2026-03-25T05:11:53.612Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/c8/6cec261d68bc3172b589515bb57c112fb46b06bfa0e4ffd03df5071234fb/openctp_ctp-6.7.11.0-cp314-cp314-win32.whl", hash = "sha256:c4f60cd3d442925e7d01974282680c7fc395750de9ef65dfaed8661bafa75c06", size = 5828121, upload-time = "2025-10-28T07:44:11.609Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/24/ed1156732bffde01eff8d930229ee542d5a776dfa497638b8627e0858855/openctp_ctp-6.7.11.0-cp314-cp314-win_amd64.whl", hash = "sha256:8d7e3424b71ad3235fb2cca0f1341c60ccee3f8285e3cade5676f5e6bfe89bf3", size = 8223294, upload-time = "2025-10-28T07:44:20.093Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/17/d260d67f38aa005e0ff38def2f44126d8a9627d2d48b1a741db3889b73bd/openctp_ctp-6.7.11.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5780d2a4e927a0c553e0c226764d270708f932d42eae1857ab694febbf2a4eac", size = 9601183, upload-time = "2025-08-21T14:19:33.368Z" },
+]
+
+[[package]]
 name = "openpyxl"
 version = "3.1.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1327,6 +1342,11 @@ dependencies = [
     { name = "tushare" },
 ]
 
+[package.optional-dependencies]
+ctp = [
+    { name = "openctp-ctp" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -1340,6 +1360,7 @@ requires-dist = [
     { name = "akshare", specifier = ">=1.15.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=1.26.0" },
+    { name = "openctp-ctp", marker = "extra == 'ctp'", specifier = "==6.7.11.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "polars", specifier = ">=1.0.0" },
     { name = "pyarrow", specifier = ">=17.0.0" },
@@ -1348,6 +1369,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "tushare", specifier = ">=1.4.0" },
 ]
+provides-extras = ["ctp"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -135,7 +135,8 @@ def check_ctp_candidates():
 
 def inspect_sdk_archives(root=ROOT):
     archives = []
-    for path in sorted((root / "docs/simnow").glob("*.zip")):
+    # 归档可能按发行目录分层存放，逐层查找；只认 zip，解压后的目录另行登记
+    for path in sorted((root / "docs/simnow").rglob("*.zip")):
         record = file_reference(root, path)
         hint = re.search(r"(\d+\.\d+\.\d+)", path.name)
         record["version_hint_from_filename"] = hint[1] if hint else None

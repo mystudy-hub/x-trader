@@ -18,7 +18,7 @@ gaps:
     - 报单
     - 回报处理
   current_handling: 阻断实盘
-  handling_details: 候选封装、API/DLL 兼容性及终端采集认证顺序待核验；SDK 原件见 docs/simnow，安装情况以环境报告为准。
+  handling_details: 已选定 openctp-ctp 6.7.11.0 并锁定（安装、导入、创建交易接口通过）；登录、查询、报单与回报尚未在柜台验证：本机到 SimNow 前置 TCP 连接超时。终端采集认证顺序与柜台实际 API/DLL 兼容性仍待联调；SDK 原件见 docs/simnow。运行证据通道为 scripts/ctp_probe.py + init_env.py --ctp-evidence。
   registered_at: '2026-09-13'
   registered_by: 开发团队
   close_condition: 完成 S0-02 联调：登录、查询持仓、报单、接收回报全流程验证并记录 DLL 哈希

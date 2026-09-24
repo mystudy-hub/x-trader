@@ -463,9 +463,17 @@ class OrderIntent:
 
 @dataclass(frozen=True, slots=True)
 class LocalSendResult:
+    """本地调用结果；``remote_identity`` 是本地已分配的柜台标识，不是远端确认。
+
+    适配器在调用真实接口前就决定了本会话的 (front_id, session_id, order_ref) 三元组，
+    把它随发送结果一起持久化，重启后仍能按原会话三元组归属迟到的订单 / 成交回报
+    (FR-ORD-05, FR-REC-02)。远程是否受理仍由回报决定，因此字段与状态互不替代。
+    """
+
     state: SendState
     local_code: int | None
     evidence: str
+    remote_identity: OrderIdentity | None = None
 
     def __post_init__(self) -> None:
         require_enum(self.state, SendState)
@@ -474,6 +482,8 @@ class LocalSendResult:
             require_int(self.local_code, "local_code", None)
         if self.state == SendState.CONFIRMED_REMOTE:
             raise ValueError("a local call result cannot itself confirm remote processing")
+        if self.remote_identity is not None and not isinstance(self.remote_identity, OrderIdentity):
+            raise TypeError("a locally assigned remote identity must be an OrderIdentity")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

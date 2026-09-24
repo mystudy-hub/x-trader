@@ -1,7 +1,9 @@
-"""[入口装配] 执行服务的本地装配：Journal / 命令表 / 账户模型 / 网关 / 查询 / 恢复 (S5-04, S5-05 前置).
+"""[入口装配] 执行服务装配：Journal / 命令表 / 账户模型 / 网关 / 查询 / 恢复 (S5-04, S5-05, S5-01).
 
 装配只在入口层完成 (04 ADR-01：领域与引擎只接收注入端口)。纸面模式用模拟网关加回报投影查询；
-实盘模式需要 S5-01 的 CTP 网关与查询适配器，未交付前明确拒绝启动，不用模拟件冒充。
+实盘模式装配 S5-01 的 CTP 网关与查询适配器，并按 A23 顺序连接柜台：
+连接（登录即持有会话）→ 隔离旧出口 → 提升代次 → 对账 → 放行。
+柜台登记里未核验的能力由网关在发送前拒绝，装配不提供默认值。
 """
 
 from __future__ import annotations
@@ -10,17 +12,18 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import yaml
 
-from qh_trader.core.constants import EventKind, Exchange, PositionSide
+from qh_trader.core.constants import EventKind, Exchange, MissingRuleError, PositionSide
 from qh_trader.core.event import CanonicalEvent, JournalTransaction
 from qh_trader.core.execution import CommandKind, ExecutionCommand, TakeoverRequest
 from qh_trader.core.objects import ControlEpoch, ControlRecord, InstrumentId, QueryBatch
@@ -34,12 +37,20 @@ from qh_trader.domain.recovery import RecoveryCoordinator
 from qh_trader.engine.base_engine import InstrumentEconomics
 from qh_trader.engine.execution_service import ExecutionService
 from qh_trader.engine.live_account_model import FACTS_KEY, AccountOpening, LiveAccountModel
+from qh_trader.gateway.ctp_gateway import (
+    CtpOrderRefBook,
+    CtpTraderGateway,
+    restore_order_refs,
+)
+from qh_trader.gateway.ctp_query import CtpQueryAdapter
 from qh_trader.gateway.epoch_fence import EpochFencedGateway
+from qh_trader.gateway.feedback_normalizer import build_normalizer
 from qh_trader.gateway.paper_query import PaperQueryAdapter
 from qh_trader.gateway.simulated_gateway import SimulatedGateway
 from qh_trader.infrastructure.command_queue import SQLiteCommandClient, SQLiteExecutionStore
 from qh_trader.infrastructure.journal import SQLiteJournal
-from qh_trader.monitor.heartbeat import HeartbeatFile
+from qh_trader.monitor.heartbeat import HeartbeatFile, read_heartbeat
+from scripts import ctp_setup
 
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORTED_MODES = ("paper", "live")
@@ -65,12 +76,19 @@ class ExecutionSpec:
     heartbeat_interval: float = 1.0
     config_path: Path | None = None
     config_sha256: str | None = None
+    broker_profile: str | None = None
+    broker: Mapping[str, object] = field(default_factory=dict)
+    ctp_flow_dir: str = "runs/live/ctp_flow"
+    query_interval_ms: int = 1000
 
     def __post_init__(self) -> None:
         if self.mode not in SUPPORTED_MODES:
             raise AssemblyError(f"unsupported execution mode {self.mode!r}; expected one of {SUPPORTED_MODES}")
         if not self.symbols:
             raise AssemblyError("at least one actual contract symbol is required")
+        object.__setattr__(self, "broker", MappingProxyType(dict(self.broker)))
+        if self.query_interval_ms < 0:
+            raise AssemblyError("query interval cannot be negative")
 
 
 def load_settings(path: Path) -> Mapping[str, Any]:
@@ -110,6 +128,12 @@ def spec_from_settings(
     digest = None
     if config_path is not None and config_path.exists():
         digest = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    broker = settings.get("broker") or {}
+    if not isinstance(broker, Mapping):
+        raise AssemblyError("broker section must be a mapping")
+    profile_name = None if not broker.get("profile") else str(broker["profile"])
+    if chosen_mode == "live" and not profile_name:
+        raise AssemblyError("live mode requires broker.profile pointing at a registered counter profile")
     return ExecutionSpec(
         mode=chosen_mode,
         account_id=account_id,
@@ -124,6 +148,13 @@ def spec_from_settings(
         poll_interval=poll_interval,
         config_path=config_path,
         config_sha256=digest,
+        broker_profile=profile_name,
+        broker={
+            key: broker.get(key)
+            for key in ("front_trade_uri", "front_market_uri", "broker_id", "investor_id", "user_id", "app_id")
+        },
+        ctp_flow_dir=str(broker.get("flow_dir") or f"runs/live/ctp_flow/{account_id}"),
+        query_interval_ms=int(broker.get("query_interval_ms") or 1000),
     )
 
 
@@ -166,6 +197,108 @@ class PaperIsolation(ExecutionIsolationPort):
         return previous is None or self.operator_confirmed
 
 
+class CounterEventForwarder:
+    """回调入队出口：执行服务的装配晚于网关，转发引用在服务创建后绑定 (ADR-X2).
+
+    CTP 回调只在 ``connect()`` 之后才可能到达，而连接又发生在装配之后；缓冲只是防御：
+    未绑定前到达的回调不得丢失，超出上限即明确失败并要求重新对账，不静默丢弃。
+    """
+
+    def __init__(self, *, capacity: int = 1024) -> None:
+        self._target: ExecutionService | None = None
+        self._buffer: list[CanonicalEvent] = []
+        self._errors: list[tuple[str, str]] = []
+        self.capacity = capacity
+        self.forwarded = 0
+        self.buffer_overflows = 0
+
+    @property
+    def bound(self) -> bool:
+        return self._target is not None
+
+    def bind(self, service: ExecutionService) -> None:
+        self._target = service
+        for event in self._buffer:
+            service.enqueue(event)
+            self.forwarded += 1
+        self._buffer.clear()
+        for source_id, error_type in self._errors:
+            service.enqueue_callback_error(source_id, RuntimeError(error_type))
+        self._errors.clear()
+
+    def enqueue(self, event: CanonicalEvent) -> bool:
+        if self._target is None:
+            if len(self._buffer) >= self.capacity:
+                self.buffer_overflows += 1
+                raise RuntimeError("callback buffer overflowed before the execution service was bound")
+            self._buffer.append(event)
+            return True
+        self.forwarded += 1
+        return self._target.enqueue(event)
+
+    def enqueue_callback_error(self, source_id: str, error: Exception) -> None:
+        if self._target is None:
+            self._errors.append((source_id, type(error).__name__))
+            return
+        self._target.enqueue_callback_error(source_id, error)
+
+
+class CtpIsolation(ExecutionIsolationPort):
+    """接管前旧出口隔离：本地可核验的部分 + 操作员确认 (A23, FR-RISK-08).
+
+    柜台侧“重复登录是否强制旧会话下线”尚未核验 (GAP-S0-05)，因此**登录成功不作为隔离证据**：
+    只有旧的执行实例心跳已经过期（或从未登记）时，才结合操作员确认判定隔离成立。
+    心跳仍新鲜 → 拒绝提升代次；操作员未确认 → 同样拒绝。
+    """
+
+    def __init__(
+        self,
+        *,
+        gateway: CtpTraderGateway,
+        heartbeat_path: Path,
+        operator_confirmed: bool,
+        max_age_s: float = 30.0,
+        wall_time: Callable[[], datetime] | None = None,
+    ) -> None:
+        self.gateway = gateway
+        self.heartbeat_path = Path(heartbeat_path)
+        self.operator_confirmed = operator_confirmed
+        self.max_age_s = float(max_age_s)
+        self._wall_time = wall_time or (lambda: datetime.now(timezone.utc))
+        self.evidence: list[Mapping[str, object]] = []
+
+    def isolate(self, previous: ControlRecord | None, request: ExecutionCommand) -> bool:
+        recorded: dict[str, object] = {
+            "previous_controller": None if previous is None else previous.epoch.controller_id,
+            "requested_by": request.producer_id,
+            "applied": False,
+        }
+        if self.gateway.trading_day is None:
+            recorded["reason"] = "counter session is not established; isolation cannot be judged"
+            self.evidence.append(recorded)
+            return False
+        heartbeat = read_heartbeat(self.heartbeat_path)
+        if heartbeat is not None:
+            age = (self._wall_time() - heartbeat.beat_wall).total_seconds()
+            recorded["heartbeat_age_s"] = round(age, 3)
+            recorded["heartbeat_instance"] = heartbeat.instance_id
+            if age <= self.max_age_s:
+                # 心跳新鲜说明本机还有实例在运行（可能是旧出口）；此时不提升代次，不猜它是谁
+                recorded["reason"] = "a fresh execution heartbeat exists; the former connection is not isolated"
+                self.evidence.append(recorded)
+                return False
+        recorded["heartbeat_missing"] = heartbeat is None
+        if not self.operator_confirmed:
+            recorded["reason"] = "operator confirmation is required: counter-side session takeover is unverified"
+            self.evidence.append(recorded)
+            return False
+        recorded["applied"] = True
+        status = self.gateway.status()
+        recorded["counter_session"] = {"front_id": status.get("front_id"), "session_id": status.get("session_id")}
+        self.evidence.append(recorded)
+        return True
+
+
 @dataclass
 class AssembledExecution:
     spec: ExecutionSpec
@@ -181,8 +314,40 @@ class AssembledExecution:
     economics: Mapping[InstrumentId, InstrumentEconomics]
     stack: ExitStack = field(default_factory=ExitStack)
     heartbeat_failures: int = 0
+    counter_gateway: CtpTraderGateway | None = None
+    forwarder: CounterEventForwarder | None = None
+    profile_summary: Mapping[str, object] = field(default_factory=dict)
+    session_report: Mapping[str, object] | None = None
     _last_beat_state: tuple[int | None, bool] | None = None
     _last_beat_at: float = 0.0
+    _session_lost_logged: bool = False
+
+    @property
+    def live(self) -> bool:
+        return self.counter_gateway is not None
+
+    def isolation(self, *, operator_confirmed: bool) -> ExecutionIsolationPort:
+        if self.counter_gateway is None:
+            return PaperIsolation(operator_confirmed=operator_confirmed)
+        return CtpIsolation(
+            gateway=self.counter_gateway,
+            heartbeat_path=self.spec.heartbeat_path,
+            operator_confirmed=operator_confirmed,
+        )
+
+    def connect_counter(self) -> Mapping[str, object] | None:
+        """连接柜台并校验交易日；纸面模式无操作 (S5-01 连接 + FR-CAL-03 交易日核验)."""
+        gateway = self.counter_gateway
+        if gateway is None:
+            return None
+        report = gateway.connect()
+        self.session_report = report.as_mapping()
+        if report.trading_day is not None and report.trading_day != self.spec.trading_day:
+            raise AssemblyError(
+                f"counter trading day {report.trading_day.isoformat()} differs from the expected "
+                f"{self.spec.trading_day.isoformat()}; the operator must confirm the trading day first"
+            )
+        return self.session_report
 
     def close(self) -> None:
         self.stack.close()
@@ -223,6 +388,10 @@ class AssembledExecution:
         self.recovery.merge_trade_query(self.query.query_trades(batch))
         self.recovery.reconcile_positions(self.query.query_positions(batch))
         self.recovery.reconcile_funds(self.query.query_account(batch), self.model.ledger.balance)
+        # 柜台侧放行：只有会话与对账都成立才重新打开网关自己的发送门禁 (FR-REC-04)
+        gateway = self.counter_gateway
+        if gateway is not None and not gateway.mark_reconciled():
+            raise AssemblyError("counter session is not established; the gateway keeps new risk closed")
         self.service.enable_after_reconciliation()
 
     # ------------------------------------------------------------------ 主循环
@@ -242,11 +411,34 @@ class AssembledExecution:
         return len(events)
 
     def step(self) -> int:
+        self.maintain_counter_session()
         processed = self.pump_gateway()
         processed += self.service.run_once(wait=True)
         processed += self.pump_gateway()
         self._beat()
         return processed
+
+    def maintain_counter_session(self) -> None:
+        """断线 / 重连后重新登录；失去会话期间不得放行新风险 (FR-REC-04).
+
+        重新登录成功也不自动放行：网关自己的发送门禁要由显式对账重新打开。
+        """
+        gateway = self.counter_gateway
+        if gateway is None:
+            return
+        gateway.maintain()
+        if gateway.ready_to_send or not self.service.ready:
+            return
+        if self._session_lost_logged:
+            return
+        self._session_lost_logged = True
+        LOGGER.error(
+            "CTP session is not dispatchable (fault=%s, needs_reconciliation=%s); "
+            "closing the trading gate until the operator reconciles again",
+            gateway.fault,
+            gateway.needs_reconciliation,
+        )
+        self.recovery.on_disconnected("ctp session requires account queries before new risk")
 
     def _beat(self) -> None:
         """按间隔写心跳；就绪或代次变化立即写。心跳写失败只告警，不能中断交易主循环."""
@@ -287,6 +479,13 @@ class AssembledExecution:
             "trade_batch_size": self.service.trade_batch_size,
             "gateway": type(getattr(self.gateway, "inner", self.gateway)).__name__,
             "query_source": type(self.query).__name__,
+            "counter": None
+            if self.counter_gateway is None
+            else {
+                "profile": dict(self.profile_summary),
+                "status": dict(self.counter_gateway.status()),
+                "session": self.session_report,
+            },
             "instruments": {str(instrument): eco.source for instrument, eco in self.economics.items()},
             "account_facts": self.model.fact_count,
             "assumptions": [
@@ -297,8 +496,6 @@ class AssembledExecution:
 
 
 def assemble(spec: ExecutionSpec) -> AssembledExecution:
-    if spec.mode == "live":
-        raise AssemblyError("live mode requires the CTP gateway and query adapter (S5-01); not delivered yet")
     stack = ExitStack()
     try:
         journal = stack.enter_context(SQLiteJournal(spec.journal_path, account_id=spec.account_id))
@@ -310,6 +507,8 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
         opening = AccountOpening(spec.initial_capital, spec.trading_day)
         model = LiveAccountModel(spec.account_id, opening, economics)
         ensure_opened(store, model)
+        if spec.mode == "live":
+            return _assemble_live(spec, stack, journal, store, client, economics, model)
         raw_gateway = SimulatedGateway(
             spec.account_id, spec.trading_day, price_tick=min(e.price_tick for e in economics.values())
         )
@@ -346,6 +545,106 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
         heartbeat=heartbeat,
         economics=economics,
         stack=stack,
+    )
+
+
+def _account_facts(store: SQLiteExecutionStore) -> tuple[Mapping[str, Any], ...]:
+    checkpoint = store.checkpoint()
+    return tuple(checkpoint.state.get(FACTS_KEY, ()))  # type: ignore[arg-type]
+
+
+def _assemble_live(
+    spec: ExecutionSpec,
+    stack: ExitStack,
+    journal: SQLiteJournal,
+    store: SQLiteExecutionStore,
+    client: SQLiteCommandClient,
+    economics: Mapping[InstrumentId, InstrumentEconomics],
+    model: LiveAccountModel,
+) -> AssembledExecution:
+    """实盘装配：CTP 网关 + 查询适配器 + 事件转发；柜台连接由 :meth:`AssembledExecution.connect_counter` 建立.
+
+    未核验能力（今昨仓映射、市价单）由网关在发送前拒绝；秘密只从环境变量读取。
+    """
+    try:
+        profile = ctp_setup.load_broker_profile(spec.broker_profile)
+        settings = ctp_setup.ctp_settings(
+            profile,
+            user_id=None if not spec.broker.get("user_id") else str(spec.broker["user_id"]),
+            investor_id=None if not spec.broker.get("investor_id") else str(spec.broker["investor_id"]),
+            front=None if not spec.broker.get("front_trade_uri") else str(spec.broker["front_trade_uri"]),
+            flow_dir=spec.ctp_flow_dir,
+            query_interval_ms=spec.query_interval_ms,
+        )
+        if spec.broker.get("broker_id") and str(spec.broker["broker_id"]) != settings.broker_id:
+            raise AssemblyError(
+                f"broker.broker_id {spec.broker['broker_id']!r} differs from the registered profile "
+                f"{settings.broker_id!r}"
+            )
+        forwarder = CounterEventForwarder()
+        ref_book = CtpOrderRefBook(restored=restore_order_refs(_account_facts(store), {}))
+        normalizer = build_normalizer(spec.account_id, ref_book)
+        price_ticks = {instrument: item.price_tick for instrument, item in economics.items()}
+
+        def price_tick(instrument: InstrumentId) -> Decimal:
+            tick = price_ticks.get(instrument)
+            if tick is None:
+                raise MissingRuleError(
+                    f"no registered contract economics for {instrument}; price needs a verified tick"
+                )
+            return tick
+
+        counter = CtpTraderGateway(
+            settings=settings,
+            account_id=spec.account_id,
+            events=forwarder,
+            normalizer=normalizer,
+            price_tick=price_tick,
+            capability_profile=ctp_setup.capability_profile(profile),
+            capability_version="registered:" + str(spec.broker_profile),
+            authority=lambda: _current_epoch(store),
+            offset_mappings=ctp_setup.offset_mappings(profile),
+            ref_book=ref_book,
+        )
+        query = CtpQueryAdapter(
+            account_id=spec.account_id,
+            channel=counter,
+            normalizer=normalizer,
+            investor_id=settings.investor_id,
+            broker_id=settings.broker_id,
+            trading_day=lambda: counter.trading_day,
+            interval_ms=spec.query_interval_ms,
+            timeout_s=settings.query_timeout_s,
+            source_version="ctp:" + counter.binding.version,
+        )
+        counter.router.queries = query
+        gateway = EpochFencedGateway(counter, lambda: _current_epoch(store))
+        placeholder = model.replica()
+        recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions)
+        service = ExecutionService(
+            store=store, model=model, gateway=gateway, recovery=recovery, poll_interval=spec.poll_interval
+        )
+        forwarder.bind(service)
+        heartbeat = HeartbeatFile(spec.heartbeat_path, role="execution", instance_id=spec.controller_id)
+    except Exception:
+        stack.close()
+        raise
+    return AssembledExecution(
+        spec=spec,
+        journal=journal,
+        store=store,
+        client=client,
+        model=model,
+        gateway=gateway,
+        query=query,
+        recovery=recovery,
+        service=service,
+        heartbeat=heartbeat,
+        economics=economics,
+        stack=stack,
+        counter_gateway=counter,
+        forwarder=forwarder,
+        profile_summary=ctp_setup.profile_summary(profile),
     )
 
 

@@ -2,10 +2,12 @@
 """[脚本工具] 装配并启动唯一执行服务 (S5-04, FR-RISK-01/07, FR-REC-04, ADR-X1/X2).
 
 流程：读取配置 → 打开本地交易库并取得执行锁 → 重建账户模型 → 装配网关与查询 →
-(可选) 受理接管申请：隔离 → 提升代次 → 对账 → 放行 → 主循环 (交易优先 + 命令轮询 + 心跳)。
+(实盘) 连接柜台 → (可选) 受理接管申请：隔离 → 提升代次 → 对账 → 放行 → 主循环
+(交易优先 + 命令轮询 + 心跳)。
 
-纸面模式 (`--mode paper`) 使用模拟网关与回报投影查询，只证明本地机制；实盘模式在 S5-01 CTP 网关
-交付前明确拒绝启动。停止用 Ctrl+C / SIGTERM；`--max-iterations` 供测试与演练。
+纸面模式 (`--mode paper`) 使用模拟网关与回报投影查询；实盘模式 (`--mode live`) 装配 CTP 网关，
+口令从环境变量 `QH_CTP_PASSWORD` 读取，柜台登记未核验的能力（今昨仓映射、市价单）在发送前被拒绝。
+停止用 Ctrl+C / SIGTERM；`--max-iterations` 供测试与演练。
 """
 
 from __future__ import annotations
@@ -25,7 +27,6 @@ if str(ROOT) not in sys.path:
 from qh_trader.core.execution import CommandStatus, ExecutionNotReadyError  # noqa: E402
 from scripts.live_assembly import (  # noqa: E402
     AssemblyError,
-    PaperIsolation,
     assemble,
     load_settings,
     spec_from_settings,
@@ -97,19 +98,33 @@ def main(argv: list[str] | None = None) -> int:
 
     exit_code = 0
     try:
+        if not args.dry_run:
+            # 实盘模式先连接柜台：登录即持有会话，是"隔离 → 提升代次 → 对账 → 放行"的第一步；
+            # 纸面模式无操作。--dry-run 只装配清单，不触碰柜台。
+            session = assembled.connect_counter()
+            if session is not None:
+                LOGGER.info(
+                    "counter session established: front_id=%s session_id=%s trading_day=%s",
+                    session.get("front_id"),
+                    session.get("session_id"),
+                    session.get("trading_day"),
+                )
         command_id = args.take_over
         if args.request_control:
             command_id = assembled.request_control(args.request_control).command_id
         if command_id is not None:
             try:
-                control = assembled.take_over(command_id, PaperIsolation(operator_confirmed=args.confirm_isolated))
+                control = assembled.take_over(command_id, assembled.isolation(operator_confirmed=args.confirm_isolated))
                 LOGGER.info("control acquired: %s epoch %s", control.controller_id, control.epoch)
             except ExecutionNotReadyError as exc:
                 queued = assembled.client.get(command_id)
                 status = None if queued is None else queued.status
                 print(f"接管未成立 ({status or 'unknown'}): {exc}", file=sys.stderr)
                 if status == CommandStatus.REJECTED:
-                    print("旧交易出口未隔离；纸面模式需 --confirm-isolated 由操作员确认", file=sys.stderr)
+                    print(
+                        "旧交易出口未隔离；需操作员确认（--confirm-isolated）且旧实例心跳已过期",
+                        file=sys.stderr,
+                    )
                 return 3
         current = assembled.store.control()
         if current is None:

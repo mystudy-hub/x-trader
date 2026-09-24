@@ -97,13 +97,21 @@ with SQLiteCommandClient({str(db)!r}, account_id={ACCOUNT!r}) as client:
     )
 
 
-def test_template_config_and_live_mode_are_refused(tmp_path):
+def test_template_config_and_live_mode_require_a_registered_counter(tmp_path, monkeypatch):
     assert run_execution_service.main(["--config", "config/settings.yaml.example", "--dry-run"]) == 2
     settings = write_settings(tmp_path, mode="live")
     assert run_script(settings, "--dry-run") == 2
     settings_data = yaml.safe_load(settings.read_text(encoding="utf-8"))
+    # 实盘模式必须显式登记柜台 profile：未登记即拒绝装配，不用模拟件冒充柜台
+    with pytest.raises(AssemblyError, match="broker.profile"):
+        spec_from_settings(settings_data, config_path=settings, mode="live", trading_day=DAY)
+    settings_data["broker"] = {"profile": "simnow_v6", "user_id": "231495", "investor_id": "231495"}
     spec = spec_from_settings(settings_data, config_path=settings, mode="live", trading_day=DAY)
-    with pytest.raises(AssemblyError):
+    # 口令只从环境变量读取；缺失即拒绝装配，配置里不落任何默认口令
+    monkeypatch.delenv("QH_CTP_PASSWORD", raising=False)
+    from scripts import ctp_setup
+
+    with pytest.raises(ctp_setup.BrokerProfileError, match="QH_CTP_PASSWORD"):
         assemble(spec)
 
 
