@@ -175,6 +175,9 @@ def test_rejected_login_keeps_the_gate_closed_and_never_sends():
     with pytest.raises(CtpHandshakeError):
         gateway.connect()
     assert gateway.fault == "login_error_3"
+    # 柜台错误码与报文必须可见，否则只能看到本地状态，无法诊断凭证 / 账户问题
+    assert gateway.status()["last_error_code"] == 3
+    assert gateway.status()["last_error_message"]
     assert gateway.ready_to_send is False
     result = gateway.submit(open_intent(), EPOCH)
     assert result.state == SendState.NOT_SENT and result.local_code == CODE_NOT_READY

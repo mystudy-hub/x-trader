@@ -1602,6 +1602,9 @@ class CtpTraderGateway(ExecutionPort):
             "settlement_confirmed": self._settlement_confirmed,
             "needs_reconciliation": self._needs_reconciliation,
             "fault": self._fault,
+            # 柜台最近一次错误码与报文：诊断登录失败必须看这个，不能只看本地状态
+            "last_error_code": None if self._last_error is None else self._last_error[0],
+            "last_error_message": None if self._last_error is None else self._last_error[1],
             "trading_day": None if self._trading_day is None else self._trading_day.isoformat(),
             "front_id": self._front_id,
             "session_id": self._session_id,

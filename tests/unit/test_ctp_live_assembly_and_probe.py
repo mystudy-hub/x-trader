@@ -243,7 +243,7 @@ def probe_arguments(out_dir: str, *extra: str) -> list[str]:
     ]
 
 
-def build_probe_binding():
+def build_probe_binding(**overrides):
     from tests.unit.fake_ctp import FakeCtpBinding, account_record, position_record
 
     order = type(
@@ -305,8 +305,10 @@ def build_probe_binding():
         exchange_id="SHFE",
         trading_day=DAY.strftime("%Y%m%d"),
         insert_date=DAY.strftime("%Y%m%d"),
+        **overrides,
         query_records={
             "account": (account_record("100000"),),
+            "position": (position_record(instrument="rb2410"),),
             "position": (position_record(instrument="rb2410"),),
             "order": (order,),
             "trade": (trade,),
@@ -347,6 +349,24 @@ def test_probe_script_collects_redacted_evidence_and_verifies_the_order_round_tr
         assert order["contract"]["volume_multiple"] == 10
         assert order["result"].startswith("order insert and cancel round trip verified")
         assert report["callbacks_normalized"]["orders"] >= 2
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def test_probe_script_reports_the_counter_error_when_login_is_rejected(tmp_path, monkeypatch):
+    binding = build_probe_binding(login_code=3)
+    install_fake_counter(monkeypatch, binding)
+    out_dir = "runs/pytest-ctp-probe-reject"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        assert ctp_probe.main(probe_arguments(out_dir)) == 1
+        report = json.loads(sorted(target.glob("ctp_runtime_evidence_*.json"))[0].read_text(encoding="utf-8"))
+        step = report["steps"][0]
+        assert step["name"] == "connect_login_settlement" and step["status"] == "failed"
+        assert step["detail"]["front_connected"] == 1
+        assert step["detail"]["counter_error_code"] == 3
+        assert step["detail"]["counter_error_message"]
     finally:
         shutil.rmtree(target, ignore_errors=True)
 

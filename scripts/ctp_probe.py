@@ -148,6 +148,8 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         front=args.front,
         flow_dir=args.flow_dir,
         query_interval_ms=args.query_interval_ms,
+        connect_timeout_s=args.connect_timeout,
+        login_timeout_s=args.login_timeout,
     )
     capability_profile = ctp_setup.capability_profile(profile)
     sink = RecordingSink()
@@ -218,11 +220,19 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     try:
         session = gateway.connect()
     except Exception as exc:
+        status = gateway.status()
         record(
             Step(
                 "connect_login_settlement",
                 "failed",
-                {"error_type": type(exc).__name__},
+                {
+                    "error_type": type(exc).__name__,
+                    "front_connected": status.get("counts", {}).get("front_connected"),
+                    "fault": status.get("fault"),
+                    "counter_error_code": status.get("last_error_code"),
+                    # 柜台报文只用于诊断；它不含凭证，但仍按原样记录以便对照 CTP 错误码表
+                    "counter_error_message": status.get("last_error_message"),
+                },
                 time.monotonic() - started,
             )
         )
@@ -458,6 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flow-dir", default="runs/live/ctp_flow", help="CTP 私有流目录（本地磁盘）")
     parser.add_argument("--query-interval-ms", type=int, default=1000, help="查询流控间隔")
     parser.add_argument("--query-timeout", type=float, default=15.0, help="单次查询等待应答的秒数")
+    parser.add_argument("--connect-timeout", type=float, default=20.0, help="等待前置连接的秒数")
+    parser.add_argument("--login-timeout", type=float, default=20.0, help="等待认证 / 登录 / 结算确认的秒数")
     parser.add_argument("--order-symbol", default=None, help="可选：做开仓限价单 + 撤单闭环的实际合约")
     parser.add_argument("--order-quantity", type=int, default=1, help="报单探测的手数（默认 1 手）")
     parser.add_argument("--order-wait", type=float, default=DEFAULT_ORDER_WAIT_S, help="等待回报的秒数")

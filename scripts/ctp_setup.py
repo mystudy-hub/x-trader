@@ -248,5 +248,5 @@ def register_front_candidates(profile: Mapping[str, Any], *, now: datetime | Non
     return tuple(
         f"{name}={value} registered_at={stamp} source={fronts.get('source') or 'unregistered'}"
         for name, value in sorted(fronts.items())
-        if name not in {"source", "registered_at"} and isinstance(value, str) and value
+        if isinstance(value, str) and value.startswith("tcp://")
     )
