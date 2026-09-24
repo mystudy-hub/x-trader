@@ -1,0 +1,19 @@
+{
+  "account_id": "live-model-account",
+  "trading_day": "2024-09-11",
+  "kind": "MTM",
+  "summary": {
+    "balance_start": "1100.00",
+    "deposit_withdrawal": "0.00",
+    "close_pnl": "-20.00",
+    "mtm_pnl": "0.00",
+    "commission": "0.00",
+    "balance_end": "1080.00",
+    "margin": "0.00",
+    "available": "1080.00"
+  },
+  "positions": [],
+  "trades": [
+    {"trade_id": "t2", "exchange": "SHFE", "symbol": "rb2410", "side": "卖", "offset": "平昨", "price": "108.00", "quantity": 1, "commission": "0.00"}
+  ]
+}
