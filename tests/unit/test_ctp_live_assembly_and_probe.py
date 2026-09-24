@@ -338,6 +338,7 @@ def test_probe_script_collects_redacted_evidence_and_verifies_the_order_round_tr
         assert report["account"]["investor_id"]["masked"].endswith("95")
         assert SECRET not in json.dumps(report)
         assert report["binding"]["dll_hashes"]
+        assert report["binding"]["version"] == binding.version != "unavailable"
         assert report["session"]["front_id"] == 12
         order = report["order_probe"]
         assert order["send_result"]["state"] == SendState.SENT_UNKNOWN.value

@@ -240,7 +240,9 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             time.monotonic() - started,
         )
     )
+    # 绑定版本与原生库哈希只有在绑定真正加载后才可知，握手后重新登记 (S0-02)
     report["binding"]["dll_hashes"] = dict(session.dll_hashes)
+    report["binding"]["version"] = gateway.binding.version
     report["session"] = session.as_mapping()
 
     # 交易日以柜台为准：探测只记录柜台给出的交易日，不用本地日期推算 (FR-CAL-03)
