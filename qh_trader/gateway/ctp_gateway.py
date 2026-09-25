@@ -1654,10 +1654,15 @@ class CtpTraderGateway(ExecutionPort):
             code = int(self._require_api().ReqOrderAction(field, request_id))  # type: ignore[attr-defined]
         finally:
             self._release(field)
+        # 证据里的三元组按实际情况取：同会话用原会话三元组，否则用柜台的交易所单号标识
         evidence_ref = (
             CtpOrderRef(*triple)
             if triple is not None
-            else CtpOrderRef(int(field.FrontID or 0), int(field.SessionID or 0), str(field.OrderRef or "0"))
+            else CtpOrderRef(
+                int(getattr(field, "FrontID", 0) or 0),
+                int(getattr(field, "SessionID", 0) or 0),
+                str(getattr(field, "OrderRef", "") or "0"),
+            )
         )
         self._cancel_locators.append(
             {"locator": locator, "request_id": request_id, "order_ref": evidence_ref.order_ref}

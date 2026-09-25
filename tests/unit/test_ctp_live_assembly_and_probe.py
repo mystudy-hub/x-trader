@@ -284,6 +284,28 @@ def test_product_comparison_flags_mismatches_and_missing_products():
     assert "commission_and_margin" in outcome
 
 
+def test_probe_script_cancels_active_orders_found_by_query(tmp_path, monkeypatch):
+    binding = build_probe_binding()
+    install_fake_counter(monkeypatch, binding)
+    out_dir = "runs/pytest-ctp-probe-cancel"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        # 清理路径不受"非交易日不报单"限制：这是撤销柜台已有委托，不是新增风险
+        assert ctp_probe.main(probe_arguments(out_dir, "--cancel-active-symbol", SYMBOL)) == 0
+        report = json.loads(sorted(target.glob("ctp_runtime_evidence_*.json"))[0].read_text(encoding="utf-8"))
+        cleanup = report["cancel_cleanup"]
+        assert cleanup["active_for_instrument"] == 1
+        assert cleanup["cancellations"][0]["state"] == SendState.SENT_UNKNOWN.value
+        assert cleanup["cancellations"][0]["order_sys_id"] == "sys-1"
+        assert cleanup["remaining_active"] == 1
+        action = binding.api.action_fields[-1]
+        assert action.OrderSysID == "sys-1" and action.InstrumentID == "rb2410"
+        assert action.OrderActionRef >= 1
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+
+
 def test_live_assembly_refuses_a_counter_trading_day_that_differs(tmp_path, monkeypatch):
     binding = fake_account()
     install_fake_counter(monkeypatch, binding)

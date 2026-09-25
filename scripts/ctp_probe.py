@@ -44,6 +44,7 @@ from qh_trader.core.objects import (  # noqa: E402
     AccountFunds,
     ControlEpoch,
     InstrumentId,
+    OrderIdentity,
     OrderIntent,
     Position,
     Trade,
@@ -341,6 +342,11 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     if sink.callback_errors:
         report["callback_errors"] = list(sink.callback_errors)
 
+    if args.cancel_active_symbol:
+        cancel_report, cancel_exit = probe_cancel_active(args, gateway, queries)
+        report["cancel_cleanup"] = cancel_report
+        exit_code = max(exit_code, cancel_exit)
+
     if args.verify_catalog:
         catalog_report, catalog_exit = probe_catalog(args, queries)
         report["catalog_check"] = catalog_report
@@ -378,6 +384,74 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     }
     gateway.close()
     return report, exit_code
+
+
+def probe_cancel_active(
+    args: argparse.Namespace, gateway: CtpTraderGateway, queries: CtpQueryAdapter
+) -> tuple[Mapping[str, object], int]:
+    """撤销柜台当前活动报单（只针对给定合约）——用于清理历史探测留下的委托.
+
+    只做“查询 → 按可唯一归属的标识撤单”，不猜测、不按品种批量误撤；每笔都记录柜台应答。
+    """
+    instrument = parse_symbol(args.cancel_active_symbol)
+    detail: dict[str, object] = {"instrument": str(instrument)}
+    try:
+        active = queries.query_orders(queries.query_batch("order"))
+    except Exception as exc:
+        detail["error"] = f"order query failed ({type(exc).__name__})"
+        return detail, 1
+    targets = [update for update in active.records if update.instrument == instrument]
+    detail["active_for_instrument"] = len(targets)
+    detail["active_total"] = len(active.records)
+    if not targets:
+        detail["result"] = "no active order for this instrument"
+        return detail, 0
+    if not gateway.mark_reconciled():
+        detail["error"] = "the counter session is not reconciled; cancelling is refused"
+        return detail, 2
+    outcomes: list[Mapping[str, object]] = []
+    exit_code = 0
+    for update in targets:
+        book = gateway.ref_book
+        if update.identity.order_ref is None and not update.identity.exchange_order_id:
+            outcomes.append(
+                {"order_ref": None, "status": str(update.status), "result": "no unique identifier on the report"}
+            )
+            exit_code = max(exit_code, 3)
+            continue
+        # 查询回报没有本地单号：只为撤单登记“该委托属于这个合约”，归属仍按柜台回报给出的标识
+        placeholder = (
+            f"cancel-cleanup:{instrument.symbol}:{update.identity.order_ref or update.identity.exchange_order_id}"
+        )
+        book.remember_instrument(placeholder, instrument)
+        identity = OrderIdentity(
+            account_id=args.account,
+            exchange=instrument.exchange,
+            client_order_id=placeholder,
+            exchange_order_id=update.identity.exchange_order_id,
+            front_id=update.identity.front_id,
+            session_id=update.identity.session_id,
+            order_ref=update.identity.order_ref,
+        )
+        result = gateway.cancel(identity, PROBE_EPOCH)
+        outcomes.append(
+            {
+                "order_ref": update.identity.order_ref,
+                "locator": "session" if update.identity.front_id is not None else "exchange",
+                "order_sys_id": update.identity.exchange_order_id,
+                "state": str(result.state),
+                "local_code": result.local_code,
+                "evidence": result.evidence,
+            }
+        )
+        if str(result.state) == "NOT_SENT":
+            exit_code = max(exit_code, 3)
+        time.sleep(1.5)
+    detail["cancellations"] = outcomes
+    remaining = queries.query_orders(queries.query_batch("order")).records
+    detail["remaining_active"] = len(remaining)
+    detail["result"] = "cancellation sent for every matched order" if not exit_code else "some orders were refused"
+    return detail, exit_code
 
 
 def probe_catalog(args: argparse.Namespace, queries: CtpQueryAdapter) -> tuple[Mapping[str, object], int]:
@@ -633,6 +707,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
     parser.add_argument(
+        "--cancel-active-symbol",
+        default=None,
+        help="撤销该合约在柜台的全部活动报单（清理历史探测留下的委托），如 SHFE.rb2610",
+    )
+    parser.add_argument(
         "--verify-catalog",
         action="store_true",
         help="查询柜台品种 / 交易所 / 投资者 / 用户会话，并与本地品种登记比对（写入 runs/s0/ctp_catalog_diff_*.json）",
@@ -683,6 +762,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"柜台拒绝未表达回报: {gap.get('callback')} code={gap.get('counter_error_code')} "
             f"{gap.get('counter_error_message')}"
+        )
+    if report.get("cancel_cleanup"):
+        cleanup = report["cancel_cleanup"]
+        print(
+            f"活动委托清理: 目标 {cleanup.get('active_for_instrument')} 笔，"
+            f"剩余 {cleanup.get('remaining_active')}，{cleanup.get('result') or cleanup.get('error')}"
         )
     if report.get("catalog_check"):
         check = report["catalog_check"]
