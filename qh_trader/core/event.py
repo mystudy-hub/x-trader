@@ -174,3 +174,37 @@ class JournalSnapshot:
             raise ValueError("snapshot control record cannot be newer than its journal sequence")
         object.__setattr__(self, "state", freeze_payload(self.state))
         object.__setattr__(self, "deduplication_keys", keys)
+
+    def advance(self, journal_seq: int, transaction: JournalTransaction) -> JournalSnapshot:
+        """在本快照上应用紧随其后提交的一笔事务，得到新的已提交快照.
+
+        快照与事务都在构造时完成了校验与冻结，这里只合并顶层键 (顶层 None 表示删除)，
+        不再逐层冻结整份状态，使每次提交的成本与本次变更量相称 (06 R11)。
+        """
+        require_int(journal_seq, "journal_seq")
+        if not isinstance(transaction, JournalTransaction):
+            raise TypeError("snapshot advances only by a normalized journal transaction")
+        if journal_seq != self.journal_seq + 1 or transaction.cursor_before != self.cursor:
+            raise ValueError("transaction does not directly follow this snapshot")
+        if any(key.account_id != self.account_id for key in transaction.deduplication_keys):
+            raise ValueError("snapshot trade identities must match the account")
+        control = transaction.control_record if transaction.control_record is not None else self.control_record
+        if control is not None and control.journal_seq > journal_seq:
+            raise ValueError("snapshot control record cannot be newer than its journal sequence")
+        state = dict(self.state)
+        for name, value in transaction.state_updates.items():
+            if value is None:
+                state.pop(name, None)
+            else:
+                state[name] = value
+        advanced = object.__new__(JournalSnapshot)
+        for name, value in (
+            ("account_id", self.account_id),
+            ("journal_seq", journal_seq),
+            ("cursor", transaction.cursor_after),
+            ("state", MappingProxyType(state)),
+            ("deduplication_keys", self.deduplication_keys | frozenset(transaction.deduplication_keys)),
+            ("control_record", control),
+        ):
+            object.__setattr__(advanced, name, value)
+        return advanced

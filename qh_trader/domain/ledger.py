@@ -357,6 +357,8 @@ class AccountLedger:
         self._instrument_ledgers: dict[InstrumentId, InstrumentLedger] = {}
         self._funds_reservations: dict[str, FundsReservation] = {}
         self.entries: list[LedgerEntry] = []
+        # 条目序号计数；实盘检查点压缩会裁掉旧条目，序号不能由条目数推出
+        self.entry_seq: int = 0
         # (trading_day, instrument) -> 已生效结算记录列表 (按版本先后)
         self._settlements: dict[tuple[date, InstrumentId], list[SettlementRecord]] = {}
         self.settlement_pending: dict[date, tuple[InstrumentId, ...]] = {}
@@ -375,8 +377,9 @@ class AccountLedger:
         version: str | None = None,
     ) -> LedgerEntry:
         rounded = self.round_money(amount)
+        self.entry_seq += 1
         entry = LedgerEntry(
-            seq=len(self.entries) + 1,
+            seq=self.entry_seq,
             kind=kind,
             trading_day=trading_day or self.current_trading_day or date.min,
             amount=rounded,

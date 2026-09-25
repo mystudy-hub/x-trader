@@ -1,12 +1,18 @@
 """[Engine 层] 实盘账户模型：S2 领域内核的暂存 / 发布投影 (S5-04, ADR-X1/X2, FR-LED-01, FR-RISK-01).
 
-账本由事件推导 (FR-LED-01)。本模型把账户事实按顺序保存在 Journal 状态键 ``account_facts`` 里，
-每次 ``publish`` 只对已提交的事实增量应用到 S2 内核 (AccountLedger / PositionManager / OrderManager /
-RiskManager)；``stage_*`` 一律在私有副本上运行同一套领域规则，不改已发布内核、不发送、不做 I/O。
-提交失败时暂存副本被丢弃；重启时从 Journal 检查点完整重建；已发布事实前缀若与内核不一致即视为损坏，
-明确失败而不是猜测。
+账本由事件推导 (FR-LED-01)。本模型把账户事实按顺序保存在 Journal 状态里，每条事实一个键
+(``account_fact/<序号>``)，提交只写新增事实，不重写历史；每次 ``publish`` 只对已提交的事实增量应用到
+S2 内核 (AccountLedger / PositionManager / OrderManager / RiskManager)；``stage_*`` 一律在私有副本上运行
+同一套领域规则，不改已发布内核、不发送、不做 I/O。提交失败时暂存副本被丢弃；重启时从 Journal 完整重建；
+已发布事实前缀若与内核不一致即视为损坏，明确失败而不是猜测。
 
-事实种类 (``account_facts`` 中每项的 ``kind``)：
+日终检查点 (06 R11)：结算完成、交易日前进的那次暂存把内核状态写成 ``account_checkpoint`` 并在同一事务里
+删除已被它覆盖的事实键，此后只重放检查点之后的事实。检查点先经"导出 → 恢复 → 再导出"逐项一致校验，不一致
+即放弃压缩 (保留全部事实并记录错误)，不以可疑检查点替代事实。退役规则见 ``engine/account_checkpoint.py``；
+最早可比的账本交易日由 ``history_start`` 给出，早于它的日口径明确不可得。旧版整表键 ``account_facts``
+须由装配入口显式迁移 (``legacy_fact_migration``)，模型不静默兼容。
+
+事实种类 (每条事实的 ``kind``)：
 - ``opened``：账户开立参数 (初始资金、交易日)，只出现一次且在最前；
 - ``intent``：已通过风控并预占的最终子单意图 (SUBMIT 命令)；
 - ``cancel``：已通过代次与撤单额度检查的撤单请求 (CANCEL 命令)；
@@ -66,19 +72,125 @@ from qh_trader.domain.risk import (
     RiskStateTransitionError,
     RiskViolationError,
 )
+from qh_trader.engine import account_checkpoint as checkpoints
 from qh_trader.engine.base_engine import InstrumentEconomics
 
 LOGGER = logging.getLogger(__name__)
 
-FACTS_KEY = "account_facts"
+FACT_KEY_PREFIX = "account_fact/"
+CHECKPOINT_KEY = "account_checkpoint"
+LEGACY_FACTS_KEY = "account_facts"
 MARK_PRICES_KEY = "mark_prices"
 VIEW_KEY = "account_view"
 
 ADVANCE_TRADING_DAY = "advance_trading_day"
+CHECKPOINT_VERSION = 1
 
 
 class AccountModelCorruptionError(RuntimeError):
     """已发布内核与 Journal 中的事实前缀不一致；不能继续在该内核上交易."""
+
+
+def fact_key(sequence: int) -> str:
+    """事实序号从 1 起全局递增、永不复用；零填充使键的字典序即事实顺序."""
+    return f"{FACT_KEY_PREFIX}{sequence:012d}"
+
+
+def stored_account(
+    state: Mapping[str, object],
+) -> tuple[Mapping[str, Any] | None, int, tuple[Mapping[str, Any], ...]]:
+    """从 Journal 状态读出 (检查点, 检查点覆盖到的事实序号, 其后按序排列的事实)；缺号即损坏."""
+    if LEGACY_FACTS_KEY in state:
+        raise AccountModelCorruptionError(
+            "journal still uses the legacy account_facts layout; run the explicit migration first"
+        )
+    checkpoint: Mapping[str, Any] | None = state.get(CHECKPOINT_KEY)  # type: ignore[assignment]
+    base = 0
+    if checkpoint is not None:
+        if checkpoint.get("version") != CHECKPOINT_VERSION:
+            raise AccountModelCorruptionError(f"unsupported account checkpoint version {checkpoint.get('version')!r}")
+        base = checkpoint["through"]
+    keys = sorted(key for key in state if key.startswith(FACT_KEY_PREFIX))
+    for index, key in enumerate(keys):
+        if key != fact_key(base + 1 + index):
+            raise AccountModelCorruptionError("account facts are not contiguous after the checkpoint")
+    return checkpoint, base, tuple(state[key] for key in keys)  # type: ignore[misc]
+
+
+def account_facts(state: Mapping[str, object]) -> tuple[Mapping[str, Any], ...]:
+    """检查点之后仍保存的事实 (供脚本与测试读取)."""
+    return stored_account(state)[2]
+
+
+def has_account_state(state: Mapping[str, object]) -> bool:
+    return LEGACY_FACTS_KEY in state or CHECKPOINT_KEY in state or any(key.startswith(FACT_KEY_PREFIX) for key in state)
+
+
+def legacy_fact_migration(state: Mapping[str, object]) -> Mapping[str, object] | None:
+    """旧版整表 ``account_facts`` → 逐条事实键的一次性状态更新；无需迁移时返回 None."""
+    legacy = state.get(LEGACY_FACTS_KEY)
+    if legacy is None:
+        return None
+    if CHECKPOINT_KEY in state or any(key.startswith(FACT_KEY_PREFIX) for key in state):
+        raise AccountModelCorruptionError("journal mixes the legacy account_facts layout with per-fact keys")
+    updates: dict[str, object] = {LEGACY_FACTS_KEY: None}
+    for index, fact in enumerate(legacy):  # type: ignore[arg-type]
+        updates[fact_key(index + 1)] = fact
+    return updates
+
+
+def stored_opening(state: Mapping[str, object]) -> AccountOpening | None:
+    """持久化的账户开立参数 (检查点或首条 ``opened`` 事实)；尚未开立时返回 None."""
+    checkpoint, _, facts = stored_account(state)
+    if checkpoint is not None:
+        opening = checkpoint["kernel"]["opening"]
+        return AccountOpening(opening["initial_capital"], opening["trading_day"])
+    for fact in facts:
+        if fact.get("kind") == "opened":
+            return AccountOpening(fact["initial_capital"], fact["trading_day"])
+    return None
+
+
+def referenced_instruments(state: Mapping[str, object]) -> set[str]:
+    """账户状态涉及的全部合约 (用于脚本侧按合约加载经济参数)."""
+    checkpoint, _, facts = stored_account(state)
+    instruments: set[str] = set()
+    for fact in facts:
+        for key in ("intent", "trade", "update"):
+            instrument = getattr(fact.get(key), "instrument", None)
+            if instrument is not None:
+                instruments.add(str(instrument))
+        if fact.get("kind") == "settlement_price":
+            instruments.add(str(fact["instrument"]))
+    if checkpoint is not None:
+        kernel = checkpoint["kernel"]
+        instruments.update(str(item["instrument"]) for item in kernel["ledger"]["instruments"])
+        instruments.update(str(item["instrument"]) for item in kernel["positions"]["positions"])
+        instruments.update(str(item["intent"].instrument) for item in kernel["orders"]["orders"])
+    return instruments
+
+
+def order_facts(state: Mapping[str, object]) -> tuple[Mapping[str, Any], ...]:
+    """委托意图与本地发送结果的事实形态：检查点中未退役的委托在前，其后是检查点之后的事实.
+
+    柜台委托号簿按"本地已分配并落盘"的原会话三元组重建归属；检查点替代事实前缀后，仍可能收到回报的
+    委托 (未退役者) 由检查点里的意图与发送记录补齐，已退役的委托不再参与归属。
+    """
+    checkpoint, _, facts = stored_account(state)
+    restored: list[Mapping[str, Any]] = []
+    if checkpoint is not None:
+        for item in checkpoint["kernel"]["orders"]["orders"]:
+            intent: OrderIntent = item["intent"]
+            restored.append({"kind": "intent", "intent": intent})
+            restored.extend(
+                {
+                    "kind": "send_result",
+                    "client_order_id": intent.client_order_id,
+                    "result": LocalSendResult(attempt["state"], attempt["local_code"], attempt["evidence"]),
+                }
+                for attempt in item["send_attempts"]
+            )
+    return tuple(restored) + facts
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +238,11 @@ class _Kernel:
         self.pending_advance: tuple[date, date, str] | None = None
         # 本方最近成交价：无行情、无结算价时的最后估值回退 (记为估值降级，绝不按 0 估值)
         self.last_trade_prices: dict[InstrumentId, Decimal] = {}
+        # 检查点：最早仍完整保存账本条目的交易日 (None 表示自开立起完整)、下一检查点的退役候选、已退役单号
+        self.history_start: date | None = None
+        self.retire_candidates: frozenset[str] = frozenset()
+        self.retired_order_ids: frozenset[str] = frozenset()
+        self.restored = False
         self.applied = 0
 
     @property
@@ -162,11 +279,15 @@ class LiveAccountModel:
         self._holiday_dates = tuple(holiday_dates)
         self._now = now
         self._kernel: _Kernel | None = None
+        self._checkpoint: Mapping[str, Any] | None = None
+        self._base = 0
         self._facts: tuple[Mapping[str, Any], ...] = ()
         self._mark_prices: dict[InstrumentId, Decimal] = {}
         self._control: ControlEpoch | None = None
         self._poisoned: str | None = None
         self.rebuilds = 0
+        self.checkpoints_written = 0
+        self.checkpoint_refusals: list[str] = []
 
     # ------------------------------------------------------------------ 只读视图 (供装配、对账与脚本)
     @property
@@ -199,7 +320,18 @@ class LiveAccountModel:
 
     @property
     def fact_count(self) -> int:
+        """检查点之后仍需重放的事实条数 (日终检查点后归零)."""
         return len(self._facts)
+
+    @property
+    def checkpoint_through(self) -> int:
+        """检查点覆盖到的事实序号；0 表示尚无检查点."""
+        return self._base
+
+    @property
+    def history_start(self) -> date | None:
+        """最早仍完整保存账本条目的交易日；None 表示自开立起完整."""
+        return self._require_kernel().history_start
 
     @property
     def mark_prices(self) -> Mapping[InstrumentId, Decimal]:
@@ -209,8 +341,8 @@ class LiveAccountModel:
         return self._funds_state(self._require_kernel())
 
     def replica(self) -> _Kernel:
-        """按已发布事实重建的一次性副本；恢复对账在副本上合并查询，不触碰已发布内核."""
-        kernel = self._new_kernel()
+        """按已发布检查点与事实重建的一次性副本；恢复对账在副本上合并查询，不触碰已发布内核."""
+        kernel = self._new_kernel(self._checkpoint, self._facts)
         self._apply_facts(kernel, self._facts)
         return kernel
 
@@ -225,14 +357,24 @@ class LiveAccountModel:
     def publish(self, checkpoint: JournalSnapshot) -> None:
         if checkpoint.account_id != self.account_id:
             raise JournalConflictError("checkpoint belongs to another account")
-        facts: tuple[Mapping[str, Any], ...] = tuple(checkpoint.state.get(FACTS_KEY, ()))  # type: ignore[arg-type]
+        stored, base, facts = stored_account(checkpoint.state)
         self._control = None if checkpoint.control_record is None else checkpoint.control_record.epoch
         raw_prices: Mapping[str, Mapping[str, Any]] = checkpoint.state.get(MARK_PRICES_KEY, {})  # type: ignore[assignment]
         self._mark_prices = {entry["instrument"]: entry["price"] for entry in raw_prices.values()}
-        if self._kernel is None or self._poisoned is not None:
-            kernel = self._new_kernel(facts)
+        rebuild = self._kernel is None or self._poisoned is not None or base != self._base
+        if not rebuild and stored != self._checkpoint:
+            self._poisoned = "published account checkpoint diverged from the durable journal state"
+            raise AccountModelCorruptionError(self._poisoned)
+        if rebuild:
+            try:
+                kernel = self._new_kernel(stored, facts)
+            except (checkpoints.CheckpointFormatError, KeyError, TypeError, ValueError) as exc:
+                self._poisoned = f"account checkpoint cannot be restored: {type(exc).__name__}"
+                raise AccountModelCorruptionError(self._poisoned) from exc
             self._apply_facts(kernel, facts)
             self._kernel = kernel
+            self._checkpoint = stored
+            self._base = base
             self._poisoned = None
             self.rebuilds += 1
         else:
@@ -271,7 +413,7 @@ class LiveAccountModel:
         return CommandPlan(
             approved=True,
             reason=f"{command.kind.value} accepted by the account model",
-            state_updates={FACTS_KEY: self._extend(fact), VIEW_KEY: self._view(kernel)},
+            state_updates={**self._fact_updates(self._pending(fact)), VIEW_KEY: self._view(kernel)},
         )
 
     def stage_send_result(self, command: ExecutionCommand, result: LocalSendResult) -> Mapping[str, object]:
@@ -284,9 +426,9 @@ class LiveAccountModel:
         else:
             return {}
         kernel = self.replica()
-        facts = self._extend(fact)
-        self._apply_facts(kernel, facts[len(self._facts) :])
-        return {FACTS_KEY: facts, VIEW_KEY: self._view(kernel)}
+        pending = self._pending(fact)
+        self._apply_facts(kernel, pending)
+        return {**self._fact_updates(pending), VIEW_KEY: self._view(kernel)}
 
     def stage_fact(self, event: CanonicalEvent) -> Mapping[str, object]:
         payload = event.payload
@@ -322,9 +464,16 @@ class LiveAccountModel:
         if fact is None:
             return {}
         kernel = self.replica()
-        facts = self._extend(fact)
-        self._apply_facts(kernel, facts[len(self._facts) :])
-        return {FACTS_KEY: facts, VIEW_KEY: self._view(kernel)}
+        day_before = kernel.trading_day
+        pending = self._pending(fact)
+        self._apply_facts(kernel, pending)
+        view = self._view(kernel)
+        if kernel.trading_day > day_before and not kernel.settlement_pending:
+            # 结算完成、交易日前进：检查点覆盖到本次追加的最后一条事实
+            compacted = self._compact(kernel, keep_from=day_before, through=self._next_sequence + len(pending) - 1)
+            if compacted is not None:
+                return {**compacted, VIEW_KEY: view}
+        return {**self._fact_updates(pending), VIEW_KEY: view}
 
     def opening_fact(self) -> Mapping[str, Any]:
         """账户开立事实；装配在首次启动时持久化，之后重建只认持久化的开立事实."""
@@ -336,18 +485,142 @@ class LiveAccountModel:
             }
         )
 
-    def _extend(self, fact: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
-        """追加一条事实；首条事实前写入账户开立参数."""
+    def opening_updates(self) -> Mapping[str, object]:
+        """首次启动写入的账户开立事实 (序号 1)."""
+        return {fact_key(1): self.opening_fact()}
+
+    @property
+    def _next_sequence(self) -> int:
+        return self._base + len(self._facts) + 1
+
+    def _pending(self, fact: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+        """待追加的事实；尚无任何持久化事实时先写账户开立参数."""
         frozen = freeze_payload(fact)
-        if self._facts:
-            return self._facts + (frozen,)
+        if self._facts or self._checkpoint is not None:
+            return (frozen,)
         return (self.opening_fact(), frozen)
+
+    def _fact_updates(self, pending: Sequence[Mapping[str, Any]]) -> dict[str, object]:
+        start = self._next_sequence
+        return {fact_key(start + index): fact for index, fact in enumerate(pending)}
+
+    # ------------------------------------------------------------------ 日终检查点 (R11)
+    def _compact(self, kernel: _Kernel, *, keep_from: date, through: int) -> dict[str, object] | None:
+        """把刚完成结算的暂存内核写成检查点，并删除被它覆盖的事实键；校验不通过时返回 None."""
+        figures = self._figures(kernel)
+        retired, candidates = checkpoints.retire_history(
+            kernel.ledger,
+            kernel.orders,
+            kernel.positions,
+            kernel.risk,
+            keep_from=keep_from,
+            candidates=kernel.retire_candidates,
+        )
+        kernel.retired_order_ids = kernel.retired_order_ids | retired
+        kernel.retire_candidates = candidates
+        kernel.history_start = keep_from
+        reason: str | None = None
+        try:
+            data = freeze_payload(self._dump_kernel(kernel))
+            restored = self._restore_kernel(data)
+            if freeze_payload(self._dump_kernel(restored)) != data:
+                reason = "restored kernel differs from the checkpoint it was built from"
+            elif self._figures(kernel) != figures:
+                reason = "retiring settled history changed current account figures"
+            elif self._figures(restored) != figures:
+                reason = "restored kernel reports different account figures"
+        except (checkpoints.CheckpointFormatError, KeyError, TypeError, ValueError) as exc:
+            reason = f"checkpoint cannot be restored: {type(exc).__name__}: {exc}"
+        if reason is not None:
+            # 放弃压缩只影响性能、不影响正确性：事实保持原样，错误留给运维处理
+            self.checkpoint_refusals.append(reason)
+            LOGGER.error("account checkpoint refused; keeping all account facts: %s", reason)
+            return None
+        self.checkpoints_written += 1
+        updates: dict[str, object] = {
+            CHECKPOINT_KEY: {
+                "version": CHECKPOINT_VERSION,
+                "through": through,
+                "trading_day": kernel.trading_day,
+                "kernel": data,
+            }
+        }
+        for sequence in range(self._base + 1, self._next_sequence):
+            updates[fact_key(sequence)] = None
+        return updates
+
+    def _figures(self, kernel: _Kernel) -> tuple[object, ...]:
+        """当前账户口径 (资金、持仓、预占、活动委托、风控状态)；退役与恢复都不得改变它们."""
+        return (
+            kernel.trading_day,
+            self._funds_state(kernel),
+            tuple(position.to_position_snapshot() for position in kernel.positions.all_positions()),
+            tuple(sorted(order.client_order_id for order in kernel.orders.active_orders())),
+            kernel.risk.risk_state,
+            kernel.settlement_pending,
+        )
+
+    def _dump_kernel(self, kernel: _Kernel) -> dict[str, Any]:
+        start = kernel.history_start
+        return {
+            "opening": {"initial_capital": kernel.opening.initial_capital, "trading_day": kernel.opening.trading_day},
+            "ledger": checkpoints.dump_ledger(kernel.ledger),
+            "positions": checkpoints.dump_positions(kernel.positions),
+            "orders": checkpoints.dump_orders(kernel.orders),
+            "risk": checkpoints.dump_risk(kernel.risk),
+            "settlement_prices": tuple(
+                {"trading_day": day, "instrument": instrument, "price": price}
+                for day, prices in kernel.settlement_prices.items()
+                if start is None or day >= start
+                for instrument, price in prices.items()
+            ),
+            "pending_advance": None
+            if kernel.pending_advance is None
+            else dict(zip(("trading_day", "new_trading_day", "version"), kernel.pending_advance, strict=True)),
+            "last_trade_prices": tuple(
+                {"instrument": instrument, "price": price} for instrument, price in kernel.last_trade_prices.items()
+            ),
+            "history_start": start,
+            "retire_candidates": tuple(sorted(kernel.retire_candidates)),
+            "retired_order_ids": tuple(sorted(kernel.retired_order_ids)),
+        }
+
+    def _restore_kernel(self, data: Mapping[str, Any]) -> _Kernel:
+        opening = AccountOpening(data["opening"]["initial_capital"], data["opening"]["trading_day"])
+        kernel = _Kernel(
+            self.account_id,
+            opening,
+            limits=self._limits,
+            holiday_hook=self._holiday_hook,
+            holiday_dates=self._holiday_dates,
+            control=self._control,
+        )
+        checkpoints.load_ledger(data["ledger"], kernel.ledger)
+        checkpoints.load_positions(data["positions"], kernel.positions)
+        checkpoints.load_orders(data["orders"], kernel.orders)
+        checkpoints.load_risk(data["risk"], kernel.risk)
+        kernel.settlement_prices = {}
+        for item in data["settlement_prices"]:
+            kernel.settlement_prices.setdefault(item["trading_day"], {})[item["instrument"]] = item["price"]
+        advance = data["pending_advance"]
+        kernel.pending_advance = (
+            None if advance is None else (advance["trading_day"], advance["new_trading_day"], advance["version"])
+        )
+        kernel.last_trade_prices = {item["instrument"]: item["price"] for item in data["last_trade_prices"]}
+        kernel.history_start = data["history_start"]
+        kernel.retire_candidates = frozenset(data["retire_candidates"])
+        kernel.retired_order_ids = frozenset(data["retired_order_ids"])
+        kernel.restored = True
+        return kernel
 
     # ------------------------------------------------------------------ 暂存：命令
     def _stage_submit(self, kernel: _Kernel, command: ExecutionCommand) -> Mapping[str, Any]:
         intent = command.payload
         assert isinstance(intent, OrderIntent)
-        if kernel.orders.get_order(intent.client_order_id) is not None:
+        if (
+            kernel.orders.get_order(intent.client_order_id) is not None
+            or intent.client_order_id in kernel.retired_order_ids
+        ):
             raise ValueError(f"duplicate client_order_id {intent.client_order_id}")
         if kernel.settlement_pending and intent.offset == Offset.OPEN:
             raise RiskViolationError("settlement is pending; new risk is not allowed until the day is settled")
@@ -379,7 +652,7 @@ class LiveAccountModel:
             "fee": fee,
             "control": command.control,
         }
-        self._apply_facts(kernel, self._extend(fact)[len(self._facts) :])
+        self._apply_facts(kernel, self._pending(fact))
         return fact
 
     def _stage_cancel(self, kernel: _Kernel, command: ExecutionCommand) -> Mapping[str, Any]:
@@ -394,7 +667,7 @@ class LiveAccountModel:
             raise ValueError(f"cancel already pending for {identity.client_order_id}")
         kernel.risk.check_cancel_command(order, command.control, kernel.trading_day)
         fact = {"kind": "cancel", "command_id": command.command_id, "client_order_id": order.client_order_id}
-        self._apply_facts(kernel, self._extend(fact)[len(self._facts) :])
+        self._apply_facts(kernel, self._pending(fact))
         return fact
 
     def _stage_control(self, kernel: _Kernel, command: ExecutionCommand) -> Mapping[str, Any]:
@@ -418,7 +691,7 @@ class LiveAccountModel:
                 raise RiskStateTransitionError("resume requires cause_cleared=true and account_consistent=true")
             fact["cause_cleared"] = True
             fact["account_consistent"] = True
-        self._apply_facts(kernel, self._extend(fact)[len(self._facts) :])
+        self._apply_facts(kernel, self._pending(fact))
         return fact
 
     # ------------------------------------------------------------------ 暂存：行情
@@ -434,9 +707,11 @@ class LiveAccountModel:
         return {MARK_PRICES_KEY: {str(inst): {"instrument": inst, "price": px} for inst, px in prices.items()}}
 
     # ------------------------------------------------------------------ 内核构建与事实应用
-    def _new_kernel(self, facts: Sequence[Mapping[str, Any]] | None = None) -> _Kernel:
+    def _new_kernel(self, checkpoint: Mapping[str, Any] | None, facts: Sequence[Mapping[str, Any]]) -> _Kernel:
+        if checkpoint is not None:
+            return self._restore_kernel(checkpoint["kernel"])
         opening = self._opening
-        for fact in self._facts if facts is None else facts:
+        for fact in facts:
             if fact.get("kind") == "opened":
                 opening = AccountOpening(fact["initial_capital"], fact["trading_day"])
                 break
@@ -457,7 +732,7 @@ class LiveAccountModel:
     def _apply_fact(self, kernel: _Kernel, fact: Mapping[str, Any]) -> None:
         kind = fact["kind"]
         if kind == "opened":
-            if kernel.applied != 0:
+            if kernel.applied != 0 or kernel.restored:
                 raise AccountModelCorruptionError("account opening fact must be the first fact")
             opened = AccountOpening(fact["initial_capital"], fact["trading_day"])
             if opened != kernel.opening:
@@ -649,6 +924,7 @@ class LiveAccountModel:
             "realized_trade_pnl": kernel.ledger.realized_trade_pnl,
             "risk_state": kernel.risk.risk_state.value,
             "settlement_pending": kernel.settlement_pending,
+            "history_start": kernel.history_start,
             "active_orders": len(kernel.orders.active_orders()),
             "positions": tuple(
                 position.to_position_snapshot()

@@ -1,4 +1,7 @@
-"""SQLite JournalPort: atomically persist events, projections, trade identities, control and cursor."""
+"""SQLite JournalPort: atomically persist events, projections, trade identities, control and cursor.
+
+A top-level ``None`` in ``state_updates`` deletes that projection key in the same transaction.
+"""
 
 from __future__ import annotations
 
@@ -259,6 +262,10 @@ class SQLiteJournal:
                     (sequence, ordinal, event.event_id, event.sequence, encoded, _hash(encoded)),
                 )
             for name, value in transaction.state_updates.items():
+                if value is None:
+                    # The transaction payload keeps the deletion, so snapshot() replays it too.
+                    self.connection.execute("DELETE FROM journal_state WHERE state_key=?", (name,))
+                    continue
                 encoded = codec.dumps(value)
                 self.connection.execute(
                     """INSERT INTO journal_state VALUES (?, ?, ?, ?)
@@ -347,7 +354,11 @@ class SQLiteJournal:
                 transaction = self._read(row["payload"], row["sha256"])
                 if not isinstance(transaction, JournalTransaction) or transaction.cursor_before != cursor:
                     raise JournalCorruptionError("transaction history does not form a contiguous processing cursor")
-                state.update(transaction.state_updates)
+                for name, value in transaction.state_updates.items():
+                    if value is None:
+                        state.pop(name, None)
+                    else:
+                        state[name] = value
                 keys.update(transaction.deduplication_keys)
                 if transaction.control_record is not None:
                     control = transaction.control_record

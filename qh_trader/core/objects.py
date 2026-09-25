@@ -93,7 +93,11 @@ def freeze_payload(value):
             raise TypeError("payload mapping keys must be strings")
         return MappingProxyType({key: freeze_payload(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):
-        return tuple(freeze_payload(item) for item in value)
+        items = tuple(freeze_payload(item) for item in value)
+        # 成员都已冻结的元组本身不可变，原样返回，避免重复冻结时整棵树被重建
+        if type(value) is tuple and all(new is old for new, old in zip(items, value, strict=True)):
+            return value
+        return items
     if isinstance(value, (set, frozenset)):
         return frozenset(freeze_payload(item) for item in value)
     if isinstance(value, datetime):
@@ -112,7 +116,10 @@ def freeze_payload(value):
         members = fields(value)
         if any(not member.init for member in members):
             raise TypeError("payload dataclasses must expose all fields in their value constructor")
-        return replace(value, **{member.name: freeze_payload(getattr(value, member.name)) for member in members})
+        frozen = {member.name: freeze_payload(getattr(value, member.name)) for member in members}
+        if all(frozen[member.name] is getattr(value, member.name) for member in members):
+            return value  # 冻结数据类的成员都已冻结：构造时的校验已经成立，无需 replace 重跑
+        return replace(value, **frozen)
     raise TypeError("payload must contain normalized values, not mutable gateway objects")
 
 

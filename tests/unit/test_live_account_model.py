@@ -55,10 +55,11 @@ from qh_trader.engine.base_engine import InstrumentEconomics
 from qh_trader.engine.execution_service import ExecutionService
 from qh_trader.engine.live_account_model import (
     ADVANCE_TRADING_DAY,
-    FACTS_KEY,
     AccountModelCorruptionError,
     AccountOpening,
     LiveAccountModel,
+    account_facts,
+    fact_key,
 )
 from qh_trader.gateway.epoch_fence import EpochFencedGateway
 from qh_trader.gateway.simulated_gateway import SimulatedGateway
@@ -315,8 +316,9 @@ def test_submit_reserves_through_s2_risk_and_only_publishes_after_commit(ready):
     reservation = ready.model.ledger.get_funds_reservation("o1")
     assert reservation is not None and reservation.margin == Decimal("100")  # 100 × 10 × 1 × 0.1
     assert ready.model.positions.get_reservation("o1") is not None
-    assert ready.journal.load_state()[FACTS_KEY][0]["kind"] == "opened"
-    assert [fact["kind"] for fact in ready.journal.load_state()[FACTS_KEY][1:]] == ["intent", "send_result"]
+    facts = account_facts(ready.journal.load_state())
+    assert facts[0]["kind"] == "opened"
+    assert [fact["kind"] for fact in facts[1:]] == ["intent", "send_result"]
 
 
 def test_insufficient_funds_is_rejected_without_staging_any_fact(ready):
@@ -326,7 +328,7 @@ def test_insufficient_funds_is_rejected_without_staging_any_fact(ready):
     rejected = ready.submit(command("c-too-many", intent("o-too-many")))
     assert rejected.status == CommandStatus.REJECTED
     assert ready.model.orders.get_order("o-too-many") is None
-    facts = ready.journal.load_state()[FACTS_KEY]
+    facts = account_facts(ready.journal.load_state())
     assert sum(1 for fact in facts if fact["kind"] == "intent") == 10
 
 
@@ -452,9 +454,8 @@ def test_restart_rebuilds_the_same_kernel_from_journal_facts(tmp_path):
 def test_diverged_published_prefix_poisons_the_kernel_instead_of_guessing(ready):
     ready.submit(command("c1", intent("o1")))
     checkpoint = ready.store.checkpoint()
-    facts = list(checkpoint.state[FACTS_KEY])
-    facts[1] = dict(facts[1]) | {"margin": Decimal("999")}
-    forged = replace(checkpoint, state=dict(checkpoint.state) | {FACTS_KEY: tuple(facts)})
+    forged_fact = dict(checkpoint.state[fact_key(2)]) | {"margin": Decimal("999")}
+    forged = replace(checkpoint, state=dict(checkpoint.state) | {fact_key(2): forged_fact})
     with pytest.raises(AccountModelCorruptionError):
         ready.model.publish(forged)
     with pytest.raises(AccountModelCorruptionError):

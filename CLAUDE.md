@@ -43,7 +43,8 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
   - The service processes each command on one thread: stage on a private copy, atomically commit the command status, journal events and projections, publish the new state, then send.
   - Every command carries a `ControlEpoch`. Takeover runs isolate → bump epoch → reconcile → enable. The epoch is checked again at the gateway call (`gateway/epoch_fence.py`).
   - Broker callbacks only enqueue: the trade queue is unbounded, the market-data queue is bounded.
-  - `engine/live_account_model.py` keeps ordered account facts in journal state and replays them into the kernel. Every staging replays the full fact list; see risk R11 in 06.
+  - `engine/live_account_model.py` keeps ordered account facts in journal state, one key per fact (`account_fact/<seq>`), and replays them into the kernel. When a settlement completes, the settled prefix is replaced by a verified kernel checkpoint (`account_checkpoint`, built by `engine/account_checkpoint.py`), so staging only replays the facts after it. See risk R11 in 06. Legacy `account_facts` journals are migrated explicitly at assembly.
+  - `SQLiteExecutionStore.checkpoint()` is cached per `head_seq` and advanced with `JournalSnapshot.advance` after each commit. A top-level `None` in `state_updates` deletes that journal state key.
   - `scripts/run_execution_service.py` and `scripts/live_assembly.py` assemble the service. `--mode paper` uses the simulated gateway and `gateway/paper_query.py`. `--mode live` wires the CTP gateway and runs connect → isolate → bump epoch → reconcile → enable.
   - CTP adapters:
     - `gateway/ctp_gateway.py` handles the handshake, re-checks the epoch before `ReqOrderInsert`/`ReqOrderAction`, and persists the `(FrontID, SessionID, OrderRef)` triple.

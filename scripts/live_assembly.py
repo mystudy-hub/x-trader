@@ -14,7 +14,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -36,7 +36,15 @@ from qh_trader.domain.positions import PositionManager
 from qh_trader.domain.recovery import RecoveryCoordinator
 from qh_trader.engine.base_engine import InstrumentEconomics
 from qh_trader.engine.execution_service import ExecutionService
-from qh_trader.engine.live_account_model import FACTS_KEY, AccountOpening, LiveAccountModel
+from qh_trader.engine.live_account_model import (
+    AccountOpening,
+    LiveAccountModel,
+    has_account_state,
+    legacy_fact_migration,
+    order_facts,
+    referenced_instruments,
+    stored_opening,
+)
 from qh_trader.gateway.ctp_gateway import (
     CtpOrderRefBook,
     CtpTraderGateway,
@@ -514,6 +522,12 @@ class AssembledExecution:
             },
             "instruments": {str(instrument): eco.source for instrument, eco in self.economics.items()},
             "account_facts": self.model.fact_count,
+            "account_checkpoint": {
+                "through_fact": self.model.checkpoint_through,
+                "history_start": self.model.history_start,
+                "written_this_run": self.model.checkpoints_written,
+                "refused_this_run": list(self.model.checkpoint_refusals),
+            },
             "assumptions": [
                 "paper mode: simulated matching, query mirror of the same report stream; not broker evidence",
                 "commission/margin from product_registry research assumptions pending rule verification (FR-RULE-05)",
@@ -532,6 +546,7 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
         economics = economics_from_catalog(spec.catalog_path, spec.symbols, as_of=spec.trading_day)
         opening = AccountOpening(spec.initial_capital, spec.trading_day)
         model = LiveAccountModel(spec.account_id, opening, economics)
+        migrate_account_facts(store)
         ensure_opened(store, model)
         if spec.mode == "live":
             return _assemble_live(spec, stack, journal, store, client, economics, model)
@@ -575,8 +590,8 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
 
 
 def _account_facts(store: SQLiteExecutionStore) -> tuple[Mapping[str, Any], ...]:
-    checkpoint = store.checkpoint()
-    return tuple(checkpoint.state.get(FACTS_KEY, ()))  # type: ignore[arg-type]
+    """柜台委托号簿重建所需的委托事实 (含日终检查点里未退役的委托)."""
+    return order_facts(store.checkpoint().state)
 
 
 def _assemble_live(
@@ -693,56 +708,69 @@ def _current_epoch(store: SQLiteExecutionStore) -> ControlEpoch | None:
     return None if current is None else current.epoch
 
 
-def ensure_opened(store: SQLiteExecutionStore, model: LiveAccountModel) -> bool:
-    """首次启动把账户开立事实写入 Journal (审计事件 + 状态)；已有事实时不改动. 返回是否写入."""
+def _commit_account_state(
+    store: SQLiteExecutionStore, action: str, payload: Mapping[str, object], updates: Mapping[str, object]
+) -> None:
     checkpoint = store.checkpoint()
-    if checkpoint.state.get(FACTS_KEY):
-        return False
     now = datetime.now(timezone.utc)
+    identifier = f"{action.replace('_', '-')}:" + now.strftime("%Y%m%dT%H%M%S%fZ")
     event = CanonicalEvent(
-        event_id="account-opened:" + now.strftime("%Y%m%dT%H%M%S%fZ"),
+        event_id=identifier,
         kind=EventKind.CONTROL,
         event_time=now,
         available_at=now,
         sequence=store.next_ingress_sequence(),
         source_id="live-assembly",
-        payload={"action": "account_opened", "account_id": model.account_id},
+        payload={"action": action, **payload},
     )
     store.commit(
         JournalTransaction(
-            transaction_id="account-opened:" + now.strftime("%Y%m%dT%H%M%S%fZ"),
+            transaction_id=identifier,
             events=(event,),
             cursor_before=checkpoint.cursor,
             cursor_after=checkpoint.cursor + 1,
-            state_updates={FACTS_KEY: (model.opening_fact(),)},
+            state_updates=updates,
         ),
         expected_control=None if checkpoint.control_record is None else checkpoint.control_record.epoch,
     )
+
+
+def migrate_account_facts(store: SQLiteExecutionStore) -> int:
+    """把旧版整表 ``account_facts`` 显式迁移为逐条事实键 (R11)；返回迁移的事实条数，无需迁移时为 0."""
+    updates = legacy_fact_migration(store.checkpoint().state)
+    if updates is None:
+        return 0
+    migrated = len(updates) - 1
+    _commit_account_state(store, "account_facts_migrated", {"facts": migrated}, updates)
+    return migrated
+
+
+def ensure_opened(store: SQLiteExecutionStore, model: LiveAccountModel) -> bool:
+    """首次启动把账户开立事实写入 Journal (审计事件 + 状态)；已有事实时不改动. 返回是否写入."""
+    if has_account_state(store.checkpoint().state):
+        return False
+    _commit_account_state(store, "account_opened", {"account_id": model.account_id}, model.opening_updates())
     return True
 
 
 def open_model_read_only(
     journal_path: Path, account_id: str, catalog_path: Path, symbols: Sequence[str] | None = None
 ) -> tuple[SQLiteJournal, LiveAccountModel]:
-    """脚本侧只读重建账户模型 (结算单比对、状态查询)；不取执行锁、不写 Journal."""
+    """脚本侧只读重建账户模型 (结算单比对、状态查询)；不取执行锁、不写 Journal.
+
+    旧版整表 ``account_facts`` 只在内存里按迁移规则展开，库内的正式迁移仍由执行服务启动时完成。
+    """
     journal = SQLiteJournal(journal_path, account_id=account_id)
     checkpoint = journal.load_checkpoint()
-    facts: tuple[Mapping[str, Any], ...] = tuple(checkpoint.state.get(FACTS_KEY, ()))  # type: ignore[arg-type]
-    instruments: set[str] = set(symbols or ())
-    for fact in facts:
-        for key in ("intent", "trade", "update"):
-            value = fact.get(key)
-            instrument = getattr(value, "instrument", None)
-            if instrument is not None:
-                instruments.add(str(instrument))
-        if fact.get("kind") == "settlement_price":
-            instruments.add(str(fact["instrument"]))
-    opening = AccountOpening(
+    migration = legacy_fact_migration(checkpoint.state)
+    if migration is not None:
+        state = {key: value for key, value in checkpoint.state.items() if key not in migration}
+        state.update({key: value for key, value in migration.items() if value is not None})
+        checkpoint = replace(checkpoint, state=state)
+    instruments: set[str] = set(symbols or ()) | referenced_instruments(checkpoint.state)
+    opening = stored_opening(checkpoint.state) or AccountOpening(
         Decimal("0"), checkpoint.control_record.acquired_at.date() if checkpoint.control_record else date.today()
     )
-    for fact in facts:
-        if fact.get("kind") == "opened":
-            opening = AccountOpening(fact["initial_capital"], fact["trading_day"])
     economics = economics_from_catalog(catalog_path, sorted(instruments)) if instruments else {}
     model = LiveAccountModel(account_id, opening, economics)
     model.publish(checkpoint)
@@ -762,13 +790,22 @@ def local_day_figures(
     *,
     positions: PositionManager | None = None,
     margin_used: Decimal | None = None,
+    history_start: date | None = None,
 ) -> LocalDayFigures:
     """按账本条目汇总某交易日的口径 (FR-LED-03：盯市平仓 + 结算盈亏；逐笔盈亏不进余额).
 
     期末结存取"截至该交易日"的余额：当前余额减去之后交易日的全部条目，使结算单迟到时仍可比。
     持仓手数只在账本尚未越过该交易日时可比 (否则记为 None，由比对方跳过)。放在入口层：data 层的
     结算单模块只依赖 Core 类型，账本读取不进入适配器 (NFR-03)。
+
+    ``history_start`` 是日终检查点后仍完整保存条目的最早交易日；更早的日口径已随检查点退役，
+    明确失败而不是把缺失的条目读成 0。
     """
+    if history_start is not None and trading_day < history_start:
+        raise AssemblyError(
+            f"ledger entries for {trading_day} were retired by the account checkpoint; "
+            f"local figures are available from {history_start}"
+        )
     close_pnl = Decimal(0)
     mtm_pnl = Decimal(0)
     commission = Decimal(0)

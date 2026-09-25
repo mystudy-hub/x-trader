@@ -100,6 +100,7 @@ class SQLiteExecutionStore:
         self._lock = _LocalExecutionLock(Path(filename).resolve())
         self._thread = threading.get_ident()
         self._closed = False
+        self._checkpoint: JournalSnapshot | None = None
 
     def __enter__(self) -> SQLiteExecutionStore:
         self.assert_owner()
@@ -155,8 +156,16 @@ class SQLiteExecutionStore:
             raise
 
     def checkpoint(self) -> JournalSnapshot:
+        """Committed state; cached per head sequence so a commit does not decode the whole history again.
+
+        Any write outside this store advances ``head_seq`` and forces a full reload.
+        """
         self.assert_owner()
-        return self.journal.load_checkpoint()
+        cached = self._checkpoint
+        if cached is not None and cached.journal_seq == self.journal.head_seq:
+            return cached
+        self._checkpoint = self.journal.load_checkpoint()
+        return self._checkpoint
 
     def control(self) -> ControlRecord | None:
         self.assert_owner()
@@ -253,7 +262,16 @@ class SQLiteExecutionStore:
                 (status.value, sequence, command.command.command_id),
             )
 
-        return self.journal._append_atomic(transaction, precondition=precondition, before_commit=acknowledge)
+        cached = self._checkpoint
+        self._checkpoint = None
+        sequence = self.journal._append_atomic(transaction, precondition=precondition, before_commit=acknowledge)
+        if cached is not None and sequence == cached.journal_seq + 1 and self.journal.head_seq == sequence:
+            # The commit is already durable; a cache that cannot advance is simply reloaded on the next read.
+            try:
+                self._checkpoint = cached.advance(sequence, transaction)
+            except (TypeError, ValueError):
+                self._checkpoint = None
+        return sequence
 
 
 class SQLiteCommandClient:

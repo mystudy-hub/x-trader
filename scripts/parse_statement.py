@@ -106,7 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.journal:
             journal, model = open_model_read_only(ROOT / args.journal, account, ROOT / args.catalog)
             funds = model.funds_state()
-            local = local_day_figures(model.ledger, statement.trading_day, margin_used=funds.margin_used)
+            local = local_day_figures(
+                model.ledger, statement.trading_day, margin_used=funds.margin_used, history_start=model.history_start
+            )
         else:
             print("需要 --journal 或 --ledger-json 之一", file=sys.stderr)
             return 2
