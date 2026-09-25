@@ -110,7 +110,7 @@ class CtpQueryAdapter(AccountQueryPort):
         trading_day: Callable[[], date | None] | None = None,
         interval_ms: int = 1000,
         timeout_s: float = 15.0,
-        source_version: str = "ctp-6.7",
+        source_version: str | Callable[[], str] = "ctp-6.7",
         wall_time: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -127,7 +127,7 @@ class CtpQueryAdapter(AccountQueryPort):
         self._normalizer = normalizer
         self._interval_ms = int(interval_ms)
         self._timeout_s = float(timeout_s)
-        self._source_version = source_version
+        self._source_version = source_version if callable(source_version) else (lambda: source_version)
         self._trading_day = trading_day or (lambda: None)
         self._wall_time = wall_time or (lambda: datetime.now(timezone.utc))
         self._monotonic = monotonic or time.monotonic
@@ -207,7 +207,7 @@ class CtpQueryAdapter(AccountQueryPort):
         skipped: list[str] = []
         for record in records:
             try:
-                instrument, side, hedge, pos_yd, pos_td, frozen_yd, frozen_td = self._position(record)
+                instrument, side, hedge, pos_yd, pos_td, frozen = self._position(record)
             except CtpQueryError as exc:
                 skipped.append(str(exc))
                 self.counts["conversion_failures"] += 1
@@ -216,9 +216,20 @@ class CtpQueryAdapter(AccountQueryPort):
             bucket = positions.setdefault(key, [0, 0, 0, 0])
             bucket[0] += pos_yd
             bucket[1] += pos_td
-            bucket[2] += frozen_yd
-            bucket[3] += frozen_td
             hedges[key] = hedge
+            # 冻结量按今仓优先归集（平今冻结最常见），剩下放不下的部分记异常：
+            # 不丢弃整条记录（否则持仓比对看不到柜台持仓），也不静默改写数量。
+            remaining = frozen
+            taken_td = min(remaining, pos_td)
+            remaining -= taken_td
+            taken_yd = min(remaining, pos_yd)
+            remaining -= taken_yd
+            bucket[2] += taken_yd
+            bucket[3] += taken_td
+            if remaining:
+                skipped.append(
+                    f"{instrument} {side.value}: counter froze {frozen} while reporting {pos_yd + pos_td} position"
+                )
         mapped = tuple(
             Position(
                 instrument=instrument,
@@ -226,8 +237,8 @@ class CtpQueryAdapter(AccountQueryPort):
                 hedge_flag=hedges[(instrument, side)],
                 pos_yd=bucket[0],
                 pos_td=bucket[1],
-                frozen_yd=min(bucket[2], bucket[0]),
-                frozen_td=min(bucket[3], bucket[1]),
+                frozen_yd=bucket[2],
+                frozen_td=bucket[3],
             )
             for (instrument, side), bucket in sorted(positions.items(), key=lambda item: str(item[0]))
         )
@@ -273,18 +284,31 @@ class CtpQueryAdapter(AccountQueryPort):
 
     # ------------------------------------------------------------------ 合约参数（探测脚本与规则核验用）
     def query_instrument(self, symbol: str) -> Mapping[str, object] | None:
-        """查询单个合约的官方参数（乘数 / 最小变动 / 到期日），供 FR-RULE-05 证据登记."""
+        """查询单个合约的官方参数（乘数 / 最小变动 / 到期日），供 FR-RULE-05 证据登记.
+
+        柜台没有用过滤条件、或过滤条件不被支持时可能返回别的合约，因此回包必须与请求的合约一致。
+        """
         require_text(symbol, "instrument symbol")
         batch = self.query_batch("instrument")
         records = self._request_raw("instrument", batch, {"InstrumentID": symbol})
-        return None if not records else dict(records[0])
+        matching = [record for record in records if str(record.get("InstrumentID")) == symbol]
+        if records and not matching:
+            raise CtpQueryError("counter answered an instrument query with a different instrument")
+        return None if not matching else dict(matching[0])
 
     def query_depth(self, symbol: str) -> Mapping[str, object] | None:
-        """查询柜台最新行情快照；用于探测脚本取可核验的价格参考（不是行情订阅通道）."""
+        """查询柜台最新行情快照；用于探测脚本取可核验的价格参考（不是行情订阅通道）.
+
+        SimNow 7x24 环境实测 `ReqQryDepthMarketData` 不遵守 InstrumentID 过滤（请求 rb2610 返回
+        rb2610P3300），因此只接受与请求合约一致的回包；不一致即失败，绝不用它推导委托价格。
+        """
         require_text(symbol, "instrument symbol")
         batch = self.query_batch("depth")
         records = self._request_raw("depth", batch, {"InstrumentID": symbol})
-        return None if not records else dict(records[0])
+        matching = [record for record in records if str(record.get("InstrumentID")) == symbol]
+        if records and not matching:
+            raise CtpQueryError("counter answered a depth query with another instrument; the quote must not be used")
+        return None if not matching else dict(matching[0])
 
     # ------------------------------------------------------------------ 内部
     def query_batch(self, kind: str) -> QueryBatch:
@@ -380,7 +404,7 @@ class CtpQueryAdapter(AccountQueryPort):
             records=records,
             available_at=self._wall_time(),
             source_id=SOURCE_ID,
-            source_version=self._source_version,
+            source_version=self._source_version(),
             complete=complete,
             error_code=error_code,
         )
@@ -404,9 +428,7 @@ class CtpQueryAdapter(AccountQueryPort):
         )
 
     @staticmethod
-    def _position(
-        record: Mapping[str, object],
-    ) -> tuple[InstrumentId, PositionSide, str, int, int, int, int]:
+    def _position(record: Mapping[str, object]) -> tuple[InstrumentId, PositionSide, str, int, int, int]:
         """按 ``PositionDate`` 归类单条持仓记录；无法表达的记录明确失败 (宁可阻塞放行也不猜).
 
         每条记录只取柜台给出的 ``Position`` 总量并归到今日 / 昨仓，不在本地重算今昨仓分配。
@@ -435,9 +457,7 @@ class CtpQueryAdapter(AccountQueryPort):
             pos_yd, pos_td = total, 0
         else:
             raise CtpQueryError(f"position record has no usable PositionDate ({position_date!r})")
-        if frozen > total:
-            raise CtpQueryError("frozen quantity exceeds the reported position bucket")
-        return instrument, side, hedge, pos_yd, pos_td, min(frozen, pos_yd), min(frozen, pos_td)
+        return instrument, side, hedge, pos_yd, pos_td, frozen
 
 
 def _as_int(value: Any) -> int:

@@ -189,11 +189,21 @@ class CtpOrderRef:
 
 
 class CtpOrderRefBook:
-    """本会话 OrderRef 分配与归属；重启时用已持久化的发送结果恢复 (FR-REC-02)."""
+    """本会话 OrderRef 分配与归属；重启时用已持久化的发送结果恢复 (FR-REC-02).
 
-    def __init__(self, *, restored: Iterable[tuple[int, int, str, str]] = ()) -> None:
+    同时记录本地委托对应的合约：撤单请求必须带合约代码（CTP 演示与 SimNow 实测都如此），
+    而 ``OrderIdentity`` 本身不含合约，所以归属信息必须由这里提供。
+    """
+
+    def __init__(
+        self,
+        *,
+        restored: Iterable[tuple[int, int, str, str]] = (),
+        instruments: Mapping[str, InstrumentId] | None = None,
+    ) -> None:
         self._lock = threading.Lock()
         self._owned: dict[tuple[int, int, str], str] = {}
+        self._instruments: dict[str, InstrumentId] = dict(instruments or {})
         self._session: tuple[int, int] | None = None
         self._next_ref = 1
         self.restored_count = 0
@@ -225,7 +235,7 @@ class CtpOrderRefBook:
             self._session = (front_id, session_id)
             self._next_ref = max(start, self._next_ref)
 
-    def allocate(self, client_order_id: str) -> CtpOrderRef:
+    def allocate(self, client_order_id: str, instrument: InstrumentId | None = None) -> CtpOrderRef:
         if not client_order_id:
             raise ValueError("client_order_id is required to allocate an order reference")
         with self._lock:
@@ -237,7 +247,19 @@ class CtpOrderRefBook:
             if len(ref) > 12:
                 raise CtpHandshakeError("order reference exhausted for this CTP session")
             self._owned[(front_id, session_id, ref)] = client_order_id
+            if instrument is not None:
+                self._instruments[client_order_id] = instrument
         return CtpOrderRef(front_id, session_id, ref)
+
+    def instrument_for(self, client_order_id: str | None) -> InstrumentId | None:
+        if not client_order_id:
+            return None
+        with self._lock:
+            return self._instruments.get(client_order_id)
+
+    def remember_instrument(self, client_order_id: str, instrument: InstrumentId) -> None:
+        with self._lock:
+            self._instruments[client_order_id] = instrument
 
     def resolve(self, front_id: int, session_id: int, order_ref: str) -> str | None:
         with self._lock:
@@ -290,6 +312,20 @@ def restore_order_refs(
         if not isinstance(client_order_id, str) or not client_order_id:
             continue
         restored.append((parsed[0], parsed[1], parsed[2], client_order_id))
+    return restored
+
+
+def restore_local_instruments(facts: Iterable[Mapping[str, object]]) -> dict[str, InstrumentId]:
+    """从已持久化的委托事实恢复 ``client_order_id -> 合约``，供重启后的撤单使用."""
+    restored: dict[str, InstrumentId] = {}
+    for fact in facts:
+        if not isinstance(fact, Mapping) or fact.get("kind") != "intent":
+            continue
+        intent = fact.get("intent")
+        instrument = getattr(intent, "instrument", None)
+        client_order_id = getattr(intent, "client_order_id", None)
+        if isinstance(client_order_id, str) and isinstance(instrument, InstrumentId):
+            restored[client_order_id] = instrument
     return restored
 
 
@@ -978,6 +1014,7 @@ class CtpTraderGateway(ExecutionPort):
         self._max_order_ref: str | None = None
         self._last_error: tuple[int | None, str | None] | None = None
         self.rejections: list[str] = []
+        self._cancel_locators: list[Mapping[str, object]] = []
         self.counts = {
             "connect_attempts": 0,
             "front_connected": 0,
@@ -992,6 +1029,9 @@ class CtpTraderGateway(ExecutionPort):
             "send_unknown": 0,
             "fenced_calls": 0,
             "open_without_registration": 0,
+            "cancel_action_ref": 0,
+            "cancel_by_session": 0,
+            "cancel_by_exchange_id": 0,
             "unsupported_capability": 0,
         }
 
@@ -1444,20 +1484,21 @@ class CtpTraderGateway(ExecutionPort):
             self.rejections.append(evidence)
             return LocalSendResult(SendState.NOT_SENT, CODE_PLAN_REJECTED, evidence)
         try:
-            ref = self._ref_book.allocate(order.client_order_id)
-        except (CtpHandshakeError, ValueError) as exc:
+            ref = self._ref_book.allocate(order.client_order_id, order.instrument)
+            identity = OrderIdentity(
+                account_id=self.account_id,
+                exchange=order.instrument.exchange,
+                client_order_id=order.client_order_id,
+                front_id=ref.front_id,
+                session_id=ref.session_id,
+                order_ref=ref.order_ref,
+            )
+        except (CtpHandshakeError, ValueError, TypeError) as exc:
+            # 本地无法形成可归属标识：没有调用柜台，因此是 NOT_SENT 而不是未知发送
             self.counts["submit_refused_local"] += 1
-            evidence = f"no order reference could be assigned locally ({type(exc).__name__})"
+            evidence = f"no attributable local order reference could be assigned ({type(exc).__name__})"
             self.rejections.append(evidence)
             return LocalSendResult(SendState.NOT_SENT, CODE_NOT_READY, evidence)
-        identity = OrderIdentity(
-            account_id=self.account_id,
-            exchange=order.instrument.exchange,
-            client_order_id=order.client_order_id,
-            front_id=ref.front_id,
-            session_id=ref.session_id,
-            order_ref=ref.order_ref,
-        )
         # 最后一次复核紧贴实际 API 调用 (ADR-X1)；不一致绝不调用柜台
         fenced = self._fence(epoch)
         if fenced is not None:
@@ -1505,12 +1546,28 @@ class CtpTraderGateway(ExecutionPort):
         triple = None
         if ref.front_id is not None and ref.session_id is not None and ref.order_ref:
             triple = (ref.front_id, ref.session_id, ref.order_ref)
-        if triple is None:
+        if triple is None and not ref.exchange_order_id:
             return self._refuse_cancel(
                 CODE_INVALID_IDENTITY,
-                "cancellation requires the original (front_id, session_id, order_ref) triple; "
-                "an exchange order id alone is not sufficient in this adapter (FR-ORD-05)",
+                "cancellation requires either the order's own session triple or its exchange order id",
             )
+        instrument = self._ref_book.instrument_for(ref.client_order_id)
+        if instrument is None:
+            # 撤单必须带合约代码（CTP 演示与 SimTime 实测都如此）；本地不知道就拒绝，不猜
+            return self._refuse_cancel(
+                CODE_INVALID_IDENTITY,
+                "cancellation needs the contract; it is not known locally for this order",
+            )
+        # 柜台只用当前会话的原会话三元组定位报单；旧会话的报单必须走交易所单号，
+        # 否则 SimNow 会返回错误码 25 (CTP:不能找到对应的报单)——2026-09-25 实测。
+        same_session = triple is not None and self._ref_book.session == (triple[0], triple[1])
+        if not same_session and not ref.exchange_order_id:
+            return self._refuse_cancel(
+                CODE_INVALID_IDENTITY,
+                "an order placed in a former session can only be cancelled by its exchange order id",
+            )
+        locator = "session" if same_session else "exchange"
+        self.counts["cancel_action_ref"] += 1
         request_id = self._next_request_id()
         try:
             field: Any = self._require_binding().field("CThostFtdcInputOrderActionField")
@@ -1519,9 +1576,12 @@ class CtpTraderGateway(ExecutionPort):
             field.UserID = self.settings.user_id
             field.ActionFlag = ACTION_DELETE
             field.ExchangeID = ref.exchange.value
-            field.OrderRef = str(triple[2])
-            field.FrontID = int(triple[0])
-            field.SessionID = int(triple[1])
+            field.InstrumentID = instrument.symbol
+            field.OrderActionRef = self.counts["cancel_action_ref"]
+            if same_session and triple is not None:
+                field.OrderRef = str(triple[2])
+                field.FrontID = int(triple[0])
+                field.SessionID = int(triple[1])
             if ref.exchange_order_id:
                 field.OrderSysID = ref.exchange_order_id
         except (CtpBindingUnavailableError, AttributeError, TypeError, ValueError) as exc:
@@ -1537,12 +1597,15 @@ class CtpTraderGateway(ExecutionPort):
             code = int(self._require_api().ReqOrderAction(field, request_id))  # type: ignore[attr-defined]
         finally:
             self._release(field)
-        return self._send_result(code, request_id, "ReqOrderAction", CtpOrderRef(*triple), ref)
-        try:
-            code = int(self._require_api().ReqOrderAction(field, request_id))  # type: ignore[attr-defined]
-        finally:
-            self._release(field)
-        return self._send_result(code, request_id, "ReqOrderAction", CtpOrderRef(*triple), ref)
+        evidence_ref = (
+            CtpOrderRef(*triple)
+            if triple is not None
+            else CtpOrderRef(int(field.FrontID or 0), int(field.SessionID or 0), str(field.OrderRef or "0"))
+        )
+        self._cancel_locators.append(
+            {"locator": locator, "request_id": request_id, "order_ref": evidence_ref.order_ref}
+        )
+        return self._send_result(code, request_id, f"ReqOrderAction({locator})", evidence_ref, ref)
 
     def _refuse_cancel(self, code: int, evidence: str) -> LocalSendResult:
         self.counts["cancel_refused_local"] += 1
@@ -1555,7 +1618,11 @@ class CtpTraderGateway(ExecutionPort):
         """本地返回 0 只说明请求被 API 受理；非零返回在没有柜台实测前不假定为"未发送"."""
         prefix = order_ref_evidence(ref) + "; "
         if code == 0:
-            self.counts["submit_accepted" if action == "ReqOrderInsert" else "cancel_accepted"] += 1
+            if action == "ReqOrderInsert":
+                self.counts["submit_accepted"] += 1
+            else:
+                self.counts["cancel_accepted"] += 1
+                self.counts["cancel_by_session" if "(session)" in action else "cancel_by_exchange_id"] += 1
             return LocalSendResult(
                 SendState.SENT_UNKNOWN,
                 0,
@@ -1613,4 +1680,5 @@ class CtpTraderGateway(ExecutionPort):
             "counts": dict(self.counts),
             "callbacks": dict(self.router.counts),
             "last_local_rejections": self.rejections[-5:],
+            "cancel_locators": [dict(item) for item in self._cancel_locators[-5:]],
         }

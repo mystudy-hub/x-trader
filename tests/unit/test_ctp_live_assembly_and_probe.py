@@ -326,7 +326,17 @@ def test_probe_script_collects_redacted_evidence_and_verifies_the_order_round_tr
     shutil.rmtree(target, ignore_errors=True)
     try:
         code = ctp_probe.main(
-            probe_arguments(out_dir, "--order-symbol", SYMBOL, "--price-tick", "1", "--query-interval-ms", "0")
+            probe_arguments(
+                out_dir,
+                "--order-symbol",
+                SYMBOL,
+                "--price-tick",
+                "1",
+                "--query-interval-ms",
+                "0",
+                # 假件的柜台交易日是固定的历史日期：这是接口冒烟，不是交易时段验证
+                "--allow-non-trading-day",
+            )
         )
         assert code == 0
         files = sorted(target.glob("ctp_runtime_evidence_*.json"))
@@ -349,6 +359,22 @@ def test_probe_script_collects_redacted_evidence_and_verifies_the_order_round_tr
         assert order["contract"]["volume_multiple"] == 10
         assert order["result"].startswith("order insert and cancel round trip verified")
         assert report["callbacks_normalized"]["orders"] >= 2
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def test_probe_script_refuses_order_probing_outside_the_counter_trading_day(tmp_path, monkeypatch):
+    binding = build_probe_binding()
+    install_fake_counter(monkeypatch, binding)
+    out_dir = "runs/pytest-ctp-probe-holiday"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        assert ctp_probe.main(probe_arguments(out_dir, "--order-symbol", SYMBOL, "--price-tick", "1")) == 2
+        report = json.loads(sorted(target.glob("ctp_runtime_evidence_*.json"))[0].read_text(encoding="utf-8"))
+        assert "needs a trading session" in report["order_probe"]["error"]
+        assert binding.api.insert_fields == []
+        assert "trading_day_warning" in report
     finally:
         shutil.rmtree(target, ignore_errors=True)
 

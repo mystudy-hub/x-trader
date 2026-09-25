@@ -29,7 +29,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -179,7 +179,8 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         trading_day=lambda: gateway.trading_day,
         interval_ms=args.query_interval_ms,
         timeout_s=args.query_timeout,
-        source_version=f"ctp:{gateway.binding.version}",
+        # 绑定版本只有加载后才知道，因此用惰性取值，避免证据里出现 "unavailable"
+        source_version=lambda: f"ctp:{gateway.binding.version}",
     )
     gateway.router.queries = queries
     report: dict[str, Any] = {
@@ -259,7 +260,27 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     if session.trading_day is None:
         record(Step("counter_trading_day", "failed", {"reason": "the counter reported no trading day"}))
         return report, 1
-    record(Step("counter_trading_day", "passed", {"trading_day": session.trading_day.isoformat()}))
+    local_date = datetime.now(timezone(timedelta(hours=8))).date()
+    matches_local = session.trading_day == local_date
+    record(
+        Step(
+            "counter_trading_day",
+            "passed",
+            {
+                "trading_day": session.trading_day.isoformat(),
+                "local_date": local_date.isoformat(),
+                "matches_local_date": matches_local,
+            },
+        )
+    )
+    if not matches_local:
+        # 休市日或环境滞后：报单 / 撤单只能在交易时段验证，否则会留下无法撤销的委托
+        warning = (
+            f"柜台交易日 {session.trading_day.isoformat()} 与本地日期 {local_date.isoformat()} 不一致"
+            "（休市日或环境按上一交易日镜像）：报单与撤单验证须在交易时段进行"
+        )
+        print(f"注意: {warning}")
+        report["trading_day_warning"] = warning
 
     for name, query in (
         ("account", queries.query_account),
@@ -325,6 +346,11 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         exit_code = max(exit_code, order_exit)
 
     report["gateway_status"] = dict(gateway.status())
+    # 柜台明确拒绝但当前事件类型表达不了的回报（例如撤单被拒）必须留痕，便于直接看错误码
+    report["callback_gaps"] = [dict(gap) for gap in normalizer.gaps]
+    # 查询里被拒收的记录（例如柜台冻结量超过持仓这类当前类型表达不了的口径）必须能看见原因
+    report["query_evidence"] = [dict(item) for item in queries.evidence]
+    report["local_rejections"] = list(gateway.rejections)
     report["callbacks_normalized"] = dict(normalizer.counts)
     report["normalized_events"] = {
         "order_reports": sum(1 for e in sink.events if e.kind == EventKind.ORDER_REPORT),
@@ -354,6 +380,15 @@ def probe_order(
     instrument = parse_symbol(args.order_symbol)
     symbol = instrument.symbol
     detail: dict[str, object] = {"instrument": str(instrument)}
+    local_date = datetime.now(timezone(timedelta(hours=8))).date()
+    if gateway.trading_day is not None and gateway.trading_day != local_date and not args.allow_non_trading_day:
+        # 非交易日或环境滞后时不下单：撤单在柜台的（已关闭）交易日里找不到报单，会留下无法撤销的委托
+        detail["error"] = (
+            f"counter trading day {gateway.trading_day.isoformat()} differs from the local date "
+            f"{local_date.isoformat()}; order probing needs a trading session "
+            "(use --allow-non-trading-day only for API smoke tests)"
+        )
+        return detail, 2
     try:
         contract = queries.query_instrument(symbol)
         depth = queries.query_depth(symbol)
@@ -473,6 +508,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--order-symbol", default=None, help="可选：做开仓限价单 + 撤单闭环的实际合约")
     parser.add_argument("--order-quantity", type=int, default=1, help="报单探测的手数（默认 1 手）")
     parser.add_argument("--order-wait", type=float, default=DEFAULT_ORDER_WAIT_S, help="等待回报的秒数")
+    parser.add_argument(
+        "--allow-non-trading-day",
+        action="store_true",
+        help="允许在柜台交易日与本地日期不一致时仍报单（仅用于接口冒烟，可能留下无法撤销的委托）",
+    )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
     parser.add_argument("--out", default="runs/s0", help="证据输出目录（项目内）")
     parser.add_argument("--json", action="store_true", help="同时打印完整证据 JSON")
@@ -512,6 +552,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
     for step in report["steps"]:
         print(f"[{step['status']}] {step['name']} ({step['seconds']}s)")
+    for gap in report.get("callback_gaps", []):
+        print(
+            f"柜台拒绝未表达回报: {gap.get('callback')} code={gap.get('counter_error_code')} "
+            f"{gap.get('counter_error_message')}"
+        )
     if report.get("order_probe"):
         outcome = report["order_probe"].get("result") or report["order_probe"].get("error")
         print(f"报单探测: {json.dumps(outcome, ensure_ascii=False)}")

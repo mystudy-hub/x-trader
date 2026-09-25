@@ -414,7 +414,8 @@ class OrderIdentity:
                 require_text(getattr(self, name), name)
         for name in ("front_id", "session_id"):
             if getattr(self, name) is not None:
-                require_int(getattr(self, name), name)
+                # 柜台会话号允许为负：SimNow 实测返回负 SessionID，符号不是本地可以假定的不变量
+                require_int(getattr(self, name), name, None)
         original = (self.front_id, self.session_id, self.order_ref)
         if any(part is not None for part in original) and any(part is None for part in original):
             raise ValueError("original session identity must include front_id, session_id and order_ref")

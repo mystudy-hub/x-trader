@@ -364,6 +364,11 @@ class CtpFeedbackNormalizer(FeedbackNormalizerPort):
     def _unrepresentable(self, callback: str, raw: Mapping[str, object], reason: str) -> None:
         """当前事件类型无法表达的回报：留审计证据并返回 None，绝不静默丢弃."""
         self._count("unrepresentable")
+        info = raw.get("rsp")
+        error_code = error_message = None
+        if isinstance(info, Mapping):
+            error_code = None if info.get("ErrorID") in (None, "") else int(str(info["ErrorID"]))
+            error_message = None if info.get("ErrorMsg") in (None, "") else str(info["ErrorMsg"])
         self.gaps.append(
             {
                 "callback": callback,
@@ -372,6 +377,9 @@ class CtpFeedbackNormalizer(FeedbackNormalizerPort):
                 "order_sys_id": raw.get("OrderSysID"),
                 "order_ref": raw.get("OrderRef"),
                 "trade_id": raw.get("TradeID"),
+                # 柜台错误码与报文是诊断唯一依据；它们不含凭证
+                "counter_error_code": error_code,
+                "counter_error_message": error_message,
             }
         )
         LOGGER.warning("CTP callback %s could not be represented: %s", callback, reason)

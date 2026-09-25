@@ -40,6 +40,7 @@ from qh_trader.engine.live_account_model import FACTS_KEY, AccountOpening, LiveA
 from qh_trader.gateway.ctp_gateway import (
     CtpOrderRefBook,
     CtpTraderGateway,
+    restore_local_instruments,
     restore_order_refs,
 )
 from qh_trader.gateway.ctp_query import CtpQueryAdapter
@@ -582,7 +583,11 @@ def _assemble_live(
                 f"{settings.broker_id!r}"
             )
         forwarder = CounterEventForwarder()
-        ref_book = CtpOrderRefBook(restored=restore_order_refs(_account_facts(store), {}))
+        facts = _account_facts(store)
+        ref_book = CtpOrderRefBook(
+            restored=restore_order_refs(facts, {}),
+            instruments=restore_local_instruments(facts),
+        )
         normalizer = build_normalizer(spec.account_id, ref_book)
         price_ticks = {instrument: item.price_tick for instrument, item in economics.items()}
 

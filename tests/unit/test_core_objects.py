@@ -371,6 +371,11 @@ def test_order_identity_can_be_remote_only_but_cannot_use_partial_session_tuple(
         account_id="account-1", exchange=Exchange.SHFE, front_id=1, session_id=0, order_ref="reference"
     )
     assert original.session_id == 0
+    # 柜台会话号可以为负（SimNow 实测返回负值），符号不是本地可假定的不变量
+    negative = OrderIdentity(
+        account_id="account-1", exchange=Exchange.SHFE, front_id=1, session_id=-815893143, order_ref="7"
+    )
+    assert negative.session_id < 0
     with pytest.raises(ValueError, match="original session identity"):
         replace(original, front_id=None)
     with pytest.raises(ValueError, match="nonempty"):

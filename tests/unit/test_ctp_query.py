@@ -15,6 +15,7 @@ from qh_trader.gateway.ctp_query import (
     QUERY_TIMEOUT_CODE,
     QUERY_UNSUPPORTED_CODE,
     CtpQueryAdapter,
+    CtpQueryError,
 )
 from qh_trader.gateway.feedback_normalizer import build_normalizer
 from tests.unit.fake_ctp import FakeCtpBinding, account_record, position_record
@@ -142,6 +143,21 @@ def test_hedged_or_net_positions_make_the_query_incomplete_instead_of_guessing()
     net = FakeCtpBinding(query_records={"position": (position_record(direction="1"),)})
     _, adapter, _ = build(net)
     assert adapter.query_positions(batch(adapter, "position")).complete is False
+
+
+def test_frozen_quantity_beyond_the_position_keeps_the_record_but_flags_it():
+    # SimNow 实测：挂着的开仓委托让柜台返回 LongFrozen=2 而 Position=0；
+    # 不丢弃整条记录（否则对账看不到柜台持仓），也不静默改写数量。
+    record = position_record(position=0, frozen=2)
+    binding = FakeCtpBinding(query_records={"position": (record,)})
+    _, adapter, _ = build(binding)
+    result = adapter.query_positions(batch(adapter, "position"))
+    assert result.complete is False
+    assert result.error_code == QUERY_UNSUPPORTED_CODE
+    assert len(result.records) == 1
+    position = result.records[0]
+    assert (position.pos_td, position.pos_yd, position.frozen_td, position.frozen_yd) == (0, 0, 0, 0)
+    assert "counter froze 2" in adapter.evidence[-1]["skipped"][0]
 
 
 def test_position_without_position_date_is_incomplete():
@@ -272,6 +288,17 @@ def test_instrument_and_depth_queries_expose_the_counter_parameters():
     assert depth["LowerLimitPrice"] == 2700.0
     with pytest.raises(ValueError):
         adapter.query_instrument("")
+
+
+def test_mismatched_query_records_are_refused_instead_of_borrowed():
+    # 柜台未按 InstrumentID 过滤时（SimNow 7x24 的行情查询实测如此），不能借用别的合约的数据
+    other = type("I", (), {"InstrumentID": "rb2610P3300", "ExchangeID": "SHFE", "PriceTick": 1.0})()
+    binding = FakeCtpBinding(query_records={"account": (account_record(),), "instrument": (other,), "depth": (other,)})
+    _, adapter, _ = build(binding)
+    with pytest.raises(CtpQueryError, match="different instrument"):
+        adapter.query_instrument("rb2610")
+    with pytest.raises(CtpQueryError, match="another instrument"):
+        adapter.query_depth("rb2610")
 
 
 def test_unmatched_query_responses_are_counted_not_applied():

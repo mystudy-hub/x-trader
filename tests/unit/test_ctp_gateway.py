@@ -393,25 +393,68 @@ def test_submit_before_connection_is_refused_locally():
 # --------------------------------------------------------------------------------------- 撤单
 
 
-def test_cancel_uses_the_original_session_triple():
+def test_cancel_uses_the_original_session_triple_and_the_contract():
     binding = FakeCtpBinding()
-    gateway, _, _ = make_gateway(binding=binding, offsets=verified_offsets())
+    gateway, _, book = make_gateway(binding=binding, offsets=verified_offsets())
     gateway.connect()
     gateway.mark_reconciled()
+    submitted = gateway.submit(open_intent(), EPOCH)
+    assert submitted.remote_identity is not None
     identity = OrderIdentity(
         account_id=ACCOUNT,
         exchange=Exchange.SHFE,
         client_order_id="cid-1",
         exchange_order_id="sys-1",
-        front_id=12,
-        session_id=345678,
-        order_ref="1",
+        front_id=submitted.remote_identity.front_id,
+        session_id=submitted.remote_identity.session_id,
+        order_ref=submitted.remote_identity.order_ref,
     )
     result = gateway.cancel(identity, EPOCH)
     assert result.state == SendState.SENT_UNKNOWN and result.local_code == 0
     action = binding.api.action_fields[-1]
-    assert (action.OrderRef, action.FrontID, action.SessionID, action.ActionFlag) == ("1", 12, 345678, "0")
+    assert (action.OrderRef, action.FrontID, action.SessionID, action.ActionFlag) == (
+        identity.order_ref,
+        identity.front_id,
+        identity.session_id,
+        "0",
+    )
     assert action.OrderSysID == "sys-1" and action.ExchangeID == "SHFE"
+    # 撤单必须带合约代码与操作引用（CTP 演示与 SimNow 实测都如此），否则柜台会拒单
+    assert action.InstrumentID == RB.symbol
+    assert action.OrderActionRef >= 1
+    assert book.instrument_for("cid-1") == RB
+
+
+def test_cancel_without_a_locally_known_contract_is_refused():
+    binding = FakeCtpBinding()
+    gateway, _, _ = make_gateway(binding=binding, offsets=verified_offsets())
+    gateway.connect()
+    gateway.mark_reconciled()
+    # 重启后既没有分配记录也没有恢复合约：撤单不能靠猜测，直接拒发
+    identity = OrderIdentity(
+        account_id=ACCOUNT,
+        exchange=Exchange.SHFE,
+        client_order_id="cid-unknown",
+        front_id=12,
+        session_id=345678,
+        order_ref="9",
+    )
+    result = gateway.cancel(identity, EPOCH)
+    assert result.state == SendState.NOT_SENT and "contract" in result.evidence
+    assert binding.api.action_fields == []
+
+
+def test_restore_local_instruments_recovers_contracts_from_intent_facts():
+    from qh_trader.gateway.ctp_gateway import restore_local_instruments
+
+    restored = restore_local_instruments(
+        (
+            {"kind": "intent", "intent": open_intent()},
+            {"kind": "send_result", "client_order_id": "cid-1", "result": None},
+            {"kind": "intent", "intent": None},
+        )
+    )
+    assert restored == {"cid-1": RB}
 
 
 def test_cancel_without_the_session_triple_is_refused_locally():
