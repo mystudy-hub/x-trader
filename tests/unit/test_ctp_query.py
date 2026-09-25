@@ -301,6 +301,49 @@ def test_mismatched_query_records_are_refused_instead_of_borrowed():
         adapter.query_depth("rb2610")
 
 
+def test_counter_catalogue_queries_expose_products_exchanges_and_sessions():
+    binding = FakeCtpBinding(
+        query_records={
+            "account": (account_record(),),
+            "product": (
+                type(
+                    "P",
+                    (),
+                    {
+                        "ProductID": "rb",
+                        "ExchangeID": "SHFE",
+                        "ProductName": "螺纹钢",
+                        "VolumeMultiple": 10,
+                        "PriceTick": 1.0,
+                    },
+                )(),
+                type(
+                    "P",
+                    (),
+                    {
+                        "ProductID": "MA",
+                        "ExchangeID": "CZCE",
+                        "ProductName": "甲醇N",
+                        "VolumeMultiple": 10,
+                        "PriceTick": 1.0,
+                    },
+                )(),
+            ),
+            "exchange": (type("E", (), {"ExchangeID": "SHFE", "ExchangeName": "上海期货交易所"})(),),
+            "investor": (type("I", (), {"InvestorID": "231495", "IsActive": 1, "InvestorName": "dudu_test"})(),),
+            "user_session": (type("S", (), {"UserID": "231495", "FrontID": 1, "SessionID": -580682724})(),),
+        }
+    )
+    _, adapter, _ = build(binding)
+    products = adapter.query_products()
+    assert [item["ProductID"] for item in products] == ["rb", "MA"]
+    assert [item["ExchangeID"] for item in adapter.query_exchanges()] == ["SHFE"]
+    investor = adapter.query_investor()
+    assert investor is not None and investor["IsActive"] == 1
+    sessions = adapter.query_user_sessions()
+    assert sessions[0]["SessionID"] == -580682724  # 柜台会话号可以是负值
+
+
 def test_unmatched_query_responses_are_counted_not_applied():
     binding = FakeCtpBinding()
     _, adapter, _ = build(binding)

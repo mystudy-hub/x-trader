@@ -64,6 +64,18 @@ class FakeTraderSpiBase:
     def OnRspQryDepthMarketData(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
         self.calls.append("OnRspQryDepthMarketData")
 
+    def OnRspQryProduct(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryProduct")
+
+    def OnRspQryExchange(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryExchange")
+
+    def OnRspQryInvestor(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryInvestor")
+
+    def OnRspQryUserSession(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryUserSession")
+
 
 class FakeTraderApi:
     """柜台交易接口：握手按脚本应答，报单 / 撤单 / 查询记录到 ``calls``."""
@@ -169,6 +181,18 @@ class FakeTraderApi:
 
     def ReqQryDepthMarketData(self, field: FakeField, request_id: int) -> int:  # noqa: N802
         return self._query("depth", field, request_id)
+
+    def ReqQryProduct(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("product", field, request_id)
+
+    def ReqQryExchange(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("exchange", field, request_id)
+
+    def ReqQryInvestor(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("investor", field, request_id)
+
+    def ReqQryUserSession(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("user_session", field, request_id)
 
     def _query(self, kind: str, field: FakeField, request_id: int) -> int:
         self.calls.append((f"ReqQry:{kind}", field))
@@ -306,6 +330,10 @@ QUERY_CALLBACKS = {
     "order": "OnRspQryOrder",
     "trade": "OnRspQryTrade",
     "instrument": "OnRspQryInstrument",
+    "product": "OnRspQryProduct",
+    "exchange": "OnRspQryExchange",
+    "investor": "OnRspQryInvestor",
+    "user_session": "OnRspQryUserSession",
     "depth": "OnRspQryDepthMarketData",
     "settlement_confirm": "OnRspQrySettlementInfoConfirm",
 }

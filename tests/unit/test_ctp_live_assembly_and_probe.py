@@ -223,6 +223,67 @@ def test_probe_script_collects_market_snapshots(tmp_path, monkeypatch):
         shutil.rmtree(target, ignore_errors=True)
 
 
+def test_probe_script_compares_counter_products_with_the_local_registry(tmp_path, monkeypatch):
+    binding = build_probe_binding()
+    # 柜台给出的乘数/最小变动与本地登记一致；再放一个本地未登记的品种，比对不应把它算进来
+    binding.query_records["product"] = (
+        type(
+            "P",
+            (),
+            {"ProductID": "rb", "ExchangeID": "SHFE", "ProductName": "螺纹钢", "VolumeMultiple": 10, "PriceTick": 1.0},
+        )(),
+        type(
+            "P",
+            (),
+            {"ProductID": "au", "ExchangeID": "SHFE", "ProductName": "黄金", "VolumeMultiple": 1000, "PriceTick": 0.02},
+        )(),
+        type(
+            "P",
+            (),
+            {
+                "ProductID": "unknown_x",
+                "ExchangeID": "DCE",
+                "ProductName": "未登记品种",
+                "VolumeMultiple": 7,
+                "PriceTick": 3.0,
+            },
+        )(),
+    )
+    binding.query_records["exchange"] = (type("E", (), {"ExchangeID": "SHFE", "ExchangeName": "上海期货交易所"})(),)
+    binding.query_records["investor"] = (type("I", (), {"InvestorID": "231495", "IsActive": 1})(),)
+    binding.query_records["user_session"] = (type("S", (), {"UserID": "231495", "FrontID": 1, "SessionID": 12})(),)
+    install_fake_counter(monkeypatch, binding)
+    out_dir = "runs/pytest-ctp-probe-catalog"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        assert ctp_probe.main(probe_arguments(out_dir, "--verify-catalog")) == 0
+        diff = json.loads(sorted(target.glob("ctp_catalog_diff_*.json"))[0].read_text(encoding="utf-8"))
+        comparison = diff["comparison"]
+        assert comparison["compared"]  # 本地登记里在柜台存在的品种
+        assert comparison["mismatches"] == []
+        assert all(item["matches"] for item in comparison["compared"])
+        assert diff["counter_products"] == 3
+        assert diff["user_sessions"] == [{"front_id": 1, "session_id": 12}]
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def test_product_comparison_flags_mismatches_and_missing_products():
+    from scripts import ctp_setup
+
+    # 柜台把螺纹钢的最小变动报成 2（与本地登记的 1 不一致），并缺少其余品种
+    outcome = ctp_setup.compare_products(
+        [{"ProductID": "rb", "ExchangeID": "SHFE", "ProductName": "螺纹钢", "VolumeMultiple": 10, "PriceTick": 2.0}]
+    )
+    assert outcome["counter_products"] == 1
+    assert len(outcome["mismatches"]) == 1
+    assert outcome["mismatches"][0]["product"] == "SHFE.RB"
+    assert outcome["mismatches"][0]["counter_price_tick"] == "2.0"
+    assert "CZCE.MA" in outcome["missing_at_counter"]
+    assert "commission_and_margin" in outcome
+
+
 def test_live_assembly_refuses_a_counter_trading_day_that_differs(tmp_path, monkeypatch):
     binding = fake_account()
     install_fake_counter(monkeypatch, binding)

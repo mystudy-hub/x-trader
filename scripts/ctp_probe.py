@@ -341,6 +341,19 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     if sink.callback_errors:
         report["callback_errors"] = list(sink.callback_errors)
 
+    if args.verify_catalog:
+        catalog_report, catalog_exit = probe_catalog(args, queries)
+        report["catalog_check"] = catalog_report
+        exit_code = max(exit_code, catalog_exit)
+        out_dir = (ROOT / args.out).resolve() if args.out else None
+        if out_dir is not None and out_dir.is_relative_to(ROOT / "runs"):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            diff_path = out_dir / f"ctp_catalog_diff_{stamp}.json"
+            payload = json.dumps(catalog_report, ensure_ascii=False, indent=2, default=str) + "\n"
+            diff_path.write_text(payload, encoding="utf-8")
+            report["catalog_diff_file"] = diff_path.relative_to(ROOT).as_posix()
+
     if args.market_symbol:
         market_report, market_exit = probe_market(args, gateway, sink)
         report["market_probe"] = market_report
@@ -365,6 +378,40 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     }
     gateway.close()
     return report, exit_code
+
+
+def probe_catalog(args: argparse.Namespace, queries: CtpQueryAdapter) -> tuple[Mapping[str, object], int]:
+    """柜台品种 / 交易所 / 投资者 / 用户会话查询，并与本地品种登记比对 (FR-RULE-05, A23).
+
+    只读查询，交易日无关；费率与保证金查询在休市日返回空，这里不把它们当成已核验口径。
+    """
+    detail: dict[str, object] = {}
+    try:
+        products = queries.query_products()
+        exchanges = queries.query_exchanges()
+        investor = queries.query_investor()
+        sessions = queries.query_user_sessions()
+    except Exception as exc:
+        detail["error"] = f"counter queries failed ({type(exc).__name__})"
+        return detail, 1
+    detail["counter_products"] = len(products)
+    detail["counter_exchanges"] = [str(item.get("ExchangeID")) for item in exchanges]
+    detail["investor"] = {
+        "investor_id": None if investor is None else investor.get("InvestorID"),
+        "active": None if investor is None else investor.get("IsActive"),
+        "name_present": bool(investor and investor.get("InvestorName")),
+    }
+    detail["user_sessions"] = [
+        {"front_id": item.get("FrontID"), "session_id": item.get("SessionID")} for item in sessions
+    ]
+    comparison = ctp_setup.compare_products(products)
+    detail["comparison"] = comparison
+    detail["result"] = (
+        "counter product parameters compared with the local registry"
+        if not comparison["mismatches"]
+        else "counter product parameters disagree with the local registry for at least one product"
+    )
+    return detail, 0 if not comparison["mismatches"] else 2
 
 
 def probe_market(
@@ -585,6 +632,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="允许在柜台交易日与本地日期不一致时仍报单（仅用于接口冒烟，可能留下无法撤销的委托）",
     )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
+    parser.add_argument(
+        "--verify-catalog",
+        action="store_true",
+        help="查询柜台品种 / 交易所 / 投资者 / 用户会话，并与本地品种登记比对（写入 runs/s0/ctp_catalog_diff_*.json）",
+    )
     parser.add_argument("--market-symbol", default=None, help="可选：订阅行情并收集逐笔快照，如 SHFE.rb2610")
     parser.add_argument("--market-front", default=None, help="行情前置（默认取柜台登记的 fronts.market）")
     parser.add_argument("--market-seconds", type=float, default=8.0, help="收集行情的秒数")
@@ -632,6 +684,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"柜台拒绝未表达回报: {gap.get('callback')} code={gap.get('counter_error_code')} "
             f"{gap.get('counter_error_message')}"
         )
+    if report.get("catalog_check"):
+        check = report["catalog_check"]
+        print(
+            f"柜台口径比对: 品种 {check.get('counter_products')} 个，"
+            f"不一致 {len((check.get('comparison') or {}).get('mismatches', []))} 项，"
+            f"柜台缺失 {len((check.get('comparison') or {}).get('missing_at_counter', []))} 项"
+        )
+        print(f"    比对文件: {report.get('catalog_diff_file')}")
     if report.get("market_probe"):
         probe = report["market_probe"]
         print(f"行情探测: ticks={probe.get('ticks')} {probe.get('result') or probe.get('error')}")

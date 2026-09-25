@@ -58,6 +58,10 @@ FIELD_BY_KIND = {
     "order": "CThostFtdcQryOrderField",
     "trade": "CThostFtdcQryTradeField",
     "instrument": "CThostFtdcQryInstrumentField",
+    "product": "CThostFtdcQryProductField",
+    "exchange": "CThostFtdcQryExchangeField",
+    "investor": "CThostFtdcQryInvestorField",
+    "user_session": "CThostFtdcQryUserSessionField",
     "depth": "CThostFtdcQryDepthMarketDataField",
     "settlement_confirm": "CThostFtdcQrySettlementInfoConfirmField",
 }
@@ -67,6 +71,10 @@ REQUEST_BY_KIND = {
     "order": "ReqQryOrder",
     "trade": "ReqQryTrade",
     "instrument": "ReqQryInstrument",
+    "product": "ReqQryProduct",
+    "exchange": "ReqQryExchange",
+    "investor": "ReqQryInvestor",
+    "user_session": "ReqQryUserSession",
     "depth": "ReqQryDepthMarketData",
     "settlement_confirm": "ReqQrySettlementInfoConfirm",
 }
@@ -281,6 +289,27 @@ class CtpQueryAdapter(AccountQueryPort):
             if isinstance(trade, Trade):
                 trades.setdefault(trade.trade_id, trade)
         return self._result("trade", batch, tuple(trades.values()), error, skipped)
+
+    # ------------------------------------------------------------------ 柜台口径（规则核验与联调证据）
+    def query_products(self) -> tuple[Mapping[str, object], ...]:
+        """柜台品种清单（官方乘数与最小变动），用于与本地登记比对 (FR-RULE-05)."""
+        return tuple(self._request_raw("product", self.query_batch("product"), {}))
+
+    def query_exchanges(self) -> tuple[Mapping[str, object], ...]:
+        return tuple(self._request_raw("exchange", self.query_batch("exchange"), {}))
+
+    def query_investor(self) -> Mapping[str, object] | None:
+        records = self._request_raw("investor", self.query_batch("investor"), {"InvestorID": self.investor_id})
+        return None if not records else dict(records[0])
+
+    def query_user_sessions(self, user_id: str | None = None) -> tuple[Mapping[str, object], ...]:
+        """柜台侧的用户会话列表；接管隔离审计用它核对旧会话是否真的消失 (A23)."""
+        extra = {"UserID": user_id or self.investor_id}
+        return tuple(self._request_raw("user_session", self.query_batch("user_session"), extra))
+
+    def query_all_instruments(self) -> tuple[Mapping[str, object], ...]:
+        """全量合约清单（不填条件）——用于与本地合约目录比对."""
+        return tuple(self._request_raw("instrument", self.query_batch("instrument"), {}))
 
     # ------------------------------------------------------------------ 合约参数（探测脚本与规则核验用）
     def query_instrument(self, symbol: str) -> Mapping[str, object] | None:

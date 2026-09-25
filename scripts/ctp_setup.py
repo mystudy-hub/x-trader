@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -250,3 +251,65 @@ def register_front_candidates(profile: Mapping[str, Any], *, now: datetime | Non
         for name, value in sorted(fronts.items())
         if isinstance(value, str) and value.startswith("tcp://")
     )
+
+
+def product_specs() -> Mapping[str, object]:
+    """本地登记的品种口径（研究假设，来源字段逐项标注）."""
+    from qh_trader.data.product_registry import registered_products
+
+    return {spec.product.upper(): spec for spec in registered_products()}
+
+
+def compare_products(counter_products: Sequence[Mapping[str, object]]) -> Mapping[str, object]:
+    """柜台品种清单 vs 本地品种登记：只比对柜台直接给出的乘数与最小变动 (FR-RULE-05).
+
+    本地登记里的手续费与保证金比例没有对应的柜台查询结果（SimNow 休市日返回空），因此只登记为
+    "无柜台口径"，不假装已核验。
+    """
+    registry = product_specs()
+    by_id = {}
+    for record in counter_products:
+        product_id = record.get("ProductID")
+        exchange = record.get("ExchangeID")
+        if isinstance(product_id, str) and isinstance(exchange, str):
+            by_id[(product_id.upper(), exchange)] = record
+    compared: list[Mapping[str, object]] = []
+    missing: list[str] = []
+    for name, spec in sorted(registry.items()):
+        record = by_id.get((name, spec.exchange.value))
+        if record is None:
+            missing.append(f"{spec.exchange.value}.{name}")
+            continue
+        counter_multiplier = record.get("VolumeMultiple")
+        counter_tick = record.get("PriceTick")
+        matches = (
+            counter_multiplier is not None
+            and Decimal(str(counter_multiplier)) == Decimal(spec.multiplier)
+            and counter_tick is not None
+            and Decimal(str(counter_tick)) == Decimal(spec.price_tick)
+        )
+        compared.append(
+            {
+                "product": f"{spec.exchange.value}.{name}",
+                "registry_multiplier": str(spec.multiplier),
+                "counter_multiplier": None if counter_multiplier is None else str(counter_multiplier),
+                "registry_price_tick": str(spec.price_tick),
+                "counter_price_tick": None if counter_tick is None else str(counter_tick),
+                "counter_name": record.get("ProductName"),
+                "matches": matches,
+                "registry_verification_status": spec.verification_status,
+                "registry_source": spec.source,
+            }
+        )
+    mismatches = [item for item in compared if not item["matches"]]
+    return {
+        "counter_products": len(counter_products),
+        "registered_products": len(registry),
+        "compared": compared,
+        "missing_at_counter": missing,
+        "mismatches": mismatches,
+        "commission_and_margin": (
+            "本地登记的手续费与保证金比例没有柜台查询结果可比（SimNow 休市日的费率/保证金查询返回空），"
+            "仍是研究假设，须在交易时段或真实柜台核验"
+        ),
+    }

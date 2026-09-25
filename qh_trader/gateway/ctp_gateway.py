@@ -590,6 +590,26 @@ TRADER_POSITION_FIELDS = (
     "PositionProfit",
     "TradingDay",
 )
+TRADER_PRODUCT_FIELDS = (
+    "ProductID",
+    "ExchangeID",
+    "ProductName",
+    "VolumeMultiple",
+    "PriceTick",
+    "TradeCurrencyID",
+    "ProductClass",
+)
+TRADER_EXCHANGE_FIELDS = ("ExchangeID", "ExchangeName", "ExchangeProperty")
+TRADER_INVESTOR_FIELDS = (
+    "BrokerID",
+    "InvestorID",
+    "InvestorName",
+    "IdentifiedCardNo",
+    "IdentifiedCardType",
+    "IsActive",
+    "InvestorGroupID",
+)
+TRADER_USER_SESSION_FIELDS = ("BrokerID", "UserID", "FrontID", "SessionID")
 TRADER_DEPTH_FIELDS = (
     "InstrumentID",
     "ExchangeID",
@@ -789,6 +809,10 @@ QUERY_FIELDS: dict[str, tuple[str, ...]] = {
     "order": TRADER_ORDER_FIELDS,
     "trade": TRADER_TRADE_FIELDS,
     "instrument": TRADER_INSTRUMENT_FIELDS,
+    "product": TRADER_PRODUCT_FIELDS,
+    "exchange": TRADER_EXCHANGE_FIELDS,
+    "investor": TRADER_INVESTOR_FIELDS,
+    "user_session": TRADER_USER_SESSION_FIELDS,
     "depth": TRADER_DEPTH_FIELDS,
     "settlement_confirm": TRADER_SETTLEMENT_CONFIRM_FIELDS,
 }
@@ -877,6 +901,18 @@ def build_trader_spi(binding: CtpBinding, router: CtpCallbackRouter) -> object:
     def on_rsp_qry_depth_market_data(self: object, field, info, request_id: int, is_last: bool) -> None:
         router.on_query(kind="depth", request_id=request_id, record=field, info=info, is_last=is_last)
 
+    def on_rsp_qry_product(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="product", request_id=request_id, record=field, info=info, is_last=is_last)
+
+    def on_rsp_qry_exchange(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="exchange", request_id=request_id, record=field, info=info, is_last=is_last)
+
+    def on_rsp_qry_investor(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="investor", request_id=request_id, record=field, info=info, is_last=is_last)
+
+    def on_rsp_qry_user_session(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="user_session", request_id=request_id, record=field, info=info, is_last=is_last)
+
     namespace = {
         "OnFrontConnected": on_front_connected,
         "OnFrontDisconnected": on_front_disconnected,
@@ -899,6 +935,10 @@ def build_trader_spi(binding: CtpBinding, router: CtpCallbackRouter) -> object:
         "OnRspQryTrade": on_rsp_qry_trade,
         "OnRspQryInstrument": on_rsp_qry_instrument,
         "OnRspQryDepthMarketData": on_rsp_qry_depth_market_data,
+        "OnRspQryProduct": on_rsp_qry_product,
+        "OnRspQryExchange": on_rsp_qry_exchange,
+        "OnRspQryInvestor": on_rsp_qry_investor,
+        "OnRspQryUserSession": on_rsp_qry_user_session,
     }
     return type("CtpTraderSpi", (binding.trader_spi_base(),), namespace)()
 
