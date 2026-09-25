@@ -127,11 +127,28 @@ class CtpSettings:
     query_timeout_s: float = 15.0
     local_reject_codes: frozenset[int] = frozenset()
 
+    # 柜台字段是定长 char 数组，超长会在绑定层直接抛异常（实测 UserProductInfo 超过 10 字符即失败），
+    # 因此在本地就按头文件长度校验：TThostFtdcBrokerIDType[11] / UserIDType[16] / InvestorIDType[13]
+    # / PasswordType[41] / ProductInfoType[11] / AuthCodeType[17] / AppIDType[33]。
+    FIELD_LIMITS = {
+        "broker_id": 10,
+        "user_id": 15,
+        "investor_id": 12,
+        "password": 40,
+        "product_info": 10,
+        "app_id": 32,
+        "auth_code": 16,
+    }
+
     def __post_init__(self) -> None:
         for name in ("front_trade", "broker_id", "investor_id", "user_id", "password"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} is required to contact a broker")
+        for name, limit in self.FIELD_LIMITS.items():
+            value = getattr(self, name)
+            if value is not None and len(value) > limit:
+                raise ValueError(f"{name} exceeds the CTP field limit of {limit} characters")
         if not self.front_trade.startswith("tcp://"):
             raise ValueError("a CTP front address must be a tcp:// URI")
         for name in ("connect_timeout_s", "login_timeout_s", "query_timeout_s"):

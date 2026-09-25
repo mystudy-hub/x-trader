@@ -140,6 +140,17 @@ def verified_offsets() -> tuple[CtpOffsetMapping, ...]:
 # --------------------------------------------------------------------------------------- 握手
 
 
+def test_connection_field_lengths_are_validated_before_touching_the_counter():
+    # 柜台字段是定长 char 数组：超长在绑定层抛 TypeError（实测 UserProductInfo>10 即失败），
+    # 因此在本地就报出可读错误
+    with pytest.raises(ValueError, match="product_info"):
+        make_settings(product_info="qh_trader_probe")
+    with pytest.raises(ValueError, match="user_id"):
+        make_settings(user_id="x" * 16)
+    with pytest.raises(ValueError, match="broker_id"):
+        make_settings(broker_id="9" * 11)
+
+
 def test_handshake_authenticates_logs_in_and_confirms_settlement():
     binding = FakeCtpBinding()
     gateway, _, _ = make_gateway(binding=binding)

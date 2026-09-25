@@ -18,7 +18,7 @@ gaps:
     - 报单
     - 回报处理
   current_handling: 阻断实盘
-  handling_details: 已选定 openctp-ctp 6.7.11.0 并锁定；2026-09-25 在 SimNow 7x24 环境（182.254.243.31:40001）实测跑通终端认证、登录、结算确认、资金/持仓/报单/成交查询与一笔开仓报单回报（按原会话三元组归属），原生库哈希已记录。撤单因当天为中秋节休市日被柜台以错误码 25 拒绝，须在交易时段重测；终端采集认证顺序与期货公司柜台兼容性仍未联调。运行证据见 runs/s0/ctp_runtime_evidence_*.json，通道为 scripts/ctp_probe.py + init_env.py --ctp-evidence。
+  handling_details: 已选定 openctp-ctp 6.7.11.0 并锁定；2026-09-25 在 SimNow 7x24 环境（182.254.243.31:40001）实测跑通终端认证、登录、结算确认、资金/持仓/报单/成交查询与一笔开仓报单回报（按原会话三元组归属），原生库哈希已记录。撤单因当天为中秋节休市日被柜台以错误码 25 拒绝，须在交易时段重测；重复登录实测不踢旧会话（不能作为隔离证据）；终端采集认证顺序与期货公司柜台兼容性仍未联调。运行证据见 runs/s0/ctp_runtime_evidence_*.json，通道为 scripts/ctp_probe.py + init_env.py --ctp-evidence。
   registered_at: '2026-09-13'
   registered_by: 开发团队
   close_condition: 完成 S0-02 联调：登录、查询持仓、报单、接收回报全流程验证并记录 DLL 哈希
