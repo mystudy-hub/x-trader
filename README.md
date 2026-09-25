@@ -6,7 +6,7 @@
 
 ## 当前进度
 
-2026-09-24 增量：已交付 [S5-01 CTP 网关与 S5-02 回报归一化](docs/06_开发计划.md#s5-01-ctp-gateway) 的本地实现：`gateway/ctp_gateway.py`（握手、代次复核、按柜台 `MaxOrderRef` 分配并持久化委托号、回调只入队）、`gateway/feedback_normalizer.py`（报单 / 成交 / 纠错回报归一化）、`gateway/ctp_query.py`（资金 / 持仓 / 报单 / 成交与合约查询），`--mode live` 装配按"连接 → 隔离 → 提升代次 → 对账 → 放行"推进。CTP 绑定锁定为 `openctp-ctp==6.7.11.0`（`uv sync --extra ctp`），SimNow 前置候选与接入参数已登记，`scripts/ctp_probe.py` 生成脱敏登录 / 查询 / 报单证据。**未核验能力一律禁用**：今昨仓映射与市价单未核验即拒发，撤单必须带原会话三元组。**已在 SimNow 7x24 环境实测跑通登录、资金 / 持仓 / 报单 / 成交查询与一笔开仓报单（柜台回报 `ACCEPTED` 并按原会话三元组归属）；撤单被柜台以错误码 25 拒绝，原因是当天为中秋节休市日，须在 2026-09-28 交易时段重测**，GAP-S0-01 / GAP-S0-05 未关闭，S5-03 终端采集、S5-05 实盘引擎、S5-06 看门狗与 S5-12 月度仿真仍待交付，S5 阶段出口不变。
+2026-09-24 增量：已交付 [S5-01 CTP 网关与 S5-02 回报归一化](docs/06_开发计划.md#s5-01-ctp-gateway) 的本地实现：`gateway/ctp_gateway.py`（握手、代次复核、按柜台 `MaxOrderRef` 分配并持久化委托号、回调只入队）、`gateway/feedback_normalizer.py`（报单 / 成交 / 纠错回报归一化）、`gateway/ctp_query.py`（资金 / 持仓 / 报单 / 成交与合约查询）、`gateway/ctp_market.py`（MdApi 行情订阅与 Tick 归一化），`--mode live` 装配按"连接 → 隔离 → 提升代次 → 对账 → 放行"推进。CTP 绑定锁定为 `openctp-ctp==6.7.11.0`（`uv sync --extra ctp`），SimNow 前置候选与接入参数已登记，`scripts/ctp_probe.py` 生成脱敏登录 / 查询 / 报单证据。**未核验能力一律禁用**：今昨仓映射与市价单未核验即拒发，撤单必须带原会话三元组。**已在 SimNow 7x24 环境实测跑通登录、资金 / 持仓 / 报单 / 成交查询与一笔开仓报单（柜台回报 `ACCEPTED` 并按原会话三元组归属）；撤单被柜台以错误码 25 拒绝，原因是当天为中秋节休市日，须在 2026-09-28 交易时段重测**，GAP-S0-01 / GAP-S0-05 未关闭，S5-03 终端采集、S5-05 实盘引擎、S5-06 看门狗与 S5-12 月度仿真仍待交付，S5 阶段出口不变。
 
 2026-09-23 增量：已交付 [S5-04 实盘账户模型与运行入口、S5-08 结算单比对](docs/06_开发计划.md#s5-04-live-assembly)。`scripts/run_execution_service.py` 可在纸面模式下完成接管、对账、放行与主循环，实盘模式在 CTP 网关交付前拒绝启动；`scripts/parse_statement.py` 逐项比对结算单与本地账本，超误差时可写入只减仓命令。账户事实全量重放的性能限制已登记为 06 R11，须在 S5-12 连续仿真前解决；柜台联调与实际结算单核验仍待进行。
 

@@ -43,6 +43,7 @@ from qh_trader.gateway.ctp_gateway import (
     restore_local_instruments,
     restore_order_refs,
 )
+from qh_trader.gateway.ctp_market import CtpMarketDataGateway, CtpMarketSettings
 from qh_trader.gateway.ctp_query import CtpQueryAdapter
 from qh_trader.gateway.epoch_fence import EpochFencedGateway
 from qh_trader.gateway.feedback_normalizer import build_normalizer
@@ -316,6 +317,8 @@ class AssembledExecution:
     stack: ExitStack = field(default_factory=ExitStack)
     heartbeat_failures: int = 0
     counter_gateway: CtpTraderGateway | None = None
+    market_gateway: CtpMarketDataGateway | None = None
+    market_report: Mapping[str, object] | None = None
     forwarder: CounterEventForwarder | None = None
     profile_summary: Mapping[str, object] = field(default_factory=dict)
     session_report: Mapping[str, object] | None = None
@@ -335,6 +338,27 @@ class AssembledExecution:
             heartbeat_path=self.spec.heartbeat_path,
             operator_confirmed=operator_confirmed,
         )
+
+    def connect_market(self, instruments: Sequence[InstrumentId]) -> Mapping[str, object] | None:
+        """连接行情通道并订阅合约；行情不可用不阻断下单，但如实登记 (S5-01 行情面).
+
+        行情缺失只意味着没有新的盯市价格（结算门禁会等待价格），不会把缺失读成 0。
+        """
+        market = self.market_gateway
+        if market is None:
+            return None
+        try:
+            report = dict(market.connect())
+            accepted = market.subscribe(instruments)
+            report["subscribed"] = list(accepted)
+        except Exception as exc:
+            LOGGER.warning("CTP market data channel is unavailable (%s); mark prices will wait", type(exc).__name__)
+            report = {"available": False, "error_type": type(exc).__name__, "status": dict(market.status())}
+        else:
+            report["available"] = True
+            report["status"] = dict(market.status())
+        self.market_report = report
+        return report
 
     def connect_counter(self) -> Mapping[str, object] | None:
         """连接柜台并校验交易日；纸面模式无操作 (S5-01 连接 + FR-CAL-03 交易日核验)."""
@@ -486,6 +510,7 @@ class AssembledExecution:
                 "profile": dict(self.profile_summary),
                 "status": dict(self.counter_gateway.status()),
                 "session": self.session_report,
+                "market": self.market_report,
             },
             "instruments": {str(instrument): eco.source for instrument, eco in self.economics.items()},
             "account_facts": self.model.fact_count,
@@ -623,6 +648,15 @@ def _assemble_live(
             source_version="ctp:" + counter.binding.version,
         )
         counter.router.queries = query
+        market_front = ctp_setup.front_addresses(profile).get("market")
+        market = (
+            CtpMarketDataGateway(
+                settings=CtpMarketSettings.from_settings(settings, front_market=market_front),
+                events=forwarder,
+            )
+            if market_front
+            else None
+        )
         gateway = EpochFencedGateway(counter, lambda: _current_epoch(store))
         placeholder = model.replica()
         recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions)
@@ -648,6 +682,7 @@ def _assemble_live(
         economics=economics,
         stack=stack,
         counter_gateway=counter,
+        market_gateway=market,
         forwarder=forwarder,
         profile_summary=ctp_setup.profile_summary(profile),
     )

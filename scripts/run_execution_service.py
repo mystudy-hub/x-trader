@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from qh_trader.core.constants import Exchange  # noqa: E402
 from qh_trader.core.execution import CommandStatus, ExecutionNotReadyError  # noqa: E402
+from qh_trader.core.objects import InstrumentId  # noqa: E402
 from scripts.live_assembly import (  # noqa: E402
     AssemblyError,
     assemble,
@@ -109,6 +111,15 @@ def main(argv: list[str] | None = None) -> int:
                     session.get("session_id"),
                     session.get("trading_day"),
                 )
+                market = assembled.connect_market(
+                    [
+                        InstrumentId(Exchange(part.split(".", 1)[0]), part.split(".", 1)[1])
+                        for part in spec.symbols
+                        if "." in part
+                    ]
+                )
+                if market is not None:
+                    LOGGER.info("market data channel: %s", market)
         command_id = args.take_over
         if args.request_control:
             command_id = assembled.request_control(args.request_control).command_id

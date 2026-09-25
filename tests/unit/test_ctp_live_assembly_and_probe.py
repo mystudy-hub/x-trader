@@ -14,9 +14,10 @@ import yaml
 from qh_trader.core.constants import Exchange, Offset, OrderStatus, OrderType, SendState, Side
 from qh_trader.core.execution import CommandKind, CommandStatus, ExecutionCommand
 from qh_trader.core.objects import InstrumentId, OrderIntent
-from qh_trader.gateway import ctp_gateway
+from qh_trader.gateway import ctp_gateway, ctp_market
 from scripts import ctp_probe, run_execution_service
 from scripts.live_assembly import AssemblyError, assemble, spec_from_settings
+from tests.unit.fake_ctp import FakeMdBinding
 
 ROOT = Path(__file__).resolve().parents[2]
 DAY = date(2024, 9, 10)
@@ -158,6 +159,68 @@ def test_live_assembly_connects_takes_over_reconciles_and_routes_counter_reports
         assert len(binding.api.insert_fields) == 1
     finally:
         assembled.close()
+
+
+def test_live_assembly_wires_the_market_channel_into_the_service(tmp_path, monkeypatch):
+    binding = fake_account()
+    install_fake_counter(monkeypatch, binding)
+    md_binding = FakeMdBinding(symbol="rb2410")
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    assembled = assemble(live_spec(tmp_path))
+    try:
+        assembled.connect_counter()
+        market = assembled.connect_market([INSTRUMENT])
+        assert market is not None and market["available"] is True
+        assert market["subscribed"] == ["rb2410"]
+        md_binding.api.push_tick(InstrumentID="rb2410", TradingDay=DAY.strftime("%Y%m%d"))
+        # 行情事件进入执行服务的有界行情队列，并只用于盯市价格
+        assert assembled.service.metrics["market_queue_depth"] == 1
+        assembled.step()
+        assert assembled.service.metrics["market_queue_depth"] == 0
+        assert assembled.market_gateway is not None
+        assert assembled.market_gateway.counts["ticks_enqueued"] == 1
+        assert assembled.manifest()["counter"]["market"]["available"] is True
+    finally:
+        assembled.close()
+
+
+def test_live_assembly_survives_an_unavailable_market_channel(tmp_path, monkeypatch):
+    binding = fake_account()
+    install_fake_counter(monkeypatch, binding)
+    md_binding = FakeMdBinding(login_code=3)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    assembled = assemble(live_spec(tmp_path))
+    try:
+        assembled.connect_counter()
+        report = assembled.connect_market([INSTRUMENT])
+        # 行情不可用不阻断下单，但如实登记（缺价时结算门禁等待价格，不把缺失读成 0）
+        assert report is not None and report["available"] is False
+        assert report["error_type"] == "CtpHandshakeError"
+    finally:
+        assembled.close()
+
+
+def test_probe_script_collects_market_snapshots(tmp_path, monkeypatch):
+    binding = build_probe_binding()
+    install_fake_counter(monkeypatch, binding)
+    md_binding = FakeMdBinding(symbol="rb2610", auto_tick_on_subscribe=True)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    out_dir = "runs/pytest-ctp-probe-market"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        code = ctp_probe.main(
+            probe_arguments(out_dir, "--market-symbol", "SHFE.rb2610", "--market-seconds", "1", "--market-ticks", "1")
+        )
+        assert code == 0
+        report = json.loads(sorted(target.glob("ctp_runtime_evidence_*.json"))[0].read_text(encoding="utf-8"))
+        probe = report["market_probe"]
+        assert probe["subscribed"] == ["rb2610"]
+        assert probe["result"] == "market data snapshots normalized and enqueued"
+        assert probe["first_tick"]["last_price"] == "3053.0"
+        assert probe["first_tick"]["phase"] == "UNKNOWN"
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
 
 
 def test_live_assembly_refuses_a_counter_trading_day_that_differs(tmp_path, monkeypatch):

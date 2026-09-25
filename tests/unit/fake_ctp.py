@@ -413,3 +413,158 @@ class FakeCtpBinding:
     def api(self) -> FakeTraderApi:
         assert self.created, "the gateway has not created a trader api yet"
         return self.created[-1]
+
+
+# --------------------------------------------------------------------------------- 行情（MdApi）假件
+
+
+class FakeMdSpiBase:
+    """行情 SPI 基类：只保留网关会覆盖的方法名."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def OnFrontConnected(self) -> None:  # noqa: N802
+        self.calls.append("OnFrontConnected")
+
+    def OnFrontDisconnected(self, nReason: int) -> None:  # noqa: N802, N803
+        self.calls.append("OnFrontDisconnected")
+
+    def OnRspSubMarketData(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspSubMarketData")
+
+    def OnRspUnSubMarketData(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspUnSubMarketData")
+
+    def OnRtnDepthMarketData(self, field: object) -> None:  # noqa: N802
+        self.calls.append("OnRtnDepthMarketData")
+
+
+class FakeMdApi:
+    """行情接口假件：登录按脚本应答，订阅记录到 ``subscribed``."""
+
+    def __init__(self, binding: FakeMdBinding) -> None:
+        self.binding = binding
+        self.spi: object | None = None
+        self.calls: list[tuple[str, object]] = []
+        self.subscribed: list[str] = []
+        self.released = False
+
+    def RegisterSpi(self, spi: object) -> None:  # noqa: N802
+        self.spi = spi
+        self.calls.append(("RegisterSpi", spi))
+
+    def RegisterFront(self, front: str) -> None:  # noqa: N802
+        self.calls.append(("RegisterFront", front))
+
+    def Init(self) -> None:  # noqa: N802
+        self.calls.append(("Init", None))
+        if not self.binding.silent_front:
+            self.spi.OnFrontConnected()  # type: ignore[attr-defined]
+
+    def ReqUserLogin(self, field: object, request_id: int) -> int:  # noqa: N802
+        self.calls.append(("ReqUserLogin", field))
+        if self.binding.login_silent:
+            return 0
+        info = FakeField(
+            "CThostFtdcRspInfoField",
+            ErrorID=self.binding.login_code,
+            ErrorMsg="" if self.binding.login_code == 0 else "fake md error",
+        )
+        self.spi.OnRspUserLogin(field, info, request_id, True)  # type: ignore[attr-defined]
+        return 0
+
+    def SubscribeMarketData(self, symbols: object, count: int) -> int:  # noqa: N802
+        self.calls.append(("SubscribeMarketData", (list(symbols), count)))
+        if self.binding.subscribe_silent:
+            return 0
+        payload = list(symbols) if isinstance(symbols, list) else []
+        for index, raw in enumerate(payload):
+            symbol = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+            accepted = symbol not in self.binding.rejected_symbols
+            if accepted:
+                self.subscribed.append(symbol)
+                if self.binding.auto_tick_on_subscribe:
+                    self.push_tick(InstrumentID=symbol)
+            field = FakeField("CThostFtdcSpecificInstrumentField", InstrumentID="" if not accepted else symbol)
+            info = FakeField(
+                "CThostFtdcRspInfoField",
+                ErrorID=0 if accepted else 26,
+                ErrorMsg="" if accepted else "fake subscription rejected",
+            )
+            self.spi.OnRspSubMarketData(field, info, index + 1, index == len(payload) - 1)  # type: ignore[attr-defined]
+        return 0
+
+    def UnSubscribeMarketData(self, symbols: object, count: int) -> int:  # noqa: N802
+        self.calls.append(("UnSubscribeMarketData", (list(symbols), count)))
+        return 0
+
+    def Release(self) -> None:  # noqa: N802
+        self.released = True
+
+    def push_tick(self, **values: Any) -> None:
+        defaults = {
+            "InstrumentID": self.binding.symbol,
+            "TradingDay": self.binding.trading_day,
+            "ActionDay": self.binding.action_day,
+            "UpdateTime": "10:26:08",
+            "UpdateMillisec": 500,
+            "LastPrice": 3053.0,
+            "BidPrice1": 3052.0,
+            "BidVolume1": 12,
+            "AskPrice1": 3054.0,
+            "AskVolume1": 30,
+            "Volume": 42925.0,
+            "Turnover": 1313292470.0,
+            "OpenInterest": 201290.0,
+            "PreSettlementPrice": 3063.0,
+            "UpperLimitPrice": 3216.0,
+            "LowerLimitPrice": 2909.0,
+        }
+        defaults.update(values)
+        self.spi.OnRtnDepthMarketData(FakeField("CThostFtdcDepthMarketDataField", **defaults))  # type: ignore[attr-defined]
+
+    def front_disconnected(self, reason: int = 0x1001) -> None:
+        self.spi.OnFrontDisconnected(reason)  # type: ignore[attr-defined]
+
+
+class FakeMdBinding:
+    """行情绑定假件."""
+
+    name = "fake-ctp"
+    version = "6.7.11-fake"
+
+    def __init__(self, **overrides: Any) -> None:
+        self.symbol = "rb2610"
+        self.trading_day = "20260923"
+        self.action_day = "20260923"
+        self.login_code = 0
+        self.login_silent = False
+        self.silent_front = False
+        self.subscribe_silent = False
+        self.auto_tick_on_subscribe = False
+        self.rejected_symbols: tuple[str, ...] = ()
+        self.created: list[FakeMdApi] = []
+        for name, value in overrides.items():
+            if not hasattr(self, name):
+                raise AttributeError(f"unknown fake market binding option {name!r}")
+            setattr(self, name, value)
+
+    def create_md_api(self, flow_dir: str) -> FakeMdApi:
+        api = FakeMdApi(self)
+        self.created.append(api)
+        return api
+
+    def md_spi_base(self) -> type:
+        return FakeMdSpiBase
+
+    def login_field(self) -> FakeField:
+        return FakeField("CThostFtdcReqUserLoginField")
+
+    def snapshot_field(self, type_name: str) -> FakeField:
+        return FakeField(type_name)
+
+    @property
+    def api(self) -> FakeMdApi:
+        assert self.created, "the market gateway has not created an md api yet"
+        return self.created[-1]

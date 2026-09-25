@@ -55,6 +55,7 @@ from qh_trader.gateway.ctp_gateway import (  # noqa: E402
     CtpTraderGateway,
     order_ref_evidence,
 )
+from qh_trader.gateway.ctp_market import CtpMarketDataGateway, CtpMarketSettings  # noqa: E402
 from qh_trader.gateway.ctp_query import CtpQueryAdapter  # noqa: E402
 from qh_trader.gateway.feedback_normalizer import build_normalizer  # noqa: E402
 from scripts import ctp_setup  # noqa: E402
@@ -340,6 +341,11 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     if sink.callback_errors:
         report["callback_errors"] = list(sink.callback_errors)
 
+    if args.market_symbol:
+        market_report, market_exit = probe_market(args, gateway, sink)
+        report["market_probe"] = market_report
+        exit_code = max(exit_code, market_exit)
+
     if args.order_symbol:
         order_report, order_exit = probe_order(args, gateway, queries, sink, ref_book, price_tick)
         report["order_probe"] = order_report
@@ -359,6 +365,71 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     }
     gateway.close()
     return report, exit_code
+
+
+def probe_market(
+    args: argparse.Namespace, gateway: CtpTraderGateway, sink: RecordingSink
+) -> tuple[Mapping[str, object], int]:
+    """行情通道探测：连接行情前置、订阅合约、收集逐笔快照并归一化.
+
+    行情与交易日无关（休市日也能取到快照），因此不受"非交易日"限制；但**不下单、不订阅全市场**。
+    """
+    instrument = parse_symbol(args.market_symbol)
+    front = args.market_front or ctp_setup.front_addresses(ctp_setup.load_broker_profile(args.profile)).get("market")
+    if not front:
+        return {"error": "no market front is registered and none was given with --market-front"}, 2
+    market = CtpMarketDataGateway(
+        settings=CtpMarketSettings.from_settings(gateway.settings, front_market=front),
+        events=sink,
+        source_id="ctp-md-probe",
+    )
+    detail: dict[str, object] = {"instrument": str(instrument), "front_market": front}
+    try:
+        detail["session"] = dict(market.connect())
+    except Exception as exc:
+        detail["error"] = f"market data front could not be reached ({type(exc).__name__})"
+        detail["status"] = dict(market.status())
+        return detail, 1
+    before = sum(1 for event in sink.events if event.kind == EventKind.MARKET_DATA)
+    accepted = market.subscribe([instrument], timeout_s=args.market_seconds)
+    detail["subscribed"] = list(accepted)
+    if not accepted:
+        detail["error"] = "the market data front did not accept the subscription"
+        detail["status"] = dict(market.status())
+        market.close()
+        return detail, 2
+    deadline = time.monotonic() + args.market_seconds
+    while time.monotonic() < deadline:
+        collected = sum(1 for event in sink.events if event.kind == EventKind.MARKET_DATA) - before
+        if collected >= args.market_ticks:
+            break
+        time.sleep(0.2)
+    ticks = [event for event in sink.events if event.kind == EventKind.MARKET_DATA][before:]
+    detail["ticks"] = len(ticks)
+    if ticks:
+        first, last = ticks[0].payload, ticks[-1].payload
+        detail["first_tick"] = {
+            "event_time": first.meta.event_time.isoformat(),
+            "trading_day": first.meta.trading_day.isoformat(),
+            "last_price": None if first.last_price is None else str(first.last_price),
+            "bid_price": None if first.bid_price is None else str(first.bid_price),
+            "ask_price": None if first.ask_price is None else str(first.ask_price),
+            "cumulative_volume": first.cumulative_volume,
+            "open_interest": first.open_interest,
+            "phase": str(first.phase),
+        }
+        detail["last_tick"] = {
+            "event_time": last.meta.event_time.isoformat(),
+            "last_price": None if last.last_price is None else str(last.last_price),
+            "cumulative_volume": last.cumulative_volume,
+        }
+    detail["status"] = dict(market.status())
+    market.close()
+    if not ticks:
+        detail["error"] = "no snapshot arrived before the deadline"
+        return detail, 2
+    detail["result"] = "market data snapshots normalized and enqueued"
+    return detail, 0
 
 
 def ctp_setup_account(profile: Mapping[str, Any], key: str) -> str | None:
@@ -514,6 +585,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="允许在柜台交易日与本地日期不一致时仍报单（仅用于接口冒烟，可能留下无法撤销的委托）",
     )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
+    parser.add_argument("--market-symbol", default=None, help="可选：订阅行情并收集逐笔快照，如 SHFE.rb2610")
+    parser.add_argument("--market-front", default=None, help="行情前置（默认取柜台登记的 fronts.market）")
+    parser.add_argument("--market-seconds", type=float, default=8.0, help="收集行情的秒数")
+    parser.add_argument("--market-ticks", type=int, default=20, help="收集到多少笔快照即可提前结束")
     parser.add_argument("--out", default="runs/s0", help="证据输出目录（项目内）")
     parser.add_argument("--json", action="store_true", help="同时打印完整证据 JSON")
     return parser
@@ -557,6 +632,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"柜台拒绝未表达回报: {gap.get('callback')} code={gap.get('counter_error_code')} "
             f"{gap.get('counter_error_message')}"
         )
+    if report.get("market_probe"):
+        probe = report["market_probe"]
+        print(f"行情探测: ticks={probe.get('ticks')} {probe.get('result') or probe.get('error')}")
     if report.get("order_probe"):
         outcome = report["order_probe"].get("result") or report["order_probe"].get("error")
         print(f"报单探测: {json.dumps(outcome, ensure_ascii=False)}")
