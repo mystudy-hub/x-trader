@@ -46,6 +46,10 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
   - `engine/live_account_model.py` keeps ordered account facts in journal state, one key per fact (`account_fact/<seq>`), and replays them into the kernel. When a settlement completes, the settled prefix is replaced by a verified kernel checkpoint (`account_checkpoint`, built by `engine/account_checkpoint.py`), so staging only replays the facts after it. See risk R11 in 06. Legacy `account_facts` journals are migrated explicitly at assembly.
   - `SQLiteExecutionStore.checkpoint()` is cached per `head_seq` and advanced with `JournalSnapshot.advance` after each commit. A top-level `None` in `state_updates` deletes that journal state key.
   - `scripts/run_execution_service.py` and `scripts/live_assembly.py` assemble the service. `--mode paper` uses the simulated gateway and `gateway/paper_query.py`. `--mode live` wires the CTP gateway and runs connect → isolate → bump epoch → reconcile → enable.
+  - Watchdog and operator control (S5-06):
+    - `monitor/watchdog.py` + `scripts/watchdog.py` judge liveness only by heartbeat sequence progress on the watchdog's own monotonic clock. They only alert or INSERT a `TAKEOVER_REQUEST`, and never for a lost execution service.
+    - `monitor/control.py` + `scripts/control.py` build operator commands. Commands that change trading state must come from the current controller at the current epoch.
+    - A takeover request grants nothing: a new execution-service instance must accept it with `--take-over <command_id>` after the old instance has stopped.
   - CTP adapters:
     - `gateway/ctp_gateway.py` handles the handshake, re-checks the epoch before `ReqOrderInsert`/`ReqOrderAction`, and persists the `(FrontID, SessionID, OrderRef)` triple.
     - `gateway/feedback_normalizer.py` turns order and trade reports into `OrderUpdate`/`Trade`.
@@ -55,7 +59,7 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
   - `scripts/ctp_setup.py` builds `CtpSettings` from `config/broker_profiles/*.yaml` (SimNow; openctp TTS is registered as a candidate). `scripts/ctp_probe.py` produces redacted login, query, order, market-data and catalog-diff evidence under `runs/s0/`.
   - Secrets come only from the environment (`QH_CTP_PASSWORD`, `QH_CTP_AUTH_CODE`). They are never written to config, logs or evidence files.
 
-These modules are one-line placeholders for work that has not started: `gateway/terminal_info.py`, `engine/live_engine.py`, `engine/shadow_engine.py`, `monitor/watchdog.py`, `monitor/control.py`, `data/recorder.py`, `analysis/execution_quality.py`.
+These modules are one-line placeholders for work that has not started: `gateway/terminal_info.py`, `engine/live_engine.py`, `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`.
 
 Design references:
 - `docs/04_系统架构设计.md`: §3 layering, §4 ports, §6 execution sequence, §12 ADRs

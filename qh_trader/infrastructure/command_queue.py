@@ -329,6 +329,39 @@ class SQLiteCommandClient:
         row = self._connection.execute("SELECT * FROM command_queue WHERE command_id=?", (command_id,)).fetchone()
         return None if row is None else _command(row, self.account_id)
 
+    def commands(self, statuses: Sequence[CommandStatus] = (), *, limit: int = 50) -> tuple[QueuedCommand, ...]:
+        """Newest first. A read-only view for operators and the watchdog; it never changes processing state."""
+        require_int(limit, "command listing limit", 1)
+        if statuses:
+            marks = ",".join("?" for _ in statuses)
+            rows = self._connection.execute(
+                f"SELECT * FROM command_queue WHERE status IN ({marks}) ORDER BY sequence DESC LIMIT ?",
+                (*(CommandStatus(status).value for status in statuses), limit),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT * FROM command_queue ORDER BY sequence DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return tuple(_command(row, self.account_id) for row in rows)
+
+    def control(self) -> ControlRecord | None:
+        """The persisted control record as last committed; the executor re-checks it before acting."""
+        row = self._connection.execute(
+            "SELECT payload, sha256, journal_seq FROM journal_control WHERE singleton=1"
+        ).fetchone()
+        if row is None:
+            return None
+        value = _decode(row["payload"], row["sha256"])
+        if not isinstance(value, ControlRecord) or value.journal_seq != row["journal_seq"]:
+            raise JournalCorruptionError("invalid persisted control record")
+        return value
+
+    def state(self, key: str) -> object | None:
+        """One committed journal projection (for example the service phase); None when it does not exist."""
+        require_text(key, "journal state key")
+        row = self._connection.execute("SELECT payload, sha256 FROM journal_state WHERE state_key=?", (key,)).fetchone()
+        return None if row is None else _decode(row["payload"], row["sha256"])
+
     def submit(self, command: ExecutionCommand) -> QueuedCommand:
         if not isinstance(command, ExecutionCommand):
             raise TypeError("only normalized execution commands may be submitted")
