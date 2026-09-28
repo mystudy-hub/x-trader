@@ -152,6 +152,8 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         query_interval_ms=args.query_interval_ms,
         connect_timeout_s=args.connect_timeout,
         login_timeout_s=args.login_timeout,
+        terminal_mode=args.terminal_mode,
+        collector_lib_path=args.collector_lib,
     )
     capability_profile = ctp_setup.capability_profile(profile)
     sink = RecordingSink()
@@ -704,6 +706,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-non-trading-day",
         action="store_true",
         help="允许在柜台交易日与本地日期不一致时仍报单（仅用于接口冒烟，可能留下无法撤销的委托）",
+    )
+    parser.add_argument(
+        "--terminal-mode",
+        choices=["none", "direct", "relay"],
+        default=None,
+        help="看穿式终端采集模式（默认从柜台登记读取；可选 none/direct/relay）",
+    )
+    parser.add_argument(
+        "--collector-lib",
+        default=None,
+        help="看穿式采集动态库路径（WinDataCollect.dll / libDataCollect.so）",
     )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
     parser.add_argument(

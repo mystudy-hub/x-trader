@@ -43,6 +43,12 @@ from qh_trader.core.objects import (
     require_text,
 )
 from qh_trader.core.ports import ExecutionPort, FeedbackNormalizerPort
+from qh_trader.gateway.terminal_info import (
+    TerminalAccessMode,
+    TerminalInfoCollector,
+    TerminalInfoPayload,
+    apply_relay_user_system_info,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -126,6 +132,13 @@ class CtpSettings:
     login_timeout_s: float = 20.0
     query_timeout_s: float = 15.0
     local_reject_codes: frozenset[int] = frozenset()
+    terminal_mode: str = "none"
+    collector_lib_path: str | None = None
+    terminal_public_ip: str | None = None
+    terminal_ip_port: int | None = None
+    terminal_mode: str = "none"
+    collector_lib_path: str | None = None
+    terminal_public_ip: str | None = None
 
     # 柜台字段是定长 char 数组，超长会在绑定层直接抛异常（实测 UserProductInfo 超过 10 字符即失败），
     # 因此在本地就按头文件长度校验：TThostFtdcBrokerIDType[11] / UserIDType[16] / InvestorIDType[13]
@@ -156,6 +169,8 @@ class CtpSettings:
                 raise ValueError(f"{name} must be a positive number of seconds")
         if (self.app_id is None) != (self.auth_code is None):
             raise ValueError("AppID and AuthCode are authenticated together or not at all")
+        if self.terminal_mode not in ("none", "direct", "relay"):
+            raise ValueError(f"unknown terminal_mode: {self.terminal_mode!r}, must be 'none', 'direct' or 'relay'")
         object.__setattr__(self, "local_reject_codes", frozenset(self.local_reject_codes))
 
     @property
@@ -972,6 +987,7 @@ class CtpSessionReport:
     login_seconds: float
     restored_order_refs: int
     dll_hashes: Mapping[str, str]
+    terminal_info: Mapping[str, object] | None = None
     notes: tuple[str, ...] = ()
 
     def as_mapping(self) -> dict[str, object]:
@@ -1070,6 +1086,7 @@ class CtpTraderGateway(ExecutionPort):
         self._session_id = 0
         self._max_order_ref: str | None = None
         self._last_error: tuple[int | None, str | None] | None = None
+        self._terminal_payload: TerminalInfoPayload | None = None
         self.rejections: list[str] = []
         self._cancel_locators: list[Mapping[str, object]] = []
         self.counts = {
@@ -1195,6 +1212,23 @@ class CtpTraderGateway(ExecutionPort):
         self._settlement_ready.clear()
         self._fault = None
         self._needs_reconciliation = True
+        # S5-03 看穿式终端信息采集与核验 (A27, F17)
+        terminal_report_mapping: dict[str, object] | None = None
+        self._terminal_payload = None
+        if self.settings.terminal_mode in ("direct", "relay"):
+            collector = TerminalInfoCollector(
+                lib_path=self.settings.collector_lib_path,
+                access_mode=TerminalAccessMode(self.settings.terminal_mode),
+                public_ip=self.settings.terminal_public_ip,
+                ip_port=self.settings.terminal_ip_port,
+            )
+            try:
+                self._terminal_payload = collector.collect()
+                terminal_report_mapping = self._terminal_payload.report.as_mapping()
+            except Exception as exc:
+                self._fault = "terminal_info_collection"
+                raise CtpHandshakeError(f"terminal info collection failed (A27, F17): {exc}") from exc
+
         api = binding.create_trader_api(str(flow))
         self._api = api
         self._spi = build_trader_spi(binding, self.router)
@@ -1213,10 +1247,20 @@ class CtpTraderGateway(ExecutionPort):
             self._authenticate(login_deadline)
         else:
             notes.append("terminal authentication not configured (AppID/AuthCode absent); counter rule unverified")
+
+        # 中继模式：在认证后、登录前调用 RegisterUserSystemInfo (A27)
+        if self.settings.terminal_mode == "relay":
+            if self._terminal_payload is None:
+                self._fault = "terminal_info_missing"
+                raise CtpHandshakeError("relay mode requires terminal info payload (A27)")
+            self._register_user_system_info(self._terminal_payload)
+
         self._login(login_deadline)
         self._confirm_settlement(login_deadline)
         api_version = str(self._safe(lambda: binding.api_version(api)) or "unknown")
         dll_hashes = dict(self._safe(binding.dll_hashes) or {})
+        if self._terminal_payload is not None:
+            dll_hashes[Path(self._terminal_payload.report.collector_dll).name] = self._terminal_payload.report.dll_hash
         self._session_report = CtpSessionReport(
             front_trade=self.settings.front_trade,
             broker_id=self.settings.broker_id,
@@ -1234,6 +1278,7 @@ class CtpTraderGateway(ExecutionPort):
             login_seconds=self._monotonic() - login_started,
             restored_order_refs=self._ref_book.restored,
             dll_hashes=dll_hashes,
+            terminal_info=terminal_report_mapping,
             notes=tuple(notes),
         )
         return self._session_report
@@ -1278,6 +1323,29 @@ class CtpTraderGateway(ExecutionPort):
         self._last_error = None
         api.ReqAuthenticate(field, request_id)
         self._wait(self._authenticated_ready, deadline, "authenticate", achieved=lambda: self._authenticated)
+
+    def _register_user_system_info(self, payload: TerminalInfoPayload) -> None:
+        """中继模式下在认证后、登录前向柜台注册终端信息 (A27)."""
+        api: Any = self._require_api()
+        binding = self._require_binding()
+        field = binding.field("CThostFtdcUserSystemInfoField")
+        apply_relay_user_system_info(
+            field,
+            payload,
+            broker_id=self.settings.broker_id,
+            user_id=self.settings.user_id,
+            app_id=self.settings.app_id or "",
+            public_ip=self.settings.terminal_public_ip,
+            ip_port=self.settings.terminal_ip_port,
+        )
+        reg_fn = getattr(api, "RegisterUserSystemInfo", None)
+        if reg_fn is None:
+            self._fault = "register_user_system_info_unsupported"
+            raise CtpHandshakeError("CTP API binding does not support RegisterUserSystemInfo")
+        code = reg_fn(field)
+        if code != 0:
+            self._fault = "register_user_system_info_failed"
+            raise CtpHandshakeError(f"RegisterUserSystemInfo failed with return code {code} (A27)")
 
     def _login(self, deadline: float) -> None:
         api: Any = self._require_api()
@@ -1324,6 +1392,8 @@ class CtpTraderGateway(ExecutionPort):
             if self.settings.authenticated and not self._authenticated:
                 self._authenticated_ready.clear()
                 self._authenticate(deadline)
+            if self.settings.terminal_mode == "relay" and self._terminal_payload is not None:
+                self._register_user_system_info(self._terminal_payload)
             self._login_ready.clear()
             self._login(deadline)
             self._settlement_ready.clear()

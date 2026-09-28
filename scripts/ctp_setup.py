@@ -172,6 +172,10 @@ def ctp_settings(
     login_timeout_s: float = 20.0,
     query_timeout_s: float = 15.0,
     query_interval_ms: int | None = None,
+    terminal_mode: str | None = None,
+    collector_lib_path: str | Path | None = None,
+    terminal_public_ip: str | None = None,
+    terminal_ip_port: int | None = None,
 ) -> CtpSettings:
     """登记 + 环境秘密 → ``CtpSettings``；缺项即失败，不用占位值连接柜台."""
     fronts = front_addresses(profile)
@@ -190,6 +194,15 @@ def ctp_settings(
     auth_code = secrets.get("auth_code") or account.get("auth_code")
     if auth_code and not app_id:
         raise BrokerProfileError("an AuthCode is only usable together with the AppID registered for it")
+    term_info = profile.get("terminal_info") or {}
+    resolved_terminal_mode = (
+        terminal_mode or (term_info.get("mode") if isinstance(term_info, Mapping) else None) or "none"
+    )
+    resolved_lib_path = (
+        str(collector_lib_path)
+        if collector_lib_path
+        else (term_info.get("collector_lib") if isinstance(term_info, Mapping) else None)
+    )
     return CtpSettings(
         front_trade=front or fronts["trade"],
         broker_id=str(broker_id),
@@ -204,6 +217,12 @@ def ctp_settings(
         connect_timeout_s=connect_timeout_s,
         login_timeout_s=login_timeout_s,
         query_timeout_s=query_timeout_s,
+        terminal_mode=str(resolved_terminal_mode),
+        collector_lib_path=None if not resolved_lib_path else str(resolved_lib_path),
+        terminal_public_ip=terminal_public_ip
+        or (str(term_info.get("public_ip")) if isinstance(term_info, Mapping) and term_info.get("public_ip") else None),
+        terminal_ip_port=terminal_ip_port
+        or (int(term_info.get("ip_port")) if isinstance(term_info, Mapping) and term_info.get("ip_port") else None),
     )
 
 

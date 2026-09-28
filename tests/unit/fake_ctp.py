@@ -128,6 +128,10 @@ class FakeTraderApi:
         self.spi.OnRspAuthenticate(field, self.rsp_info(0), request_id, True)  # type: ignore[attr-defined]
         return 0
 
+    def RegisterUserSystemInfo(self, field: FakeField) -> int:  # noqa: N802
+        self.calls.append(("RegisterUserSystemInfo", field))
+        return self.binding.user_system_info_code
+
     def ReqUserLogin(self, field: FakeField, request_id: int) -> int:  # noqa: N802
         self.calls.append(("ReqUserLogin", field))
         code = self.binding.login_code
@@ -413,6 +417,7 @@ class FakeCtpBinding:
         self.query_codes: Mapping[str, int] = {}
         self.query_return_codes: Mapping[str, int] = {}
         self.query_records: dict[str, tuple[FakeField, ...]] = {"account": (account_record(),)}
+        self.user_system_info_code = 0
         self.dll_files = {"thosttraderapi_se-fake.dll": "0" * 64}
         for name, value in overrides.items():
             if not hasattr(self, name):
