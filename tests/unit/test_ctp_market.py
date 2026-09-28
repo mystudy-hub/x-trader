@@ -18,7 +18,8 @@ from qh_trader.gateway.ctp_market import (
     _price,
     exchange_instant,
 )
-from tests.unit.fake_ctp import FakeMdBinding
+from qh_trader.gateway.ctp_native_libs import NativeLibError
+from tests.unit.fake_ctp import FakeMdBinding, native_lib_spec, staged_native_libs
 
 RB = InstrumentId(Exchange.SHFE, "rb2610")
 RU = InstrumentId(Exchange.SHFE, "ru2611")
@@ -52,16 +53,38 @@ def make_settings(**overrides) -> CtpMarketSettings:
     return CtpMarketSettings(**values)
 
 
-def make_gateway(binding: FakeMdBinding | None = None, sink: Sink | None = None):
+def make_gateway(
+    binding: FakeMdBinding | None = None, sink: Sink | None = None, settings: CtpMarketSettings | None = None
+):
     resolved = binding if binding is not None else FakeMdBinding()
     recorder = sink if sink is not None else Sink()
     gateway = CtpMarketDataGateway(
-        settings=make_settings(),
+        settings=settings or make_settings(),
         events=recorder,
         binding=resolved,
         wall_time=lambda: datetime(2026, 9, 25, 2, 30, tzinfo=timezone.utc),
     )
     return gateway, recorder, resolved
+
+
+def test_a_native_library_mismatch_stops_the_market_handshake_before_registering_the_front():
+    """行情侧与交易侧同一道门禁：用错原生库不能只留下一个 4097 (GAP-S0-01)."""
+    binding = FakeMdBinding()
+    gateway, _, _ = make_gateway(binding=binding, settings=make_settings(native_libs=native_lib_spec()))
+    with pytest.raises(NativeLibError, match="openctp-tts"):
+        gateway.connect()
+    assert gateway.fault == "native_lib_mismatch" and gateway.ready is False
+    assert [name for name, _ in binding.api.calls] == []
+
+
+def test_the_market_session_reports_the_loaded_native_library():
+    binding = FakeMdBinding(api_version_value="openctp-tts v6.7.11")
+    binding.native_lib_report = staged_native_libs()
+    gateway, _, _ = make_gateway(binding=binding, settings=make_settings(native_libs=native_lib_spec()))
+    report = gateway.connect()
+    assert report["logged_in"] is True
+    assert report["native_libs"]["flavor"] == "openctp-tts"
+    assert report["native_libs"]["files"][0]["loader_name"] == "thosttraderapi_se-deadbeef.dll"
 
 
 # --------------------------------------------------------------------------------------- 握手

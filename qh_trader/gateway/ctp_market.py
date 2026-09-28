@@ -26,12 +26,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Protocol, runtime_checkable
 
 from qh_trader.core.constants import EventKind, Exchange, MarketPhase
 from qh_trader.core.event import CanonicalEvent
 from qh_trader.core.objects import InstrumentId, RecordMeta, Tick, require_text
 
+from .ctp_native_libs import (
+    NativeLibError,
+    NativeLibSpec,
+    StagedNativeLibs,
+    ensure_native_libs,
+    verify_api_marker,
+)
 from .ctp_gateway import (
     CTP_EXTRA_HINT,
     EXCHANGE_TZ,
@@ -90,6 +98,8 @@ class CtpMarketSettings:
     connect_timeout_s: float = 20.0
     login_timeout_s: float = 20.0
     subscribe_timeout_s: float = 10.0
+    # 原生库选择必须与交易前置一致：行情与交易同时加载不同的库会当场崩溃 (S0-02)
+    native_libs: NativeLibSpec | None = None
 
     def __post_init__(self) -> None:
         for name in ("front_market", "broker_id", "user_id", "password"):
@@ -113,6 +123,7 @@ class CtpMarketSettings:
             flow_dir=settings.flow_dir.rstrip("/") + "-md",
             connect_timeout_s=settings.connect_timeout_s,
             login_timeout_s=settings.login_timeout_s,
+            native_libs=settings.native_libs,
         )
 
 
@@ -125,41 +136,45 @@ class CtpMarketBinding(Protocol):
 
 
 class OpenCtpMarketBinding:
-    """``openctp-ctp`` 的行情模块（``openctp_ctp.mdapi``）."""
+    """``openctp-ctp`` 的行情模块（``openctp_ctp.mdapi``）.
+
+    原生库的预装载与交易绑定共用同一套机制与暂存目录，避免两个模块各加载一套库。
+    """
 
     name = "openctp-ctp"
     version = "unavailable"
 
-    def create_md_api(self, flow_dir: str) -> Any:
+    def __init__(self, native_libs: NativeLibSpec | None = None) -> None:
+        self._native_libs = native_libs
+        self.native_lib_report: StagedNativeLibs | None = None
+
+    def _import_package(self) -> ModuleType:
+        if self._native_libs is not None and self.native_lib_report is None:
+            self.native_lib_report = ensure_native_libs(self._native_libs)
         try:
-            package = importlib.import_module("openctp_ctp")
-            module = package.mdapi
+            return importlib.import_module("openctp_ctp")
         except (ImportError, OSError, AttributeError) as exc:
             raise CtpBindingUnavailableError(
                 f"CTP market data binding is unavailable ({type(exc).__name__}); install it with {CTP_EXTRA_HINT}"
             ) from exc
+
+    def create_md_api(self, flow_dir: str) -> Any:
+        package = self._import_package()
         self.version = str(getattr(package, "__version__", "unknown"))
-        return module.CThostFtdcMdApi.CreateFtdcMdApi(flow_dir)
+        return package.mdapi.CThostFtdcMdApi.CreateFtdcMdApi(flow_dir)
 
     def md_spi_base(self) -> Any:
-        try:
-            package = importlib.import_module("openctp_ctp")
-        except (ImportError, OSError, AttributeError) as exc:
-            raise CtpBindingUnavailableError(
-                f"CTP market data binding is unavailable ({type(exc).__name__}); install it with {CTP_EXTRA_HINT}"
-            ) from exc
-        return package.mdapi.CThostFtdcMdSpi
+        return self._import_package().mdapi.CThostFtdcMdSpi
 
     def login_field(self) -> Any:
         return self.snapshot_field("CThostFtdcReqUserLoginField")
 
     def snapshot_field(self, type_name: str) -> Any:
-        package = importlib.import_module("openctp_ctp")
-        return getattr(package.mdapi, type_name)()
+        return getattr(self._import_package().mdapi, type_name)()
 
 
-def load_ctp_market_binding() -> OpenCtpMarketBinding:
-    return OpenCtpMarketBinding()
+def load_ctp_market_binding(native_libs: NativeLibSpec | None = None) -> OpenCtpMarketBinding:
+    return OpenCtpMarketBinding(native_libs=native_libs)
 
 
 class CtpMarketDataGateway:
@@ -182,7 +197,7 @@ class CtpMarketDataGateway:
         self.settings = settings
         self.source_id = source_id
         self._events = events
-        self._binding = binding if binding is not None else load_ctp_market_binding()
+        self._binding = binding if binding is not None else load_ctp_market_binding(settings.native_libs)
         self._wall_time = wall_time or (lambda: datetime.now(timezone.utc))
         self._monotonic = monotonic or time.monotonic
         self.timestamp_tolerance = timestamp_tolerance
@@ -239,6 +254,24 @@ class CtpMarketDataGateway:
         self._fault = None
         api = self._binding.create_md_api(str(flow))
         self._api = api
+        # 与交易侧同一道原生库门禁：用错库连兼容柜台会在握手时表现为 4097 (GAP-S0-01)
+        if self.settings.native_libs is not None:
+            reported = "unknown"
+            getter = getattr(api, "GetApiVersion", None)
+            if getter is not None:
+                try:
+                    reported = str(getter())
+                except Exception:  # 版本读取失败不冒充已知版本
+                    reported = "unknown"
+            try:
+                verify_api_marker(
+                    flavor=self.settings.native_libs.flavor,
+                    api_marker=self.settings.native_libs.api_marker,
+                    api_version=reported,
+                )
+            except NativeLibError:
+                self._fault = "native_lib_mismatch"
+                raise
         self._spi = build_market_spi(self._binding, self)
         api.RegisterSpi(self._spi)
         api.RegisterFront(self.settings.front_market)
@@ -264,7 +297,13 @@ class CtpMarketDataGateway:
             "binding": self._binding.name,
             "binding_version": self._binding.version,
             "logged_in": True,
+            "native_libs": self.native_lib_report(),
         }
+
+    def native_lib_report(self) -> Mapping[str, object] | None:
+        """实际装载的原生库登记（未登记 flavor 时为 ``None``）."""
+        report = getattr(self._binding, "native_lib_report", None)
+        return None if not isinstance(report, StagedNativeLibs) else report.as_mapping()
 
     def subscribe(self, instruments: Sequence[InstrumentId], *, timeout_s: float | None = None) -> tuple[str, ...]:
         """订阅行情；返回本次实际得到应答的合约，未应答的合约保持未订阅状态."""
@@ -460,6 +499,8 @@ class CtpMarketDataGateway:
             "connected": self._connected,
             "logged_in": self._logged_in,
             "fault": self._fault,
+            "last_error_code": None if self._last_error is None else self._last_error[0],
+            "last_error_message": None if self._last_error is None else self._last_error[1],
             "subscribed": list(self.subscribed),
             "counts": dict(self.counts),
             "recent_evidence": [dict(item) for item in self.evidence[-5:]],

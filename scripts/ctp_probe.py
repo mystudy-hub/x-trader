@@ -17,6 +17,13 @@
     set QH_CTP_PASSWORD=...
     uv run --no-sync python scripts/ctp_probe.py --profile simnow_v6
     uv run --no-sync python scripts/ctp_probe.py --order-symbol SHFE.rb2601 --order-quantity 1
+
+无凭据联调（尚未拿到柜台账号时，只证明原生库与前置正常）::
+
+    uv run --no-sync python scripts/ctp_probe.py --profile openctp_tts --dummy-login
+
+``--dummy-login`` 用明显虚构的探测账号发起一次登录：柜台会应答并拒绝，证据里记为
+``login_probe.kind = unregistered_dummy_account`` 与柜台错误码，**不构成登录通过**，退出码 3。
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import sys
 import time
@@ -59,11 +67,16 @@ from qh_trader.gateway.ctp_gateway import (  # noqa: E402
 from qh_trader.gateway.ctp_market import CtpMarketDataGateway, CtpMarketSettings  # noqa: E402
 from qh_trader.gateway.ctp_query import CtpQueryAdapter  # noqa: E402
 from qh_trader.gateway.feedback_normalizer import build_normalizer  # noqa: E402
-from scripts import ctp_setup  # noqa: E402
+from scripts import ctp_position_probe, ctp_setup  # noqa: E402
 
 PROBE_CONTROLLER = "ctp-probe"
 PROBE_EPOCH = ControlEpoch(PROBE_CONTROLLER, 1)
 DEFAULT_ORDER_WAIT_S = 8.0
+#: 无凭据联调的虚构探测账号：它不属于任何客户，只用来确认柜台会在同一连接上应答登录请求。
+DUMMY_PROBE_USER = "qh_probe"
+DUMMY_PROBE_PASSWORD = "QhProbe!Unregistered#2026"
+DUMMY_PROBE_ACCOUNT = "openctp-tts-probe"
+DUMMY_PROBE_EXIT_CODE = 3
 
 
 class ProbeError(RuntimeError):
@@ -141,6 +154,51 @@ def _deadline_wait(sink: RecordingSink, ref: CtpOrderRef, wanted: set[str], time
     return sink.order_updates(ref)
 
 
+def record_native_libs(report: dict[str, Any], gateway: CtpTraderGateway) -> None:
+    """登记实际装载的原生库（flavor、暂存文件与摘要）；未登记 flavor 时记 ``None``.
+
+    原生库只有在装载后才可核对，因此连接成功与连接失败都要登记，否则证据里看不到用的是哪一套库。
+    """
+    staged = getattr(gateway.binding, "native_lib_report", None)
+    report["native_libs"] = None if staged is None else staged.as_mapping()
+
+
+def probe_market_reachability(
+    args: argparse.Namespace, settings: CtpSettings, sink: RecordingSink
+) -> Mapping[str, object]:
+    """行情前置可达性与原生库核验：只登行情前置，只记录柜台应答，不订阅也不下单。
+
+    无凭据联调时账户是虚构的，因此这里同样**只**证明"TTS 原生库能加载行情模块、行情前置能建立
+    会话并给出应答"，不构成行情登录通过。
+    """
+    front = args.market_front or ctp_setup.front_addresses(ctp_setup.load_broker_profile(args.profile)).get("market")
+    if not front:
+        return {"result": "no market front is registered and none was given with --market-front"}
+    market = CtpMarketDataGateway(
+        settings=CtpMarketSettings.from_settings(settings, front_market=front),
+        events=sink,
+        source_id="ctp-md-probe",
+    )
+    detail: dict[str, object] = {"front_market": front}
+    started = time.monotonic()
+    try:
+        detail["session"] = dict(market.connect())
+        detail["result"] = "the market data front accepted the login"
+    except Exception as exc:
+        status = dict(market.status())
+        detail["error"] = type(exc).__name__
+        detail["fault"] = status.get("fault")
+        detail["counts"] = status.get("counts")
+        detail["counter_error_code"] = status.get("last_error_code")
+        detail["counter_error_message"] = status.get("last_error_message")
+        detail["result"] = "the counter answered the market login on the same connection"
+    finally:
+        detail["native_libs"] = market.native_lib_report()
+        detail["seconds"] = round(time.monotonic() - started, 6)
+        market.close()
+    return detail
+
+
 def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     profile = ctp_setup.load_broker_profile(args.profile)
     settings: CtpSettings = ctp_setup.ctp_settings(
@@ -156,6 +214,16 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         collector_lib_path=args.collector_lib,
     )
     capability_profile = ctp_setup.capability_profile(profile)
+    offset_mappings = list(ctp_setup.offset_mappings(profile))
+    capability_version = "registered:" + str(profile.get("profile_name"))
+    if args.position_probe:
+        # 持仓探测要真的成交与平仓：开平标志与市价单在登记里仍未核验，因此显式换成**仅供探测**的
+        # 档案（证据写 probe:*），并把目标交易所的候选开平标志挂上；执行服务不受影响。
+        probed_exchange = parse_symbol(args.position_probe).exchange
+        offset_mappings = [item for item in offset_mappings if item.exchange != probed_exchange]
+        offset_mappings.append(ctp_position_probe.probe_offset_mapping(probed_exchange))
+        capability_profile = ctp_position_probe.probe_capability_profile(capability_profile)
+        capability_version = ctp_position_probe.PROBE_CAPABILITY_EVIDENCE
     sink = RecordingSink()
     ref_book = CtpOrderRefBook()
     normalizer = build_normalizer(args.account, ref_book)
@@ -168,9 +236,9 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         normalizer=normalizer,
         price_tick=lambda instrument: price_tick["value"],
         capability_profile=capability_profile,
-        capability_version="registered:" + str(profile.get("profile_name")),
+        capability_version=capability_version,
         authority=lambda: PROBE_EPOCH,
-        offset_mappings=ctp_setup.offset_mappings(profile),
+        offset_mappings=offset_mappings,
         ref_book=ref_book,
         source_id="ctp-probe",
     )
@@ -210,11 +278,17 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         "steps": [],
         "queries": {},
         "order_probe": None,
+        "native_libs": None,
+        "login_probe": None,
+        "market_reachability": None,
         "redaction": [
             "口令与 AuthCode 不写入证据文件，只记录是否配置",
             "投资者号与用户号仅保留掩码与 SHA-256 前缀",
         ],
-        "scope": "仿真环境本地探测（工程样例）；不替代柜台联调、阶段出口或实盘验收",
+        "scope": (
+            "仿真环境本地探测（工程样例）；持仓探测会在仿真柜台真实成交并留下手续费，"
+            "收尾必须确认已平仓；不替代柜台联调、阶段出口或实盘验收"
+        ),
     }
     exit_code = 0
 
@@ -222,26 +296,58 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         report["steps"].append(step.as_mapping())
 
     started = time.monotonic()
+    dummy = bool(getattr(args, "dummy_login", False))
     try:
         session = gateway.connect()
     except Exception as exc:
         status = gateway.status()
+        counts = status.get("counts") or {}
+        # “柜台应答了”与“请求根本没得到应答”是两回事：只有前者才能证明链路与原生库正常
+        answered = status.get("last_error_code") is not None
+        expected_rejection = dummy and answered
+        detail = {
+            "error_type": type(exc).__name__,
+            "front_connected": counts.get("front_connected"),
+            "front_disconnected": counts.get("front_disconnected"),
+            "fault": status.get("fault"),
+            "counter_error_code": status.get("last_error_code"),
+            # 柜台报文只用于诊断；它不含凭证，但仍按原样记录以便对照 CTP 错误码表
+            "counter_error_message": status.get("last_error_message"),
+        }
         record(
             Step(
                 "connect_login_settlement",
-                "failed",
-                {
-                    "error_type": type(exc).__name__,
-                    "front_connected": status.get("counts", {}).get("front_connected"),
-                    "fault": status.get("fault"),
-                    "counter_error_code": status.get("last_error_code"),
-                    # 柜台报文只用于诊断；它不含凭证，但仍按原样记录以便对照 CTP 错误码表
-                    "counter_error_message": status.get("last_error_message"),
-                },
+                "rejected" if expected_rejection else "failed",
+                detail,
                 time.monotonic() - started,
             )
         )
         report["gateway_status"] = dict(gateway.status())
+        record_native_libs(report, gateway)
+        if dummy:
+            if args.market_symbol:
+                # 行情前置不校验口令（openctp 实测），因此无账号也能把行情通道跑到底：登录 + 订阅 + 收快照
+                market_report, _ = probe_market(args, gateway, sink)
+                report["market_probe"] = market_report
+            else:
+                report["market_reachability"] = probe_market_reachability(args, settings, sink)
+            report["login_probe"] = {
+                "kind": "unregistered_dummy_account",
+                "counter_answered": answered,
+                "user_id": mask_identifier(DUMMY_PROBE_USER),
+                "front_connected": counts.get("front_connected"),
+                "front_disconnected": counts.get("front_disconnected"),
+                "counter_error_code": status.get("last_error_code"),
+                "counter_error_message": status.get("last_error_message"),
+                "fault": status.get("fault"),
+                "interpretation": (
+                    "柜台在同一连接上应答了登录请求：说明登记的原生库已装载且前置可达。"
+                    "本记录是预期内的拒绝，不构成登录通过，也不构成柜台能力核验。"
+                    if answered
+                    else "登录请求没有等到柜台应答：不能用它证明链路或原生库正常。"
+                ),
+            }
+            return report, DUMMY_PROBE_EXIT_CODE if expected_rejection else 1
         return report, 1
     record(
         Step(
@@ -259,6 +365,11 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     report["binding"]["dll_hashes"] = dict(session.dll_hashes)
     report["binding"]["version"] = gateway.binding.version
     report["session"] = session.as_mapping()
+    report["native_libs"] = session.native_libs
+    report["login_probe"] = {
+        "kind": "unregistered_dummy_account" if dummy else "registered_account",
+        "passed": True,
+    }
 
     # 交易日以柜台为准：探测只记录柜台给出的交易日，不用本地日期推算 (FR-CAL-03)
     if session.trading_day is None:
@@ -362,6 +473,19 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             diff_path.write_text(payload, encoding="utf-8")
             report["catalog_diff_file"] = diff_path.relative_to(ROOT).as_posix()
 
+    if args.verify_rates:
+        rate_report, rate_exit = probe_rates(args, queries)
+        report["rate_check"] = rate_report
+        exit_code = max(exit_code, rate_exit)
+        out_dir = (ROOT / args.out).resolve() if args.out else None
+        if out_dir is not None and out_dir.is_relative_to(ROOT / "runs"):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            rate_path = out_dir / f"ctp_rate_evidence_{stamp}.json"
+            payload = json.dumps(rate_report, ensure_ascii=False, indent=2, default=str) + "\n"
+            rate_path.write_text(payload, encoding="utf-8")
+            report["rate_evidence_file"] = rate_path.relative_to(ROOT).as_posix()
+
     if args.market_symbol:
         market_report, market_exit = probe_market(args, gateway, sink)
         report["market_probe"] = market_report
@@ -371,6 +495,26 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         order_report, order_exit = probe_order(args, gateway, queries, sink, ref_book, price_tick)
         report["order_probe"] = order_report
         exit_code = max(exit_code, order_exit)
+
+    if args.position_probe:
+        position_report, position_exit = ctp_position_probe.run_position_probe(
+            instrument=parse_symbol(args.position_probe),
+            quantity=int(args.position_quantity),
+            account_id=args.account,
+            controller_id=PROBE_CONTROLLER,
+            epoch=PROBE_EPOCH,
+            gateway=gateway,
+            queries=queries,
+            sink=sink,
+            price_tick=price_tick,
+            wait_s=args.fill_wait,
+            market_order_probe=bool(args.market_order_probe),
+            probe_all_close_flags=bool(args.all_close_flags),
+            cross_ticks=int(args.cross_ticks),
+            allow_non_trading_day=bool(args.allow_non_trading_day),
+        )
+        report["position_probe"] = position_report
+        exit_code = max(exit_code, position_exit)
 
     report["gateway_status"] = dict(gateway.status())
     # 柜台明确拒绝但当前事件类型表达不了的回报（例如撤单被拒）必须留痕，便于直接看错误码
@@ -482,12 +626,162 @@ def probe_catalog(args: argparse.Namespace, queries: CtpQueryAdapter) -> tuple[M
     ]
     comparison = ctp_setup.compare_products(products)
     detail["comparison"] = comparison
-    detail["result"] = (
-        "counter product parameters compared with the local registry"
-        if not comparison["mismatches"]
-        else "counter product parameters disagree with the local registry for at least one product"
+    # 品种级口径在部分柜台（实测 openctp TTS）恒返 0，因此真正的核验落在合约级 ReqQryInstrument
+    instruments = queries.query_all_instruments()
+    detail["counter_instruments"] = len(instruments)
+    instrument_comparison = ctp_setup.compare_instruments(instruments)
+    detail["instrument_comparison"] = instrument_comparison
+    detail["result"] = instrument_comparison["result"]
+    if instrument_comparison["mismatches"] or comparison["mismatches"]:
+        return detail, 2
+    if instrument_comparison["missing_at_counter"]:
+        return detail, 2
+    return detail, 0
+
+
+COMMISSION_RATE_FIELDS = (
+    "OpenRatioByMoney",
+    "OpenRatioByVolume",
+    "CloseRatioByMoney",
+    "CloseRatioByVolume",
+    "CloseTodayRatioByMoney",
+    "CloseTodayRatioByVolume",
+    "BizType",
+)
+MARGIN_RATE_FIELDS = (
+    "HedgeFlag",
+    "LongMarginRatioByMoney",
+    "LongMarginRatioByVolume",
+    "ShortMarginRatioByMoney",
+    "ShortMarginRatioByVolume",
+    "IsRelative",
+)
+
+
+def _trim(record: Mapping[str, object], names: Sequence[str]) -> dict[str, object]:
+    return {name: record.get(name) for name in names if record.get(name) is not None}
+
+
+def nearest_listed_contracts(
+    counter_instruments: Sequence[Mapping[str, object]],
+) -> tuple[dict[str, str], list[str]]:
+    """每个本地登记品种取柜台清单里最近的上市合约作为费率核验样本.
+
+    品种级口径在部分柜台（实测 openctp TTS）恒返 0，因此费率核验按合约取样；柜台没有该品种的
+    可交易合约时把品种列入 ``absent``，不拿别的品种或已摘牌合约替代。
+    """
+    registry = ctp_setup.product_specs()
+    by_product: dict[tuple[str, str], list[str]] = {}
+    for record in counter_instruments:
+        product_id = record.get("ProductID")
+        exchange = record.get("ExchangeID")
+        symbol = record.get("InstrumentID")
+        if not isinstance(product_id, str) or not isinstance(exchange, str) or not isinstance(symbol, str):
+            continue
+        if str(record.get("IsTrading", "")) != "1":
+            continue
+        by_product.setdefault((product_id.upper(), exchange), []).append(symbol)
+    selected: dict[str, str] = {}
+    absent: list[str] = []
+    for name, spec in sorted(registry.items()):
+        candidates = sorted(by_product.get((name, spec.exchange.value), []))
+        if not candidates:
+            absent.append(f"{spec.exchange.value}.{name}")
+            continue
+        selected[f"{spec.exchange.value}.{candidates[0]}"] = name
+    return selected, absent
+
+
+def probe_rates(args: argparse.Namespace, queries: CtpQueryAdapter) -> tuple[Mapping[str, object], int]:
+    """柜台手续费率 / 保证金率与本地品种登记比对 (FR-RULE-05).
+
+    只读查询；柜台返回空（休市日或该柜台不支持）时记为"柜台未给出该口径"，不当成不一致，也不当成
+    已核验。命令行给了 ``--rate-symbols`` 就只查这些合约，否则每个登记品种取柜台最近的上市合约。
+    """
+    requested = [item.strip() for item in str(getattr(args, "rate_symbols", "") or "").split(",") if item.strip()]
+    absent: list[str] = []
+    counter_only: list[str] = []
+    if requested:
+        products = {symbol: "".join(ch for ch in symbol.split(".")[-1] if ch.isalpha()) for symbol in requested}
+        source = "命令行 --rate-symbols"
+    else:
+        instruments = queries.query_all_instruments()
+        pairs, absent = nearest_listed_contracts(instruments)
+        products = {symbol: product for symbol, product in pairs.items()}
+        counter_only = _counter_only_contracts(instruments)
+        source = "柜台合约清单（每品种最近的上市合约）"
+    observations: list[dict[str, object]] = []
+    errors: list[str] = []
+    for symbol, product in products.items():
+        observation, error = _rate_observation(queries, symbol, product)
+        if error:
+            errors.append(error)
+            continue
+        observations.append(observation)
+    # 柜台自有合约（本地无登记）：只登记柜台口径，用于证明查询通道本身可用
+    counter_only_observations: list[dict[str, object]] = []
+    for symbol in counter_only:
+        observation, error = _rate_observation(queries, symbol, None)
+        if error:
+            errors.append(error)
+            continue
+        counter_only_observations.append(observation)
+    comparison = ctp_setup.compare_contract_rates(observations)
+    detail: dict[str, object] = {
+        "symbol_source": source,
+        "symbols": sorted(products),
+        "products_without_listed_contracts": absent,
+        "observations": observations,
+        "comparison": comparison,
+        "counter_only_observations": counter_only_observations,
+        "errors": errors,
+        "result": comparison["result"],
+    }
+    return detail, 2 if (comparison["mismatches"] or errors) else 0
+
+
+def _rate_observation(
+    queries: CtpQueryAdapter, symbol: str, product: str | None
+) -> tuple[dict[str, object], str | None]:
+    # 柜台查询只认裸合约代码：登记里的 "SHFE.rb2610" 直接当 InstrumentID 发出去会得到空记录
+    bare = symbol.split(".")[-1]
+    try:
+        commission = queries.query_commission_rate(bare)
+        margin = queries.query_margin_rate(bare)
+    except Exception as exc:
+        return {}, f"{symbol}:{type(exc).__name__}"
+    return (
+        {
+            "instrument": symbol,
+            "product": product,
+            "commission": None if commission is None else _trim(commission, COMMISSION_RATE_FIELDS),
+            "margin": None if margin is None else _trim(margin, MARGIN_RATE_FIELDS),
+        },
+        None,
     )
-    return detail, 0 if not comparison["mismatches"] else 2
+
+
+def _counter_only_contracts(counter_instruments: Sequence[Mapping[str, object]], *, limit: int = 3) -> list[str]:
+    """柜台自有交易所的上市合约（本地无登记）：优先 TTS 自有的撮合合约，最多取若干条.
+
+    实测这类合约才在柜台配了费率与保证金（重放的真实市场合约返回空记录），因此它们是"查询通道可用"
+    的唯一证人；按交易所各取一条，不重复。
+    """
+    registered = {spec.exchange.value for spec in ctp_setup.product_specs().values()}
+    by_exchange: dict[str, list[str]] = {}
+    for record in counter_instruments:
+        exchange = record.get("ExchangeID")
+        symbol = record.get("InstrumentID")
+        if not isinstance(exchange, str) or not isinstance(symbol, str) or exchange in registered:
+            continue
+        if str(record.get("IsTrading", "")) != "1":
+            continue
+        by_exchange.setdefault(exchange, []).append(symbol)
+    ordered = sorted(by_exchange, key=lambda name: (name != "TTS", name))
+    selected: list[str] = []
+    for exchange in ordered[:limit]:
+        selected.append(sorted(by_exchange[exchange])[0])
+    return selected
 
 
 def probe_market(
@@ -696,7 +990,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--account", default=None, help="本地账户标识（写入证据与事件归属）")
     parser.add_argument("--flow-dir", default="runs/live/ctp_flow", help="CTP 私有流目录（本地磁盘）")
     parser.add_argument("--query-interval-ms", type=int, default=1000, help="查询流控间隔")
-    parser.add_argument("--query-timeout", type=float, default=15.0, help="单次查询等待应答的秒数")
+    parser.add_argument(
+        "--query-timeout",
+        type=float,
+        default=30.0,
+        help="单次查询等待应答的秒数（全量合约清单在 openctp TTS 上 >20 秒，故默认 30 秒）",
+    )
     parser.add_argument("--connect-timeout", type=float, default=20.0, help="等待前置连接的秒数")
     parser.add_argument("--login-timeout", type=float, default=20.0, help="等待认证 / 登录 / 结算确认的秒数")
     parser.add_argument("--order-symbol", default=None, help="可选：做开仓限价单 + 撤单闭环的实际合约")
@@ -720,6 +1019,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--price-tick", default="1", help="报单探测使用的价格步长（须与合约登记一致）")
     parser.add_argument(
+        "--position-probe",
+        default=None,
+        help="会成交的持仓探测：穿价建仓后逐个开平标志平仓，如 SHFE.rb2610（仿真环境专用）",
+    )
+    parser.add_argument("--position-quantity", type=int, default=1, help="持仓探测的手数（默认 1 手）")
+    parser.add_argument("--fill-wait", type=float, default=10.0, help="等待成交 / 终局状态的秒数")
+    parser.add_argument(
+        "--market-order-probe",
+        action="store_true",
+        help="附加市价单探测：用 AnyPrice 再建一笔仓并平掉（登记里市价单仍未核验，仅供探测）",
+    )
+    parser.add_argument(
+        "--cross-ticks",
+        type=int,
+        default=2,
+        help="持仓探测的穿价余量（跳）：做市模式要求高于叫卖价才立即成交（默认 2 跳）",
+    )
+    parser.add_argument(
+        "--all-close-flags",
+        action="store_true",
+        help="对每个候选开平标志各建一次仓再平一次：既证明哪个能用，也证明哪个被拒",
+    )
+    parser.add_argument(
         "--cancel-active-symbol",
         default=None,
         help="撤销该合约在柜台的全部活动报单（清理历史探测留下的委托），如 SHFE.rb2610",
@@ -729,7 +1051,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="查询柜台品种 / 交易所 / 投资者 / 用户会话，并与本地品种登记比对（写入 runs/s0/ctp_catalog_diff_*.json）",
     )
+    parser.add_argument(
+        "--verify-rates",
+        action="store_true",
+        help="查询柜台手续费率 / 保证金率并与本地品种登记比对（写入 runs/<out>/ctp_rate_evidence_*.json）",
+    )
+    parser.add_argument(
+        "--rate-symbols",
+        default=None,
+        help="费率核验的合约清单（逗号分隔）；默认每个登记品种取柜台最近的上市合约",
+    )
     parser.add_argument("--market-symbol", default=None, help="可选：订阅行情并收集逐笔快照，如 SHFE.rb2610")
+    parser.add_argument(
+        "--dummy-login",
+        action="store_true",
+        help="无凭据联调：用虚构账号发起一次登录，只验证原生库与前置，须同时显式指定 --profile",
+    )
+    parser.add_argument("--dummy-user", default=DUMMY_PROBE_USER, help="无凭据联调使用的虚构用户号")
     parser.add_argument("--market-front", default=None, help="行情前置（默认取柜台登记的 fronts.market）")
     parser.add_argument("--market-seconds", type=float, default=8.0, help="收集行情的秒数")
     parser.add_argument("--market-ticks", type=int, default=20, help="收集到多少笔快照即可提前结束")
@@ -743,15 +1081,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
-    if args.profile is None:
-        config_path = ROOT / args.config
-        if config_path.is_file():
-            import yaml
+    explicit_account = args.account
+    config_path = ROOT / args.config
+    config_data: dict[str, Any] = {}
+    if config_path.is_file():
+        import yaml
 
-            data = yaml.safe_load(config_path.read_text(encoding="utf-8-sig")) or {}
-            args.profile = (data.get("broker") or {}).get("profile")
-            if args.account is None:
-                args.account = (data.get("risk") or {}).get("account_id")
+        config_data = yaml.safe_load(config_path.read_text(encoding="utf-8-sig")) or {}
+    broker = config_data.get("broker") or {}
+    if args.profile is None:
+        args.profile = broker.get("profile")
+    if broker.get("profile") == args.profile:
+        # 账号标识只从“与所选登记一致”的本地配置取，避免把 SimNow 账号带进 openctp 环境
+        args.user = args.user or broker.get("user_id")
+        args.investor = args.investor or broker.get("investor_id")
+        if explicit_account is None:
+            args.account = (config_data.get("risk") or {}).get("account_id")
+    if args.dummy_login and args.profile is None:
+        # 无凭据联调不能落到运行配置的环境上：用错环境会把柜台行为当成网络故障解读
+        print("无凭据联调必须显式指定 --profile（如 --profile openctp_tts）", file=sys.stderr)
+        return 2
+    if args.dummy_login:
+        args.user = args.user or args.dummy_user
+        args.investor = args.investor or args.dummy_user
+        os.environ[ctp_setup.PASSWORD_ENV] = DUMMY_PROBE_PASSWORD
+        if explicit_account is None:
+            args.account = DUMMY_PROBE_ACCOUNT
+        print(f"无凭据联调：使用虚构探测账号 {args.dummy_user}，口令为脚本内虚构值，不代表任何客户账号")
     args.account = args.account or "ctp-probe-account"
     try:
         report, exit_code = run_probe(args)
@@ -784,18 +1140,77 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if report.get("catalog_check"):
         check = report["catalog_check"]
+        product = check.get("comparison") or {}
+        instrument = check.get("instrument_comparison") or {}
         print(
-            f"柜台口径比对: 品种 {check.get('counter_products')} 个，"
-            f"不一致 {len((check.get('comparison') or {}).get('mismatches', []))} 项，"
-            f"柜台缺失 {len((check.get('comparison') or {}).get('missing_at_counter', []))} 项"
+            f"柜台口径比对: 品种 {check.get('counter_products')} 个（不一致 {len(product.get('mismatches', []))}，"
+            f"柜台未给出 {len(product.get('counter_absent', []))}），"
+            f"合约 {check.get('counter_instruments')} 个（不一致 {len(instrument.get('mismatches', []))}，"
+            f"柜台缺失 {len(instrument.get('missing_at_counter', []))}）"
         )
+        print(f"    {check.get('result')}")
         print(f"    比对文件: {report.get('catalog_diff_file')}")
     if report.get("market_probe"):
         probe = report["market_probe"]
         print(f"行情探测: ticks={probe.get('ticks')} {probe.get('result') or probe.get('error')}")
+    if report.get("position_probe"):
+        check = report["position_probe"]
+        print(f"持仓探测: {check.get('result') or check.get('error')}")
+        confirmed = check.get("close_confirmed") or {}
+        if confirmed:
+            print(f"    平仓确认: {confirmed.get('meaning')}（flag={confirmed.get('flag')}）")
+        residual = check.get("residual_check") or {}
+        print(
+            f"    残留持仓: {residual.get('open_position_after')} 手（已平={residual.get('flat')}，"
+            f"查询完整={residual.get('query_complete')}）"
+        )
+        for warning in check.get("warnings") or []:
+            print(f"    注意: {warning}")
     if report.get("order_probe"):
         outcome = report["order_probe"].get("result") or report["order_probe"].get("error")
         print(f"报单探测: {json.dumps(outcome, ensure_ascii=False)}")
+    if report.get("native_libs"):
+        staged = report["native_libs"]
+        print(f"原生库: {staged.get('flavor')}（api_marker={staged.get('api_marker')}，loaded={staged.get('loaded')}）")
+        for item in staged.get("files") or []:
+            print(f"    {item.get('loader_name')} {item.get('sha256')}")
+    if report.get("login_probe"):
+        probe = report["login_probe"]
+        if probe.get("kind") == "unregistered_dummy_account":
+            if probe.get("counter_answered"):
+                print(
+                    f"无凭据联调: 柜台已应答登录请求并被拒绝（code={probe.get('counter_error_code')} "
+                    f"{probe.get('counter_error_message')}）；本记录不构成登录通过"
+                )
+            else:
+                print(
+                    f"无凭据联调失败: 登录未得到柜台应答（fault={probe.get('fault')}，"
+                    f"disconnect={probe.get('front_disconnected')}）；清单与故障见证据文件"
+                )
+        else:
+            print(f"登录证据: {probe.get('kind')}")
+    if report.get("rate_check"):
+        check = report["rate_check"]
+        comparison = check.get("comparison") or {}
+        print(
+            f"费率与保证金核验: 合约 {len(check.get('symbols') or [])} 个（不一致 {len(comparison.get('mismatches', []))}，"
+            f"柜台未给出 {len(comparison.get('counter_absent', []))}）"
+        )
+        print(f"    {check.get('result')}")
+        counter_only = check.get("counter_only_observations") or []
+        if counter_only:
+            print(f"    柜台自有合约（本地无登记）: {[item['instrument'] for item in counter_only]}")
+        print(f"    证据文件: {report.get('rate_evidence_file')}")
+    if report.get("market_reachability"):
+        reachability = report["market_reachability"]
+        print(
+            f"行情前置: {reachability.get('front_market')} -> {reachability.get('result')}"
+            + (
+                ""
+                if reachability.get("session")
+                else f"（code={reachability.get('counter_error_code')} {reachability.get('counter_error_message')}）"
+            )
+        )
     print(f"证据文件: {path.relative_to(ROOT).as_posix()}")
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))

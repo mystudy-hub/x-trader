@@ -2,6 +2,8 @@
 broker_id: null
 profile_name: null
 ctp_version: null
+# 目标环境要求的原生库；未登记即用绑定自带库，登记了就必须装载成功且 GetApiVersion() 含 api_marker。
+native_libs: null
 effective_from: null
 effective_to: null
 verified_at: null

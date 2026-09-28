@@ -42,7 +42,7 @@ def write_settings(tmp_path: Path, **overrides) -> Path:
 
 
 def install_fake_counter(monkeypatch: pytest.MonkeyPatch, binding) -> None:
-    monkeypatch.setattr(ctp_gateway, "load_ctp_binding", lambda: binding)
+    monkeypatch.setattr(ctp_gateway, "load_ctp_binding", lambda *_args, **_kwargs: binding)
     monkeypatch.setenv("QH_CTP_PASSWORD", SECRET)
 
 
@@ -165,7 +165,7 @@ def test_live_assembly_wires_the_market_channel_into_the_service(tmp_path, monke
     binding = fake_account()
     install_fake_counter(monkeypatch, binding)
     md_binding = FakeMdBinding(symbol="rb2410")
-    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda *_args, **_kwargs: md_binding)
     assembled = assemble(live_spec(tmp_path))
     try:
         assembled.connect_counter()
@@ -188,7 +188,7 @@ def test_live_assembly_survives_an_unavailable_market_channel(tmp_path, monkeypa
     binding = fake_account()
     install_fake_counter(monkeypatch, binding)
     md_binding = FakeMdBinding(login_code=3)
-    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda *_args, **_kwargs: md_binding)
     assembled = assemble(live_spec(tmp_path))
     try:
         assembled.connect_counter()
@@ -204,7 +204,7 @@ def test_probe_script_collects_market_snapshots(tmp_path, monkeypatch):
     binding = build_probe_binding()
     install_fake_counter(monkeypatch, binding)
     md_binding = FakeMdBinding(symbol="rb2610", auto_tick_on_subscribe=True)
-    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda *_args, **_kwargs: md_binding)
     out_dir = "runs/pytest-ctp-probe-market"
     target = ROOT / out_dir
     shutil.rmtree(target, ignore_errors=True)
@@ -249,6 +249,25 @@ def test_probe_script_compares_counter_products_with_the_local_registry(tmp_path
             },
         )(),
     )
+    # 合约级核验（ReqQryInstrument）要求每个本地登记品种都有可交易合约：按登记口径造出这些记录
+    from scripts import ctp_setup
+
+    binding.query_records["instrument"] = tuple(
+        type(
+            "I",
+            (),
+            {
+                "InstrumentID": f"{spec.product.lower()}2610",
+                "ExchangeID": spec.exchange.value,
+                "ProductID": spec.product,
+                "VolumeMultiple": spec.multiplier,
+                "PriceTick": spec.price_tick,
+                "ExpireDate": "20261015",
+                "IsTrading": "1",
+            },
+        )()
+        for spec in ctp_setup.product_specs().values()
+    )
     binding.query_records["exchange"] = (type("E", (), {"ExchangeID": "SHFE", "ExchangeName": "上海期货交易所"})(),)
     binding.query_records["investor"] = (type("I", (), {"InvestorID": "231495", "IsActive": 1})(),)
     binding.query_records["user_session"] = (type("S", (), {"UserID": "231495", "FrontID": 1, "SessionID": 12})(),)
@@ -265,6 +284,10 @@ def test_probe_script_compares_counter_products_with_the_local_registry(tmp_path
         assert all(item["matches"] for item in comparison["compared"])
         assert diff["counter_products"] == 3
         assert diff["user_sessions"] == [{"front_id": 1, "session_id": 12}]
+        # 合约级比对：每个登记品种都有可交易合约，且乘数 / 最小变动与登记一致
+        instrument = diff["instrument_comparison"]
+        assert instrument["mismatches"] == [] and instrument["missing_at_counter"] == []
+        assert all(item["value_state"] == "一致" for item in instrument["compared"])
     finally:
         shutil.rmtree(target, ignore_errors=True)
 
@@ -547,6 +570,35 @@ def test_probe_script_refuses_to_run_without_the_local_secret(monkeypatch, capsy
     monkeypatch.delenv("QH_CTP_PASSWORD", raising=False)
     assert ctp_probe.main(["--profile", "simnow_v6", "--user", "231495", "--investor", "231495"]) == 2
     assert "QH_CTP_PASSWORD" in capsys.readouterr().err
+
+
+def test_probe_takes_account_ids_only_from_a_matching_local_config(tmp_path, monkeypatch):
+    """账号标识只从与所选登记一致的本地配置取：不能把 SimNow 账号带进 openctp 环境。"""
+    config = tmp_path / "settings.openctp.local.yaml"
+    config.write_text(
+        "broker:\n  profile: openctp_tts\n  user_id: '20525'\n  investor_id: '20525'\nrisk:\n  account_id: openctp-7x24\n",
+        encoding="utf-8",
+    )
+    seen: dict[str, object] = {}
+
+    def fake_run_probe(args):
+        seen.update(vars(args))
+        return {"steps": []}, 0
+
+    monkeypatch.setattr(ctp_probe, "run_probe", fake_run_probe)
+    out_dir = "runs/pytest-ctp-probe-config"
+    target = ROOT / out_dir
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        base = ["--config", str(config), "--out", out_dir]
+        assert ctp_probe.main([*base, "--profile", "openctp_tts"]) == 0
+        assert (seen["user"], seen["investor"], seen["account"]) == ("20525", "20525", "openctp-7x24")
+        seen.clear()
+        # 配置里的登记与所选登记不一致时不采用它的账号标识
+        assert ctp_probe.main([*base, "--profile", "simnow_v6", "--account", "probe-account"]) == 0
+        assert seen["user"] is None and seen["investor"] is None and seen["account"] == "probe-account"
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
 
 
 def test_probe_script_refuses_to_write_evidence_outside_runs(tmp_path, monkeypatch):

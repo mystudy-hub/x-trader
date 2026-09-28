@@ -43,6 +43,13 @@ from qh_trader.core.objects import (
     require_text,
 )
 from qh_trader.core.ports import ExecutionPort, FeedbackNormalizerPort
+from qh_trader.gateway.ctp_native_libs import (
+    NativeLibError,
+    NativeLibSpec,
+    StagedNativeLibs,
+    ensure_native_libs,
+    verify_api_marker,
+)
 from qh_trader.gateway.terminal_info import (
     TerminalAccessMode,
     TerminalInfoCollector,
@@ -136,9 +143,8 @@ class CtpSettings:
     collector_lib_path: str | None = None
     terminal_public_ip: str | None = None
     terminal_ip_port: int | None = None
-    terminal_mode: str = "none"
-    collector_lib_path: str | None = None
-    terminal_public_ip: str | None = None
+    # 原生库选择：登记了 flavor 就按 TTS/指定版本装载，未登记则用绑定自带库 (S0-02, GAP-S0-01)
+    native_libs: NativeLibSpec | None = None
 
     # 柜台字段是定长 char 数组，超长会在绑定层直接抛异常（实测 UserProductInfo 超过 10 字符即失败），
     # 因此在本地就按头文件长度校验：TThostFtdcBrokerIDType[11] / UserIDType[16] / InvestorIDType[13]
@@ -171,6 +177,8 @@ class CtpSettings:
             raise ValueError("AppID and AuthCode are authenticated together or not at all")
         if self.terminal_mode not in ("none", "direct", "relay"):
             raise ValueError(f"unknown terminal_mode: {self.terminal_mode!r}, must be 'none', 'direct' or 'relay'")
+        if self.native_libs is not None and not isinstance(self.native_libs, NativeLibSpec):
+            raise TypeError("native_libs must be a NativeLibSpec translated from the counter registration")
         object.__setattr__(self, "local_reject_codes", frozenset(self.local_reject_codes))
 
     @property
@@ -401,24 +409,40 @@ class CtpBinding(Protocol):
 
 
 class OpenCtpBinding:
-    """``openctp-ctp`` 绑定；模块导入推迟到创建连接时，未安装不阻塞其他层次."""
+    """``openctp-ctp`` 绑定；模块导入推迟到创建连接时，未安装不阻塞其他层次.
+
+    登记了 ``native_libs`` 时，先按登记暂存并预装载原生库再导入绑定：连 openctp TTS 环境必须用
+    TTS 版兼容库，用官方库的症状是 4097 或『不合法的登录』（GAP-S0-01）。
+    """
 
     name = "openctp-ctp"
     version = "unavailable"
 
-    def __init__(self) -> None:
+    def __init__(self, native_libs: NativeLibSpec | None = None) -> None:
         self._module: ModuleType | None = None
+        self._native_libs = native_libs
+        self.native_lib_report: StagedNativeLibs | None = None
+
+    def _preload(self) -> None:
+        """在导入绑定前装载登记的原生库；失败即明确拒绝，不回退到绑定自带库."""
+        if self._native_libs is None or self.native_lib_report is not None:
+            return
+        self.native_lib_report = ensure_native_libs(self._native_libs)
+
+    def _import_package(self) -> ModuleType:
+        self._preload()
+        try:
+            return importlib.import_module("openctp_ctp")
+        except (ImportError, OSError, AttributeError) as exc:
+            raise CtpBindingUnavailableError(
+                f"CTP binding openctp-ctp is unavailable ({type(exc).__name__}); install it with {CTP_EXTRA_HINT}"
+            ) from exc
 
     def _trader(self) -> ModuleType:
         """openctp-ctp 把交易接口模块以 ``tdapi`` 暴露 (对应 ``thosttraderapi``)."""
         if self._module is None:
-            try:
-                package = importlib.import_module("openctp_ctp")
-                self._module = package.tdapi
-            except (ImportError, OSError, AttributeError) as exc:
-                raise CtpBindingUnavailableError(
-                    f"CTP binding openctp-ctp is unavailable ({type(exc).__name__}); install it with {CTP_EXTRA_HINT}"
-                ) from exc
+            package = self._import_package()
+            self._module = package.tdapi
             self.version = str(getattr(package, "__version__", "unknown"))
         return self._module
 
@@ -436,23 +460,36 @@ class OpenCtpBinding:
         return str(getter()) if getter is not None else "unknown"
 
     def dll_hashes(self) -> Mapping[str, str]:
-        """登记实际加载的原生库哈希 (S0-02 / GAP-S0-01 关闭条件)."""
+        """登记实际加载的原生库哈希 (S0-02 / GAP-S0-01 关闭条件).
+
+        装载了登记库时，以 ``native/`` 前缀登记实际被加载的暂存库，避免与 wheel 自带的同名文件混淆。
+        """
         module = importlib.import_module("openctp_ctp")
         if not module.__file__:
             return {}
         root = Path(module.__file__).resolve().parent
         digests: dict[str, str] = {}
-        for path in sorted(list(root.glob("*.pyd")) + list(root.parent.glob("openctp_ctp.libs/*.dll"))):
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(block)
-            digests[path.name] = digest.hexdigest()
+        for path in sorted(root.glob("*.pyd")):
+            digests[path.name] = _file_sha256(path)
+        if self.native_lib_report is not None:
+            for name, digest in self.native_lib_report.preloaded_hashes().items():
+                digests[f"native/{name}"] = digest
+            return digests
+        for path in sorted(root.parent.glob("openctp_ctp.libs/*.dll")):
+            digests[path.name] = _file_sha256(path)
         return digests
 
 
-def load_ctp_binding() -> CtpBinding:
-    return OpenCtpBinding()
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_ctp_binding(native_libs: NativeLibSpec | None = None) -> CtpBinding:
+    return OpenCtpBinding(native_libs=native_libs)
 
 
 # --------------------------------------------------------------------------------------- 序列化辅助
@@ -615,6 +652,36 @@ TRADER_PRODUCT_FIELDS = (
     "ProductClass",
 )
 TRADER_EXCHANGE_FIELDS = ("ExchangeID", "ExchangeName", "ExchangeProperty")
+# 柜台费率 / 保证金率：本地研究假设（元/手、比例）的柜台口径来源 (FR-RULE-05)。
+TRADER_COMMISSION_RATE_FIELDS = (
+    "InstrumentID",
+    "ExchangeID",
+    "BrokerID",
+    "InvestorID",
+    "InvestorRange",
+    "OpenRatioByMoney",
+    "OpenRatioByVolume",
+    "CloseRatioByMoney",
+    "CloseRatioByVolume",
+    "CloseTodayRatioByMoney",
+    "CloseTodayRatioByVolume",
+    "BizType",
+    "InvestUnitID",
+)
+TRADER_MARGIN_RATE_FIELDS = (
+    "InstrumentID",
+    "ExchangeID",
+    "BrokerID",
+    "InvestorID",
+    "InvestorRange",
+    "HedgeFlag",
+    "LongMarginRatioByMoney",
+    "LongMarginRatioByVolume",
+    "ShortMarginRatioByMoney",
+    "ShortMarginRatioByVolume",
+    "IsRelative",
+    "InvestUnitID",
+)
 TRADER_INVESTOR_FIELDS = (
     "BrokerID",
     "InvestorID",
@@ -709,6 +776,7 @@ class CtpCallbackRouter:
         queries: CtpQuerySink | None = None,
         source_id: str = "ctp",
         wall_time: Callable[[], datetime] | None = None,
+        session_trading_day: Callable[[], date | None] | None = None,
     ) -> None:
         self.normalizer = normalizer
         self.events = events
@@ -716,6 +784,7 @@ class CtpCallbackRouter:
         self.account_id = account_id
         self.source_id = source_id
         self._wall_time = wall_time or (lambda: datetime.now(timezone.utc))
+        self._session_trading_day = session_trading_day or (lambda: None)
         self._lock = threading.Lock()
         self.counts = {
             "order_reports": 0,
@@ -778,12 +847,38 @@ class CtpCallbackRouter:
         if info is not None:
             raw["rsp"] = _struct_fields(info, TRADER_RSP_INFO_FIELDS)
         raw["callback"] = kind
+        # 拒单回报（OnErrRtnOrderInsert / OnRspOrderInsert / OnRspOrderAction）不带 TradingDay：
+        # 用已核验的**会话说交易日**补齐，并标记来源；会话交易日未知时仍然明确失败，绝不用本地日期推算。
+        # 2026-09-28 openctp TTS 实测：缺这一步会把柜台拒单变成“转换失败”，丢掉柜台错误码。
+        if not raw.get("TradingDay"):
+            session_day = self._session_trading_day()
+            if session_day is not None:
+                raw["TradingDay"] = session_day.strftime("%Y%m%d")
+                raw["__trading_day_source"] = "session"
         try:
             event = self.normalizer.normalize_error(raw, received_at)
         except Exception as exc:
             self._fail(f"error_conversion:{kind}", exc)
             return
         self._count("errors")
+        response = raw.get("rsp")
+        code: int | None = None
+        message: str | None = None
+        if isinstance(response, Mapping):
+            code = None if response.get("ErrorID") in (None, "") else int(response["ErrorID"])
+            message = None if response.get("ErrorMsg") in (None, "") else str(response["ErrorMsg"])
+        # 拒单原因必须可见：柜台错误码 / 报文写进网关状态，否则只看得到“被拒”看不到“为何被拒”
+        self._notify(
+            "counter_rejection",
+            {
+                "kind": kind,
+                "error_code": code,
+                "error_message": message,
+                "order_ref": raw.get("OrderRef"),
+                "instrument_id": raw.get("InstrumentID"),
+                "trading_day_source": raw.get("__trading_day_source"),
+            },
+        )
         if event is not None:
             self.events.enqueue(event)
 
@@ -830,6 +925,8 @@ QUERY_FIELDS: dict[str, tuple[str, ...]] = {
     "user_session": TRADER_USER_SESSION_FIELDS,
     "depth": TRADER_DEPTH_FIELDS,
     "settlement_confirm": TRADER_SETTLEMENT_CONFIRM_FIELDS,
+    "commission_rate": TRADER_COMMISSION_RATE_FIELDS,
+    "margin_rate": TRADER_MARGIN_RATE_FIELDS,
 }
 
 
@@ -928,6 +1025,12 @@ def build_trader_spi(binding: CtpBinding, router: CtpCallbackRouter) -> object:
     def on_rsp_qry_user_session(self: object, field, info, request_id: int, is_last: bool) -> None:
         router.on_query(kind="user_session", request_id=request_id, record=field, info=info, is_last=is_last)
 
+    def on_rsp_qry_instrument_commission_rate(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="commission_rate", request_id=request_id, record=field, info=info, is_last=is_last)
+
+    def on_rsp_qry_instrument_margin_rate(self: object, field, info, request_id: int, is_last: bool) -> None:
+        router.on_query(kind="margin_rate", request_id=request_id, record=field, info=info, is_last=is_last)
+
     namespace = {
         "OnFrontConnected": on_front_connected,
         "OnFrontDisconnected": on_front_disconnected,
@@ -954,6 +1057,8 @@ def build_trader_spi(binding: CtpBinding, router: CtpCallbackRouter) -> object:
         "OnRspQryExchange": on_rsp_qry_exchange,
         "OnRspQryInvestor": on_rsp_qry_investor,
         "OnRspQryUserSession": on_rsp_qry_user_session,
+        "OnRspQryInstrumentCommissionRate": on_rsp_qry_instrument_commission_rate,
+        "OnRspQryInstrumentMarginRate": on_rsp_qry_instrument_margin_rate,
     }
     return type("CtpTraderSpi", (binding.trader_spi_base(),), namespace)()
 
@@ -988,6 +1093,7 @@ class CtpSessionReport:
     restored_order_refs: int
     dll_hashes: Mapping[str, str]
     terminal_info: Mapping[str, object] | None = None
+    native_libs: Mapping[str, object] | None = None
     notes: tuple[str, ...] = ()
 
     def as_mapping(self) -> dict[str, object]:
@@ -1008,6 +1114,8 @@ class CtpSessionReport:
             "login_seconds": round(self.login_seconds, 6),
             "restored_order_refs": self.restored_order_refs,
             "dll_hashes": dict(self.dll_hashes),
+            "terminal_info": None if self.terminal_info is None else dict(self.terminal_info),
+            "native_libs": None if self.native_libs is None else dict(self.native_libs),
             "notes": list(self.notes),
         }
 
@@ -1051,7 +1159,7 @@ class CtpTraderGateway(ExecutionPort):
         self._profile = capability_profile
         self._capability_version = capability_version
         self._authority = authority
-        self._binding = binding if binding is not None else load_ctp_binding()
+        self._binding = binding if binding is not None else load_ctp_binding(settings.native_libs)
         self._ref_book = ref_book if ref_book is not None else CtpOrderRefBook()
         self._offsets = {mapping.exchange: mapping for mapping in offset_mappings}
         self._wall_time = wall_time or (lambda: datetime.now(timezone.utc))
@@ -1063,6 +1171,7 @@ class CtpTraderGateway(ExecutionPort):
             queries=queries,
             source_id=source_id,
             wall_time=self._wall_time,
+            session_trading_day=lambda: self._trading_day,
         )
         self.router.observer = self._on_notification
         self._api: Any | None = None
@@ -1088,6 +1197,8 @@ class CtpTraderGateway(ExecutionPort):
         self._last_error: tuple[int | None, str | None] | None = None
         self._terminal_payload: TerminalInfoPayload | None = None
         self.rejections: list[str] = []
+        # 柜台明确拒单的原因（拒单 / 拒撤的错误码与报文）；有界，供操作员与证据引用
+        self.counter_rejections: list[Mapping[str, object]] = []
         self._cancel_locators: list[Mapping[str, object]] = []
         self.counts = {
             "connect_attempts": 0,
@@ -1212,6 +1323,7 @@ class CtpTraderGateway(ExecutionPort):
         self._settlement_ready.clear()
         self._fault = None
         self._needs_reconciliation = True
+
         # S5-03 看穿式终端信息采集与核验 (A27, F17)
         terminal_report_mapping: dict[str, object] | None = None
         self._terminal_payload = None
@@ -1231,6 +1343,18 @@ class CtpTraderGateway(ExecutionPort):
 
         api = binding.create_trader_api(str(flow))
         self._api = api
+        # 原生库核验前置：用错库连 TTS 等兼容柜台会在握手时表现为 4097 或『不合法的登录』 (GAP-S0-01)
+        if self.settings.native_libs is not None:
+            reported = str(self._safe(lambda: binding.api_version(api)) or "unknown")
+            try:
+                verify_api_marker(
+                    flavor=self.settings.native_libs.flavor,
+                    api_marker=self.settings.native_libs.api_marker,
+                    api_version=reported,
+                )
+            except NativeLibError:
+                self._fault = "native_lib_mismatch"
+                raise
         self._spi = build_trader_spi(binding, self.router)
         api.RegisterSpi(self._spi)
         self._subscribe_private(api)
@@ -1261,6 +1385,8 @@ class CtpTraderGateway(ExecutionPort):
         dll_hashes = dict(self._safe(binding.dll_hashes) or {})
         if self._terminal_payload is not None:
             dll_hashes[Path(self._terminal_payload.report.collector_dll).name] = self._terminal_payload.report.dll_hash
+        native_report = getattr(binding, "native_lib_report", None)
+        native_lib_mapping = None if not isinstance(native_report, StagedNativeLibs) else native_report.as_mapping()
         self._session_report = CtpSessionReport(
             front_trade=self.settings.front_trade,
             broker_id=self.settings.broker_id,
@@ -1279,6 +1405,7 @@ class CtpTraderGateway(ExecutionPort):
             restored_order_refs=self._ref_book.restored,
             dll_hashes=dll_hashes,
             terminal_info=terminal_report_mapping,
+            native_libs=native_lib_mapping,
             notes=tuple(notes),
         )
         return self._session_report
@@ -1405,6 +1532,20 @@ class CtpTraderGateway(ExecutionPort):
 
     # ------------------------------------------------------------------ 回调侧状态
     def _on_notification(self, action: str, payload: Mapping[str, object]) -> None:
+        if action == "counter_rejection":
+            # 柜台明确拒单（拒单 / 拒撤）：错误码与报文进状态与证据，供操作员与对账使用
+            code = payload.get("error_code")
+            message = payload.get("error_message")
+            self._last_error = (None if code is None else int(code), None if message is None else str(message))
+            self.counter_rejections.append(dict(payload))
+            del self.counter_rejections[:-20]
+            LOGGER.warning(
+                "CTP rejected a %s request (code=%s): %s",
+                payload.get("kind"),
+                code,
+                message,
+            )
+            return
         if action == "front_connected":
             self.counts["front_connected"] += 1
             self._connected = True
@@ -1812,5 +1953,6 @@ class CtpTraderGateway(ExecutionPort):
             "counts": dict(self.counts),
             "callbacks": dict(self.router.counts),
             "last_local_rejections": self.rejections[-5:],
+            "counter_rejections": [dict(item) for item in self.counter_rejections[-5:]],
             "cancel_locators": [dict(item) for item in self._cancel_locators[-5:]],
         }

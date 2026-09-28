@@ -64,6 +64,8 @@ FIELD_BY_KIND = {
     "user_session": "CThostFtdcQryUserSessionField",
     "depth": "CThostFtdcQryDepthMarketDataField",
     "settlement_confirm": "CThostFtdcQrySettlementInfoConfirmField",
+    "commission_rate": "CThostFtdcQryInstrumentCommissionRateField",
+    "margin_rate": "CThostFtdcQryInstrumentMarginRateField",
 }
 REQUEST_BY_KIND = {
     "account": "ReqQryTradingAccount",
@@ -77,6 +79,8 @@ REQUEST_BY_KIND = {
     "user_session": "ReqQryUserSession",
     "depth": "ReqQryDepthMarketData",
     "settlement_confirm": "ReqQrySettlementInfoConfirm",
+    "commission_rate": "ReqQryInstrumentCommissionRate",
+    "margin_rate": "ReqQryInstrumentMarginRate",
 }
 SOURCE_ID = "ctp"
 
@@ -323,6 +327,27 @@ class CtpQueryAdapter(AccountQueryPort):
         matching = [record for record in records if str(record.get("InstrumentID")) == symbol]
         if records and not matching:
             raise CtpQueryError("counter answered an instrument query with a different instrument")
+        return None if not matching else dict(matching[0])
+
+    # ------------------------------------------------------------------ 费率与保证金率（研究假设核验）
+    def query_commission_rate(self, symbol: str) -> Mapping[str, object] | None:
+        """查询合约手续费率（按金额 / 按手数 / 平今），用于核验本地手续费研究假设 (FR-RULE-05).
+
+        柜台没有该合约的费率记录时返回 ``None``（空口径），也不拿别的合约的记录充数。
+        """
+        return self._rate_query("commission_rate", symbol, {})
+
+    def query_margin_rate(self, symbol: str) -> Mapping[str, object] | None:
+        """查询合约保证金率（投机仓），用于核验本地保证金研究假设 (FR-RULE-05)."""
+        return self._rate_query("margin_rate", symbol, {"HedgeFlag": HEDGE_SPECULATION})
+
+    def _rate_query(self, kind: str, symbol: str, extra: Mapping[str, object]) -> Mapping[str, object] | None:
+        require_text(symbol, "instrument symbol")
+        batch = self.query_batch(kind)
+        records = self._request_raw(kind, batch, {"InstrumentID": symbol, **extra})
+        matching = [record for record in records if str(record.get("InstrumentID")) == symbol]
+        if records and not matching:
+            raise CtpQueryError(f"counter answered a {kind} query with another instrument; the rate must not be used")
         return None if not matching else dict(matching[0])
 
     def query_depth(self, symbol: str) -> Mapping[str, object] | None:

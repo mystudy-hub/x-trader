@@ -9,17 +9,21 @@ verified_by: null
 capabilities:
   offset_mapping:
     SHFE:
-      value: null
-      evidence_level: null
-      source: null
-      test_id: null
-      verified_at: null
-      notes: 今昨仓品种，须核验平今、平昨标志及分配顺序
-      verification_status: 登记缺口
-      gap_ids:
-      - GAP-S0-05
-      evidence: null
-      verified_by: null
+      value:
+        OPEN: '0'
+        CLOSE_TODAY: '3'
+      evidence_level: 柜台实测
+      source: CTP API THOST_FTDC_OffsetFlagType；openctp TTS 7x24 实测（穿价建仓后按候选标志平仓）
+      test_id: ctp_runtime_evidence_20260928T070836Z
+      verified_at: '2026-09-28'
+      notes: 今仓平仓须用平今 '3'（1 手 rb2610 建仓后成交并回到零仓）；平仓 '1' 与平昨 '4' 被柜台拒绝（错误码
+        1009 持仓不足）。**昨仓未在本环境建立**（7x24 按最近一个交易日回放），因此"平仓标志在昨仓上的分配顺序"仍未核验；登记只写已核验的标志，未列出的标志网关会本地拒发
+      verification_status: 已核验
+      gap_ids: []
+      evidence:
+        path: runs/s5/ctp_runtime_evidence_20260928T070836Z.json
+        sha256: bf9aac741d17feb0b328b7f93cfe7ffa3563736b204a3d4090ce63edf44cebf7
+      verified_by: 开发团队
     DCE:
       value: null
       evidence_level: null
@@ -70,29 +74,33 @@ capabilities:
       reason: 首个工程样本只启用 SHFE.rb，其他交易所范围尚未启用。
   order_types:
     limit_order:
-      value: null
-      evidence_level: null
-      source: CTP API ThostFtdcOrderPriceTypeType
-      test_id: null
-      verified_at: null
-      notes: 限价单支持
-      verification_status: 登记缺口
-      gap_ids:
-      - GAP-S0-05
-      evidence: null
-      verified_by: null
+      value: true
+      evidence_level: 柜台实测
+      source: CTP API ThostFtdcOrderPriceTypeType；openctp TTS 实测（ReqOrderInsert 限价开仓回报 UNKNOWN→ACCEPTED，
+        ReqOrderAction 按原会话三元组回报 CANCELLED）
+      test_id: ctp_runtime_evidence_20260928T061637Z
+      verified_at: '2026-09-28'
+      notes: 限价单支持（2026-09-28 在 openctp TTS 7x24 实测：SHFE.rb2610 限价开仓报单被柜台接受，随后撤单闭环；7x24 与仿真环境表现一致）
+      verification_status: 已核验
+      gap_ids: []
+      evidence:
+        path: runs/s5/ctp_runtime_evidence_20260928T061637Z.json
+        sha256: d5c93030760c3bceba995cafccb6b104e1137f670421c2460c19735cbc53d828
+      verified_by: 开发团队
     market_order:
-      value: null
-      evidence_level: null
-      source: CTP API ThostFtdcOrderPriceTypeType
-      test_id: null
-      verified_at: null
-      notes: 市价单支持，须核验各交易所差异
-      verification_status: 登记缺口
-      gap_ids:
-      - GAP-S0-05
-      evidence: null
-      verified_by: null
+      value: true
+      evidence_level: 柜台实测
+      source: CTP API ThostFtdcOrderPriceTypeType；openctp TTS 7x24 实测（AnyPrice 报单被接受并成交）
+      test_id: ctp_runtime_evidence_20260928T070836Z
+      verified_at: '2026-09-28'
+      notes: 市价单（OrderPriceType=AnyPrice）在 1 手 rb2610 上被柜台接受并成交，随后按已核验标志平仓；仅覆盖
+        openctp TTS 7x24 的 SHFE 合约，**其他交易所与柜台的市价单差异仍未核验**（那部分仍按登记缺口处理）
+      verification_status: 已核验
+      gap_ids: []
+      evidence:
+        path: runs/s5/ctp_runtime_evidence_20260928T070836Z.json
+        sha256: bf9aac741d17feb0b328b7f93cfe7ffa3563736b204a3d4090ce63edf44cebf7
+      verified_by: 开发团队
     fak_fok:
       value: null
       evidence_level: null
@@ -403,8 +411,18 @@ simulation_notes:
 - TTS 不校验终端信息（ReqAuthenticate 直接成功），BrokerID 可留空（本登记填 9999 仅为一致性）
 - TTS 支持 ReqQryInstrumentCommissionRate / ReqQryInstrumentMarginRate / ReqQryInvestorPositionDetail，可用于核验本地的手续费与保证金研究假设（SimNow
   的同类查询在休市日返回空）
-- 账号须通过 openctp 公众号注册（一个微信号最多 3 个 7x24/仿真号），密码在同一微信号的所有模拟号之间共享
-- 本登记的能力项结构沿用 SimNow 登记，全部为未核验；须按目标环境逐项实测后填写
+- 账号须通过 openctp 公众号注册（一个微信号最多 3 个 7x24/仿真号），密码在同一微信号的所有模拟号之间共享；SimNow
+  账号与 TTS 账号不通用
+- 2026-09-28 柜台实测补充：ReqQryProduct 的 VolumeMultiple / PriceTick 在 TTS 上**恒为 0**（品种级口径不可用），合约参数须用
+  ReqQryInstrument（实测 SHFE.rb2610：乘数 10、最小变动 1.0、到期日 20261015，与本地登记一致）；`scripts/ctp_probe.py
+  --verify-catalog` 因此会把 10 个本地品种全部报为不一致——这是柜台返回空值，不是本地登记错误
+- 费率与保证金口径：TTS 支持 ReqQryInstrumentCommissionRate / ReqQryInstrumentMarginRate（SimNow 在休市日返回空），但本项目的
+  查询适配器尚未接入这两个查询，属待交付项
+- '2026-09-28 费率 / 保证金实测（scripts/ctp_probe.py --verify-rates）：真实市场合约返回空记录（rb/au/cu/m/c/i/jd/AP/MA/FG 全部 0 条，柜台没给口径），只有柜台自有合约（TEST、lc2610、HO2610-C-2500 等）返回费率；因此这 10 个本地品种的手续费 / 保证金仍没有柜台口径可比，仍是研究假设'
+- '2026-09-28 拒单回报实测：柜台拒单（OnErrRtnOrderInsert）的回报不带 TradingDay，本项目原先按缺字段判为转换失败并丢掉柜台错误码；现已改为用该会话已核验的交易日补齐（证据里标 trading_day_source = session），拒单因此能表达为 REJECTED，并把错误码 / 报文写进网关状态的 counter_rejections'
+- '2026-09-28 持仓探测实测：做市模式要求高于叫卖价才立即成交，恰好等于卖一价可能挂住不成交（本机实测发生过），因此探测用卖一价加若干跳下单；平仓后柜台会留下 Position=0 但 LongFrozen>0 的持仓行，本项目按既有口径把这类记录保留在证据里并把查询标为不完整'
+- '2026-09-28 撤单实测：按原会话三元组的撤单在 TTS 上可用（3 笔活动委托全部撤净）'
+
 schema_version: 1
 scope:
   contracts:
@@ -423,9 +441,60 @@ fronts:
   - tcp://trading.openctp.cn:30002
   - tcp://vip.openctp.cn:30003
   source: openctp TTS 环境介绍与模拟环境监控（2026-09-25 检索），本机 TCP 实测均连通
+  paper: tcp://trading.openctp.cn:30002
+  paper_market: null
   verification_status: 待核验
-  notes: 7x24 环境行情前置 30011；仿真（30002）与 vip（30003）不提供实时行情，行情需直连实盘前置。第一套/第二套等 SimNow
-    地址不适用于本登记
+  local_evidence:
+    tested_at: '2026-09-28'
+    method: scripts/ctp_probe.py --profile openctp_tts（7x24 用 config/settings.openctp-7x24.local.yaml，仿真用 config/settings.openctp-sim.local.yaml；两者均为本机
+      git-ignored 配置，账号标识不进入仓库）
+    login: 7x24（30001）与仿真（30002）均登录成功，柜台交易日 2026-09-28，FrontID=1，SessionID 每次新建；无需 AppID/AuthCode （柜台不校验终端信息）
+    queries: 资金（余额 1,000 万、保证金 0）、持仓、报单、成交查询均返回完整应答（7x24 与仿真一致）
+    order_round_trip: SHFE.rb2610 限价开仓（取柜台跌停价 2901/2897，不会成交）→ 回报 UNKNOWN→ACCEPTED → 按原会话三元组撤单 → 回报 CANCELLED；7x24 与仿真均跑通
+    market: 7x24 行情前置 MdApi 登录成功、订阅 SHFE.rb2610 获应答并收到快照（按最近一个交易日 Tick 回放，实测 6~8 秒 1 笔）；仿真环境不提供行情，行情须直连实盘前置（实测：未登记 native_libs
+      时同一交易前置 4097 循环）
+    account_scope: 7x24 与仿真账号不通用：7x24 账号在仿真前置（30002）被拒（错误码 1005），仿真账号在 30001 与 30002 均可用
+    files:
+    - runs/s5/ctp_runtime_evidence_20260928T061637Z.json
+    - runs/s5/ctp_runtime_evidence_20260928T061427Z.json
+    - runs/s5/ctp_runtime_evidence_20260928T061322Z.json
+    - runs/s5/ctp_runtime_evidence_20260928T041605Z.json
+    note: 这些是**仿真柜台实测**证据，不替代期货公司柜台联调（S5-11、A03/A04 的柜台部分），也不改变 S5 阶段出口；未登记 native_libs 时同一交易前置表现为 4097 循环（front_disconnected=10）
+  notes: 7x24（30001/30011）与仿真（30002，无行情）是两个环境，账号不通用；vip（vip.openctp.cn:30003）未注册。第一套/第二套等 SimNow 地址不适用于本登记
+native_libs:
+  flavor: openctp-tts
+  api_marker: openctp-tts
+  staging_dir: runs/ctp_native/openctp-tts
+  source: openctp TTS系统CTPAPI 下载页（2026-09-28 检索并下载，摘要为本地实测）；TTS 版库自报 GetApiVersion() 含
+    `openctp-tts`
+  archive:
+    url: http://www.openctp.cn/download/CTPAPI/TTS/tts_6.7.11.zip
+    sha256: f9d4aec4aa3b3d1ec9f0587d37a447f6bfe4158745226279cc078257faa3a6ee
+  platforms:
+    win64:
+      source_dir: vendor/ctp/openctp_tts_6.7.11/win64
+      digests:
+        thosttraderapi_se.dll: b09a8088786f9c919b92bdbfc40344b1435a9f345704ea964ab0bb51ec1a6939
+        thostmduserapi_se.dll: 2da7652fd619db5778968298b1b995a71eed0875583bff6921e4ae2d44d6095e
+    lin64:
+      source_dir: vendor/ctp/openctp_tts_6.7.11/lin64
+      digests:
+        thosttraderapi_se.so: 6f4b31f178be5433d12deb8533f9cb3876f5429e8bbd76ed0d4e64fadb1486ad
+        thostmduserapi_se.so: c81a6fdb0c70110190fa6a64d138c0fcb13c33cca076a3dde9f479af6c45a887
+  notes: 绑定按 delvewheel 摘要文件名（thosttraderapi_se-<摘要>.dll）加载原生库，因此换库必须按该文件名暂存并在导入绑定前预装载；未登记摘要、摘要不符或
+    GetApiVersion() 不含 api_marker 一律拒绝连接，不静默回退到绑定自带库
+  verification_status: 待核验
+  local_evidence:
+    tested_at: '2026-09-28'
+    result: TTS 版原生库（GetApiVersion() = openctp-tts v6.7.11）按绑定要求的 delvewheel 文件名暂存并预装载成功；未登记
+      native_libs 时同一交易前置陷入 4097 断开循环（front_disconnected=10）
+    files:
+    - runs/s5/ctp_runtime_evidence_20260928T042034Z.json
+    - runs/s5/ctp_runtime_evidence_20260928T041605Z.json
+  gap_ids:
+  - GAP-S0-01
+  evidence: null
+  verified_by: null
 account:
   user_id: null
   investor_id: null
@@ -433,4 +502,5 @@ account:
   auth_code: null
   product_info: qh_trader
   query_interval_ms: 1000
-notes: 候选环境：openctp TTS 7x24（BrokerID 9999，无看穿式认证）。未接入、未实测登录。
+notes: 候选环境：openctp TTS 7x24（BrokerID 9999，无穿桒式认证）。前置可达性、登录 / 查询 / 报撤单与 TTS 原生库装载均已实测（见
+  fronts.local_evidence 与 capabilities 的已核验项）；仿真环境（30002）同样跑通，但账号不通用且不提供行情。

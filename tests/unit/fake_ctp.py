@@ -11,6 +11,37 @@ import threading
 from collections.abc import Mapping
 from typing import Any
 
+from qh_trader.gateway.ctp_native_libs import NativeLibSpec, StagedNativeLib, StagedNativeLibs
+
+
+#: 登记一套 TTS 原生库：假件绑定不做暂存，只用来驱动版本标记核验与证据登记。
+def native_lib_spec() -> NativeLibSpec:
+    return NativeLibSpec(
+        flavor="openctp-tts",
+        api_marker="openctp-tts",
+        source_dir="vendor/ctp/openctp_tts_6.7.11/win64",
+        staging_dir="runs/pytest/ctp_native/openctp-tts",
+    )
+
+
+def staged_native_libs() -> StagedNativeLibs:
+    return StagedNativeLibs(
+        flavor="openctp-tts",
+        api_marker="openctp-tts",
+        source_dir="vendor/ctp/openctp_tts_6.7.11/win64",
+        staging_dir="runs/pytest/ctp_native/openctp-tts",
+        files=(
+            StagedNativeLib(
+                basename="thosttraderapi_se",
+                expected_name="thosttraderapi_se-deadbeef.dll",
+                path="runs/pytest/ctp_native/openctp-tts/thosttraderapi_se-deadbeef.dll",
+                bytes=589824,
+                sha256="ab" * 32,
+            ),
+        ),
+        loaded=True,
+    )
+
 
 class FakeField:
     """SWIG 结构体等价物：可写任意属性，带 ``thisown``."""
@@ -75,6 +106,12 @@ class FakeTraderSpiBase:
 
     def OnRspQryUserSession(self, field: object, info: object, request_id: int, is_last: bool) -> None:  # noqa: N802
         self.calls.append("OnRspQryUserSession")
+
+    def OnRspQryInstrumentCommissionRate(self, field, info, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryInstrumentCommissionRate")
+
+    def OnRspQryInstrumentMarginRate(self, field, info, request_id: int, is_last: bool) -> None:  # noqa: N802
+        self.calls.append("OnRspQryInstrumentMarginRate")
 
 
 class FakeTraderApi:
@@ -197,6 +234,12 @@ class FakeTraderApi:
 
     def ReqQryUserSession(self, field: FakeField, request_id: int) -> int:  # noqa: N802
         return self._query("user_session", field, request_id)
+
+    def ReqQryInstrumentCommissionRate(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("commission_rate", field, request_id)
+
+    def ReqQryInstrumentMarginRate(self, field: FakeField, request_id: int) -> int:  # noqa: N802
+        return self._query("margin_rate", field, request_id)
 
     def _query(self, kind: str, field: FakeField, request_id: int) -> int:
         self.calls.append((f"ReqQry:{kind}", field))
@@ -340,6 +383,8 @@ QUERY_CALLBACKS = {
     "user_session": "OnRspQryUserSession",
     "depth": "OnRspQryDepthMarketData",
     "settlement_confirm": "OnRspQrySettlementInfoConfirm",
+    "commission_rate": "OnRspQryInstrumentCommissionRate",
+    "margin_rate": "OnRspQryInstrumentMarginRate",
 }
 
 
@@ -495,6 +540,9 @@ class FakeMdApi:
         if not self.binding.silent_front:
             self.spi.OnFrontConnected()  # type: ignore[attr-defined]
 
+    def GetApiVersion(self) -> str:  # noqa: N802
+        return self.binding.api_version_value
+
     def ReqUserLogin(self, field: object, request_id: int) -> int:  # noqa: N802
         self.calls.append(("ReqUserLogin", field))
         if self.binding.login_silent:
@@ -576,6 +624,7 @@ class FakeMdBinding:
         self.silent_front = False
         self.subscribe_silent = False
         self.auto_tick_on_subscribe = False
+        self.api_version_value = "fake-md-api-6.7.13"
         self.rejected_symbols: tuple[str, ...] = ()
         self.created: list[FakeMdApi] = []
         for name, value in overrides.items():

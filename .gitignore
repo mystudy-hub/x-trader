@@ -81,3 +81,6 @@ terminal_payloads/
 config/*.local.yaml
 config/secrets*.yaml
 *.token
+
+# 第三方原生库产物（openctp TTS 版 CTPAPI 等，由 scripts/fetch_ctp_native_libs.py 下载校验）
+vendor/

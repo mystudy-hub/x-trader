@@ -29,8 +29,9 @@ from qh_trader.gateway.ctp_gateway import (
     parse_order_ref_evidence,
     restore_order_refs,
 )
+from qh_trader.gateway.ctp_native_libs import NativeLibError
 from qh_trader.gateway.feedback_normalizer import build_normalizer
-from tests.unit.fake_ctp import FakeCtpBinding
+from tests.unit.fake_ctp import FakeCtpBinding, native_lib_spec, staged_native_libs
 
 ACCOUNT = "simnow-account"
 RB = InstrumentId(Exchange.SHFE, "rb2601")
@@ -208,6 +209,49 @@ def test_api_version_and_dll_hashes_are_recorded_for_the_gap_evidence():
     gateway, _, _ = make_gateway(binding=binding)
     report = gateway.connect()
     assert report.dll_hashes == {"thosttraderapi_se-x.dll": "ab" * 32}
+    assert report.native_libs is None
+
+
+def test_an_order_insert_rejection_without_a_counter_trading_day_is_still_represented():
+    """柜台拒单回报不带 TradingDay：用会话说交易日补齐并给出 REJECTED，且柜台错误码可见 (2026-09-28 TTS 实测)."""
+    binding = FakeCtpBinding(silent_reports=True)
+    gateway, sink, _ = make_gateway(binding=binding)
+    gateway.connect()
+    assert gateway.mark_reconciled() is True
+    result = gateway.submit(open_intent(), EPOCH)
+    assert result.remote_identity is not None
+    binding.api.push_insert_error(binding.api.insert_fields[-1], 1009)
+    updates = [event.payload for event in sink.events if event.kind == EventKind.ORDER_REPORT]
+    assert [update.status for update in updates] == [OrderStatus.REJECTED]
+    # 拒单是可表达的柜台事实：不应当被记成"转换失败"（那会把错误码丢掉并关闭发送门禁）
+    assert gateway.router.faulted is None and gateway.router.counts["conversion_failures"] == 0
+    assert sink.errors == []
+    assert gateway.counter_rejections[-1]["error_code"] == 1009
+    assert gateway.status()["counter_rejections"][-1]["error_code"] == 1009
+
+
+def test_a_native_library_mismatch_stops_the_handshake_before_registering_the_front():
+    """用错原生库连兼容柜台的症状是 4097；本地必须在握手前就把它拦下来 (GAP-S0-01)."""
+    binding = FakeCtpBinding(api_version_value="v6.7.13_20260225 14:16:30.12079")
+    gateway, _, _ = make_gateway(binding=binding, settings=make_settings(native_libs=native_lib_spec()))
+    with pytest.raises(NativeLibError, match="openctp-tts"):
+        gateway.connect()
+    assert gateway.fault == "native_lib_mismatch"
+    assert gateway.ready_to_send is False
+    # 只创建了接口就停在版本核验：未注册前置、未认证、未登录
+    assert [name for name, _ in binding.api.calls] == []
+
+
+def test_a_verified_native_library_flavour_is_recorded_in_the_session_report():
+    binding = FakeCtpBinding(api_version_value="openctp-tts v6.7.11")
+    binding.native_lib_report = staged_native_libs()
+    gateway, _, _ = make_gateway(binding=binding, settings=make_settings(native_libs=native_lib_spec()))
+    report = gateway.connect()
+    assert report.api_version == "openctp-tts v6.7.11"
+    assert gateway.fault is None
+    assert report.native_libs is not None
+    assert report.native_libs["flavor"] == "openctp-tts" and report.native_libs["loaded"] is True
+    assert report.native_libs["files"][0]["loader_name"] == "thosttraderapi_se-deadbeef.dll"
 
 
 # --------------------------------------------------------------------------------------- 门禁
