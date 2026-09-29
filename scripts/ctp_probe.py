@@ -29,7 +29,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -264,22 +264,30 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         return report, 1
     local_date = datetime.now(timezone(timedelta(hours=8))).date()
     matches_local = session.trading_day == local_date
+    expected_day = getattr(args, "expected_trading_day", None)
+    matches_expected = expected_day is None or session.trading_day == expected_day
     record(
         Step(
             "counter_trading_day",
-            "passed",
+            "passed" if matches_expected else "failed",
             {
                 "trading_day": session.trading_day.isoformat(),
                 "local_date": local_date.isoformat(),
                 "matches_local_date": matches_local,
+                "expected_trading_day": None if expected_day is None else expected_day.isoformat(),
+                "matches_expected_trading_day": None if expected_day is None else matches_expected,
             },
         )
     )
-    if not matches_local:
+    if not matches_expected:
+        report["trading_day_warning"] = "柜台交易日与显式指定的预期交易日不符，停止探测"
+        gateway.close()
+        return report, 2
+    if not matches_local and expected_day is None:
         # 休市日或环境滞后：报单 / 撤单只能在交易时段验证，否则会留下无法撤销的委托
         warning = (
             f"柜台交易日 {session.trading_day.isoformat()} 与本地日期 {local_date.isoformat()} 不一致"
-            "（休市日或环境按上一交易日镜像）：报单与撤单验证须在交易时段进行"
+            "（夜盘归属、休市或环境镜像均可能导致）：须用 --expected-trading-day 明确夜盘交易日"
         )
         print(f"注意: {warning}")
         report["trading_day_warning"] = warning
@@ -573,7 +581,16 @@ def probe_order(
     symbol = instrument.symbol
     detail: dict[str, object] = {"instrument": str(instrument)}
     local_date = datetime.now(timezone(timedelta(hours=8))).date()
-    if gateway.trading_day is not None and gateway.trading_day != local_date and not args.allow_non_trading_day:
+    expected_day = getattr(args, "expected_trading_day", None)
+    if expected_day is not None and gateway.trading_day != expected_day:
+        detail["error"] = "counter trading day differs from explicitly expected trading day; send is disabled"
+        return detail, 2
+    if (
+        expected_day is None
+        and gateway.trading_day is not None
+        and gateway.trading_day != local_date
+        and not args.allow_non_trading_day
+    ):
         # 非交易日或环境滞后时不下单：撤单在柜台的（已关闭）交易日里找不到报单，会留下无法撤销的委托
         detail["error"] = (
             f"counter trading day {gateway.trading_day.isoformat()} differs from the local date "
@@ -700,6 +717,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--order-symbol", default=None, help="可选：做开仓限价单 + 撤单闭环的实际合约")
     parser.add_argument("--order-quantity", type=int, default=1, help="报单探测的手数（默认 1 手）")
     parser.add_argument("--order-wait", type=float, default=DEFAULT_ORDER_WAIT_S, help="等待回报的秒数")
+    parser.add_argument(
+        "--expected-trading-day", type=date.fromisoformat, help="显式预期交易日；夜盘按柜台交易日核对，不用自然日推断"
+    )
     parser.add_argument(
         "--allow-non-trading-day",
         action="store_true",

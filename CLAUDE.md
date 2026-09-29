@@ -59,7 +59,9 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
   - `scripts/ctp_setup.py` builds `CtpSettings` from `config/broker_profiles/*.yaml` (SimNow; openctp TTS is registered as a candidate). `scripts/ctp_probe.py` produces redacted login, query, order, market-data and catalog-diff evidence under `runs/s0/`.
   - Secrets come only from the environment (`QH_CTP_PASSWORD`, `QH_CTP_AUTH_CODE`). They are never written to config, logs or evidence files.
 
-These modules are one-line placeholders for work that has not started: `gateway/terminal_info.py`, `engine/live_engine.py`, `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`.
+`engine/live_engine.py` is the S5-05 single-strategy command producer. It consumes closed bars and optional protective ticks, and writes commands through the injected client; it never calls a gateway. `scripts/run_simnow_strategy.py` defaults to observation and checks prerequisites before enabling SimNow orders. `config/strategy_validation.yaml` records the first 30-minute EMA strategy experiment; historical data readiness is still blocked.
+
+These modules are one-line placeholders for work that has not started: `gateway/terminal_info.py`, `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`.
 
 Design references:
 - `docs/04_系统架构设计.md`: §3 layering, §4 ports, §6 execution sequence, §12 ADRs

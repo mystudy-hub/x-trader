@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -43,6 +43,7 @@ from qh_trader.core.objects import (
     OrderUpdate,
     Trade,
     require_decimal,
+    require_int,
     require_text,
 )
 from qh_trader.core.ports import (
@@ -120,6 +121,56 @@ def default_close_capability_table() -> CloseCapabilityTable:
     return CloseCapabilityTable(version="v1.0-default", capabilities=caps)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CommissionSchedule:
+    """按实际成交金额及手数计费；今昨费率明确区分，来源随账户开立事实持久化。"""
+
+    multiplier: Decimal
+    open_money_ratio: Decimal
+    open_per_lot: Decimal
+    close_yesterday_money_ratio: Decimal
+    close_yesterday_per_lot: Decimal
+    close_today_money_ratio: Decimal
+    close_today_per_lot: Decimal
+    source: str
+
+    def __post_init__(self) -> None:
+        require_decimal(self.multiplier, "commission multiplier", Decimal("0.000001"))
+        for name in (
+            "open_money_ratio",
+            "open_per_lot",
+            "close_yesterday_money_ratio",
+            "close_yesterday_per_lot",
+            "close_today_money_ratio",
+            "close_today_per_lot",
+        ):
+            require_decimal(getattr(self, name), name, Decimal(0))
+        require_text(self.source, "commission source")
+
+    def commission(self, price: Decimal, quantity: int, offset: Offset) -> Decimal:
+        """返回未舍入的精确手续费；货币分位舍入沿用账户账本统一规则。"""
+        require_decimal(price, "commission price", Decimal("0.000001"))
+        require_int(quantity, "commission quantity", 1)
+        if not isinstance(offset, Offset):
+            raise TypeError("commission offset must be Offset")
+        if offset == Offset.OPEN:
+            ratio, per_lot = self.open_money_ratio, self.open_per_lot
+        elif offset == Offset.CLOSE_TODAY:
+            ratio, per_lot = self.close_today_money_ratio, self.close_today_per_lot
+        elif offset == Offset.CLOSE_YESTERDAY:
+            ratio, per_lot = self.close_yesterday_money_ratio, self.close_yesterday_per_lot
+        elif offset == Offset.CLOSE:
+            if (self.close_today_money_ratio, self.close_today_per_lot) != (
+                self.close_yesterday_money_ratio,
+                self.close_yesterday_per_lot,
+            ):
+                raise MissingRuleError("commission requires an explicit today/yesterday close offset")
+            ratio, per_lot = self.close_yesterday_money_ratio, self.close_yesterday_per_lot
+        else:
+            raise MissingRuleError(f"commission is not defined for offset {offset}")
+        return (price * self.multiplier * ratio + per_lot) * Decimal(quantity)
+
+
 @dataclass(frozen=True, slots=True)
 class InstrumentEconomics:
     """按合约登记的经济参数；来源写入运行清单."""
@@ -129,6 +180,7 @@ class InstrumentEconomics:
     commission_per_lot: Decimal
     margin_ratio: Decimal
     source: str
+    commission_schedule: CommissionSchedule | None = None
 
     def __post_init__(self) -> None:
         require_decimal(self.multiplier, "multiplier", Decimal("0.000001"))
@@ -136,6 +188,21 @@ class InstrumentEconomics:
         require_decimal(self.commission_per_lot, "commission_per_lot", Decimal(0))
         require_decimal(self.margin_ratio, "margin_ratio", Decimal(0))
         require_text(self.source, "source")
+        if self.commission_schedule is not None:
+            if not isinstance(self.commission_schedule, CommissionSchedule):
+                raise TypeError("commission_schedule must be CommissionSchedule")
+            if self.commission_schedule.multiplier != self.multiplier:
+                raise ValueError("commission multiplier differs from instrument multiplier")
+
+    def commission(self, price: Decimal, quantity: int, offset: Offset) -> Decimal:
+        require_int(quantity, "commission quantity", 1)
+        if self.commission_schedule is not None:
+            return self.commission_schedule.commission(price, quantity, offset)
+        return self.commission_per_lot * Decimal(quantity)
+
+    def as_dict(self) -> dict:
+        """只含公共声明值，供 Journal/运行清单保存及恢复时逐项比对。"""
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -559,7 +626,7 @@ class BaseEngine(StrategyContextPort):
         margin = Decimal(0)
         if intent.offset == Offset.OPEN:
             margin = price * eco.multiplier * Decimal(intent.quantity) * eco.margin_ratio
-        fee = eco.commission_per_lot * Decimal(intent.quantity)
+        fee = eco.commission(price, intent.quantity, intent.offset)
         return margin, fee
 
     def _reject_locally(self, client_order_id: str, stage: str, reason: str) -> None:
@@ -879,7 +946,7 @@ class BaseEngine(StrategyContextPort):
 
     def _commission_for(self, trade: Trade, eco: InstrumentEconomics) -> Decimal:
         if self.rule_engine is None:
-            return eco.commission_per_lot * Decimal(trade.quantity)
+            return eco.commission(trade.price, trade.quantity, trade.offset)
         # 缺规则或规则冲突时由 RuleStore 抛出核心异常，不静默回退 (FR-RULE, A21)
         return self.rule_engine.evaluate_commission(
             trade.instrument,

@@ -162,11 +162,16 @@ def test_live_assembly_connects_takes_over_reconciles_and_routes_counter_reports
 
 
 def test_live_assembly_wires_the_market_channel_into_the_service(tmp_path, monkeypatch):
+    from dataclasses import replace
+
     binding = fake_account()
     install_fake_counter(monkeypatch, binding)
     md_binding = FakeMdBinding(symbol="rb2410")
     monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda: md_binding)
-    assembled = assemble(live_spec(tmp_path))
+    spec = live_spec(tmp_path)
+    front = "tcp://127.0.0.1:30011"
+    spec = replace(spec, broker={**spec.broker, "front_market_uri": front})
+    assembled = assemble(spec)
     try:
         assembled.connect_counter()
         market = assembled.connect_market([INSTRUMENT])
@@ -178,10 +183,13 @@ def test_live_assembly_wires_the_market_channel_into_the_service(tmp_path, monke
         assembled.step()
         assert assembled.service.metrics["market_queue_depth"] == 0
         assert assembled.market_gateway is not None
+        assert assembled.market_gateway.settings.front_market == front
         assert assembled.market_gateway.counts["ticks_enqueued"] == 1
         assert assembled.manifest()["counter"]["market"]["available"] is True
     finally:
         assembled.close()
+    assert md_binding.api.released is True
+    assert binding.api.released is True
 
 
 def test_live_assembly_survives_an_unavailable_market_channel(tmp_path, monkeypatch):
