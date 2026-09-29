@@ -17,7 +17,7 @@ from qh_trader.core.objects import InstrumentId, OrderIntent
 from qh_trader.gateway import ctp_gateway, ctp_market
 from scripts import ctp_probe, run_execution_service
 from scripts.live_assembly import AssemblyError, assemble, spec_from_settings
-from tests.unit.fake_ctp import FakeMdBinding
+from tests.unit.fake_ctp import FakeMdApi, FakeMdBinding
 
 ROOT = Path(__file__).resolve().parents[2]
 DAY = date(2024, 9, 10)
@@ -41,9 +41,13 @@ def write_settings(tmp_path: Path, **overrides) -> Path:
     return path
 
 
-def install_fake_counter(monkeypatch: pytest.MonkeyPatch, binding) -> None:
+def install_fake_counter(monkeypatch: pytest.MonkeyPatch, binding) -> FakeMdBinding:
     monkeypatch.setattr(ctp_gateway, "load_ctp_binding", lambda *_args, **_kwargs: binding)
+    # 运行入口会同时打开交易和行情通道；只替换交易绑定会启动真实 MdApi C++ 线程。
+    market_binding = FakeMdBinding(symbol="rb2410")
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda *_args, **_kwargs: market_binding)
     monkeypatch.setenv("QH_CTP_PASSWORD", SECRET)
+    return market_binding
 
 
 def fake_account(**overrides):
@@ -363,7 +367,7 @@ def test_live_takeover_needs_operator_confirmation_and_a_stale_heartbeat(tmp_pat
 
 def test_run_execution_service_live_mode_uses_the_counter_isolation(tmp_path, monkeypatch):
     binding = fake_account()
-    install_fake_counter(monkeypatch, binding)
+    market_binding = install_fake_counter(monkeypatch, binding)
     settings = write_settings(tmp_path)
     code = run_execution_service.main(
         [
@@ -387,7 +391,10 @@ def test_run_execution_service_live_mode_uses_the_counter_isolation(tmp_path, mo
         ]
     )
     # 柜台假件可完成接管与对账，但命令表写入的接管申请由装配受理；放行后主循环退出码为 0
-    assert code in (0, 4)
+    assert code == 0
+    assert any(name == "SubscribeMarketData" for name, _ in market_binding.api.calls)
+    assert market_binding.api.released
+    assert binding.api.released
 
 
 def probe_arguments(out_dir: str, *extra: str) -> list[str]:
@@ -478,7 +485,6 @@ def build_probe_binding(**overrides):
         query_records={
             "account": (account_record("100000"),),
             "position": (position_record(instrument="rb2410"),),
-            "position": (position_record(instrument="rb2410"),),
             "order": (order,),
             "trade": (trade,),
             "instrument": (instrument,),
@@ -562,6 +568,7 @@ def test_probe_script_reports_the_counter_error_when_login_is_rejected(tmp_path,
         assert step["detail"]["front_connected"] == 1
         assert step["detail"]["counter_error_code"] == 3
         assert step["detail"]["counter_error_message"]
+        assert binding.api.released
     finally:
         shutil.rmtree(target, ignore_errors=True)
 
@@ -576,7 +583,8 @@ def test_probe_takes_account_ids_only_from_a_matching_local_config(tmp_path, mon
     """账号标识只从与所选登记一致的本地配置取：不能把 SimNow 账号带进 openctp 环境。"""
     config = tmp_path / "settings.openctp.local.yaml"
     config.write_text(
-        "broker:\n  profile: openctp_tts\n  user_id: '20525'\n  investor_id: '20525'\nrisk:\n  account_id: openctp-7x24\n",
+        "broker:\n  profile: openctp_tts\n  user_id: '20525'\n  investor_id: '20525'\n"
+        "risk:\n  account_id: openctp-7x24\n",
         encoding="utf-8",
     )
     seen: dict[str, object] = {}
@@ -602,8 +610,59 @@ def test_probe_takes_account_ids_only_from_a_matching_local_config(tmp_path, mon
 
 
 def test_probe_script_refuses_to_write_evidence_outside_runs(tmp_path, monkeypatch):
-    install_fake_counter(monkeypatch, build_probe_binding())
+    def unexpected_probe(args):
+        pytest.fail("invalid evidence paths must be rejected before connecting to any counter")
+
+    monkeypatch.setattr(ctp_probe, "run_probe", unexpected_probe)
     assert ctp_probe.main(probe_arguments(str(tmp_path))) == 2
+
+
+@pytest.mark.parametrize("failure", ["login", "subscribe"])
+def test_probe_releases_both_connections_on_market_failure(tmp_path, monkeypatch, failure):
+    binding = build_probe_binding()
+    install_fake_counter(monkeypatch, binding)
+    market_binding = FakeMdBinding(symbol="rb2410", login_code=3 if failure == "login" else 0)
+    monkeypatch.setattr(ctp_market, "load_ctp_market_binding", lambda *_args, **_kwargs: market_binding)
+    if failure == "subscribe":
+        def fail_subscription(*args):
+            raise RuntimeError("injected subscription failure")
+
+        monkeypatch.setattr(FakeMdApi, "SubscribeMarketData", fail_subscription)
+    args = ctp_probe.build_parser().parse_args(probe_arguments(
+        str(tmp_path), "--market-symbol", SYMBOL, "--query-interval-ms", "0",
+    ))
+    if failure == "subscribe":
+        with pytest.raises(RuntimeError, match="subscription failure"):
+            ctp_probe.run_probe(args)
+    else:
+        report, code = ctp_probe.run_probe(args)
+        assert code == 1
+        assert "error" in report["market_probe"]
+    assert binding.api.released
+    assert market_binding.api.released
+
+
+def test_live_assembly_stops_native_callbacks_before_closing_the_journal(tmp_path, monkeypatch):
+    binding = fake_account()
+    market_binding = install_fake_counter(monkeypatch, binding)
+    assembled = assemble(live_spec(tmp_path))
+    closed = []
+
+    def release(name):
+        # API 回调仍可能使用执行服务：数据库与执行锁必须保持到两个 API 停止之后。
+        assert assembled.journal.connection.execute("SELECT 1").fetchone()[0] == 1
+        assembled.store.assert_owner()
+        closed.append(name)
+
+    try:
+        assembled.connect_counter()
+        assembled.connect_market([INSTRUMENT])
+        monkeypatch.setattr(binding.api, "Release", lambda: release("trade"))
+        monkeypatch.setattr(market_binding.api, "Release", lambda: release("market"))
+    finally:
+        assembled.close()
+    assembled.close()
+    assert closed == ["market", "trade"]
 
 
 def test_counter_profile_registration_is_translated_without_inventing_capabilities():

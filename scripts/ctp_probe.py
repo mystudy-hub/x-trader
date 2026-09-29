@@ -36,6 +36,7 @@ import platform
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -200,6 +201,12 @@ def probe_market_reachability(
 
 
 def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    """成功、拒绝登录、缺失字段和异常退出均先释放原生回调线程。"""
+    with ExitStack() as resources:
+        return _run_probe(args, resources)
+
+
+def _run_probe(args: argparse.Namespace, resources: ExitStack) -> tuple[dict[str, Any], int]:
     profile = ctp_setup.load_broker_profile(args.profile)
     settings: CtpSettings = ctp_setup.ctp_settings(
         profile,
@@ -242,6 +249,7 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         ref_book=ref_book,
         source_id="ctp-probe",
     )
+    resources.callback(gateway.close)
     queries = CtpQueryAdapter(
         account_id=args.account,
         channel=gateway,
@@ -528,7 +536,6 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         "trade_reports": sum(1 for e in sink.events if e.kind == EventKind.TRADE_REPORT),
         "control": sum(1 for e in sink.events if e.kind == EventKind.CONTROL),
     }
-    gateway.close()
     return report, exit_code
 
 
@@ -787,6 +794,13 @@ def _counter_only_contracts(counter_instruments: Sequence[Mapping[str, object]],
 def probe_market(
     args: argparse.Namespace, gateway: CtpTraderGateway, sink: RecordingSink
 ) -> tuple[Mapping[str, object], int]:
+    with ExitStack() as resources:
+        return _probe_market(args, gateway, sink, resources)
+
+
+def _probe_market(
+    args: argparse.Namespace, gateway: CtpTraderGateway, sink: RecordingSink, resources: ExitStack
+) -> tuple[Mapping[str, object], int]:
     """行情通道探测：连接行情前置、订阅合约、收集逐笔快照并归一化.
 
     行情与交易日无关（休市日也能取到快照），因此不受"非交易日"限制；但**不下单、不订阅全市场**。
@@ -800,6 +814,7 @@ def probe_market(
         events=sink,
         source_id="ctp-md-probe",
     )
+    resources.callback(market.close)
     detail: dict[str, object] = {"instrument": str(instrument), "front_market": front}
     try:
         detail["session"] = dict(market.connect())
@@ -813,7 +828,6 @@ def probe_market(
     if not accepted:
         detail["error"] = "the market data front did not accept the subscription"
         detail["status"] = dict(market.status())
-        market.close()
         return detail, 2
     deadline = time.monotonic() + args.market_seconds
     while time.monotonic() < deadline:
@@ -841,7 +855,6 @@ def probe_market(
             "cumulative_volume": last.cumulative_volume,
         }
     detail["status"] = dict(market.status())
-    market.close()
     if not ticks:
         detail["error"] = "no snapshot arrived before the deadline"
         return detail, 2
@@ -1081,6 +1094,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
+    out_dir = (ROOT / args.out).resolve()
+    if not out_dir.is_relative_to(ROOT / "runs"):
+        print("证据须写入项目 runs/ 目录，避免机器相关信息进入 Git", file=sys.stderr)
+        return 2
     explicit_account = args.account
     config_path = ROOT / args.config
     config_data: dict[str, Any] = {}
@@ -1117,10 +1134,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:  # 未预期的失败也要给出可读结论
         print(f"探测失败: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
-    out_dir = (ROOT / args.out).resolve()
-    if not out_dir.is_relative_to(ROOT / "runs"):
-        print("证据须写入项目 runs/ 目录，避免机器相关信息进入 Git", file=sys.stderr)
-        return 2
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = out_dir / f"ctp_runtime_evidence_{stamp}.json"
@@ -1193,7 +1206,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         check = report["rate_check"]
         comparison = check.get("comparison") or {}
         print(
-            f"费率与保证金核验: 合约 {len(check.get('symbols') or [])} 个（不一致 {len(comparison.get('mismatches', []))}，"
+            f"费率与保证金核验: 合约 {len(check.get('symbols') or [])} 个"
+            f"（不一致 {len(comparison.get('mismatches', []))}，"
             f"柜台未给出 {len(comparison.get('counter_absent', []))}）"
         )
         print(f"    {check.get('result')}")

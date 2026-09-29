@@ -892,3 +892,55 @@ def test_new_callback_failure_between_prepare_and_send_closes_final_gate(ready_h
     assert h.client.get("one").status == CommandStatus.NOT_SENT
     assert h.model.state["reservations"] == {}
     assert not h.service.ready
+
+
+def test_recovery_drain_preserves_pending_commands_and_market_data(harness):
+    h = harness
+    pending = h.client.submit(command())
+    h.service.enqueue(event("recovered-trade", kind=EventKind.TRADE_REPORT))
+    h.service.enqueue(event("waiting-quote", kind=EventKind.MARKET_DATA))
+    assert h.service.drain_recovery_reports() == 1
+    assert h.client.get("one") == pending
+    assert h.gateway.calls == []
+    assert len(h.model.state["trades"]) == 1
+    assert h.service.metrics["market_queue_depth"] == 1
+    assert not h.service.ready
+
+
+def test_recovery_drain_budget_keeps_unprocessed_reports_and_gate_closed(harness):
+    h = harness
+    h.service.enqueue(event("first"))
+    h.service.enqueue(event("second"))
+    with pytest.raises(ExecutionNotReadyError, match="reports remain"):
+        h.service.drain_recovery_reports(max_events=1)
+    assert h.model.state["facts"] == ("first",)
+    assert h.service.metrics["trade_queue_depth"] == 1
+    assert not h.service.ready
+    assert h.service.drain_recovery_reports(max_events=1) == 1
+    assert h.model.state["facts"] == ("first", "second")
+
+
+def test_recovery_drain_retries_a_committed_report_after_publication_failure(harness):
+    h = harness
+    h.service.drain_recovery_reports()  # 先发布恢复门禁，再针对成交提交后的发布窗口注入故障。
+    trade = event("recovered-once", kind=EventKind.TRADE_REPORT)
+    original_publish = h.model.publish
+
+    def fail_publication(checkpoint):
+        raise RuntimeError("injected recovery publication failure")
+
+    h.model.publish = fail_publication
+    h.service.enqueue(trade)
+    with pytest.raises(RuntimeError, match="publication"):
+        h.service.drain_recovery_reports()
+    assert h.service.pending_fact == trade
+    assert h.journal.contains_trade(trade.payload.deduplication_key)
+    h.model.publish = original_publish
+    assert h.service.drain_recovery_reports() == 1
+    assert len(h.model.state["trades"]) == 1
+    assert not h.service.ready
+
+
+def test_recovery_drain_refuses_a_ready_execution_service(ready_harness):
+    with pytest.raises(ExecutionNotReadyError, match="disabled"):
+        ready_harness.service.drain_recovery_reports()

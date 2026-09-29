@@ -55,11 +55,17 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
     - `gateway/feedback_normalizer.py` turns order and trade reports into `OrderUpdate`/`Trade`.
     - `gateway/ctp_query.py` runs the account and contract queries.
     - `gateway/ctp_market.py` turns MdApi snapshots into `Tick`.
+    - Assembly registers both API closers on its `ExitStack`: native callbacks stop before the journal and execution lock close. Probe error/early-return paths also close their API instances. Unit assembly tests must inject both trader and market bindings.
   - Counter capabilities that have not been verified are refused rather than guessed: today/yesterday offset mapping and market orders. A cancel must carry the original session triple.
   - `scripts/ctp_setup.py` builds `CtpSettings` from `config/broker_profiles/*.yaml` (SimNow; openctp TTS is registered as a candidate). `scripts/ctp_probe.py` produces redacted login, query, order, market-data and catalog-diff evidence under `runs/s0/`.
   - Secrets come only from the environment (`QH_CTP_PASSWORD`, `QH_CTP_AUTH_CODE`). They are never written to config, logs or evidence files.
 
-These modules are one-line placeholders for work that has not started: `gateway/terminal_info.py`, `engine/live_engine.py`, `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`.
+  - Independent strategy runtime (S5-05): `engine/live_engine.py` consumes committed Bar/order/trade/timer events through the command client's journal subscription. `infrastructure/strategy_runtime.py` keeps a separate durable callback/outbox/cursor database. `scripts/run_strategy.py` requires an explicit controller/epoch and a progressing execution heartbeat. It cannot connect to the counter. Tick-to-Bar production, lifecycle scheduling and strategy-state migration remain pending.
+  - Recovery queries now persist uniquely attributed missing order/trade reports through the execution service, then repeat the queries before enabling. `drain_recovery_reports()` drains reports only and leaves pending commands intact. Unknown or conflicting external fills stay blocked.
+  - `scripts/backup_state.py` offers `backup`, `verify` and `restore` for the whole trading database. Restore is for offline validation: an embedded `qh_offline_restore_guard` makes assembly reject it before opening a writer. Never remove that guard to bypass missing latest-control evidence.
+  - `scripts/replay_events.py` checks the complete transaction/event/snapshot chain and replays recorded projections. It does not independently recompute domain accounting. Coordinated backup of the trading and strategy runtime databases is not implemented.
+
+These modules remain one-line placeholders: `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`. Terminal collection is implemented in `gateway/terminal_info.py`; real broker certification remains separate.
 
 Design references:
 - `docs/04_系统架构设计.md`: §3 layering, §4 ports, §6 execution sequence, §12 ADRs

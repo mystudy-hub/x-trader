@@ -26,13 +26,14 @@ from qh_trader.core.objects import (
     AccountFunds,
     ControlRecord,
     InstrumentId,
+    OrderIdentity,
     OrderUpdate,
     Position,
     QueryResult,
     Trade,
 )
 from qh_trader.core.ports import JournalPort
-from qh_trader.domain.orders import OrderManager
+from qh_trader.domain.orders import Order, OrderManager
 from qh_trader.domain.positions import PositionManager
 
 
@@ -51,6 +52,48 @@ class RecoveryPhase(StrEnum):
 
 class RecoveryStateError(RuntimeError):
     """恢复协议状态不允许当前操作。"""
+
+
+def match_registered_order(manager: OrderManager, identity: OrderIdentity | None) -> Order:
+    """Require all available strong identities to agree; never match a bare OrderRef."""
+    if identity is None:
+        raise ValueError("trade has no registered order identity")
+    candidates: dict[str, Order] = {}
+    for order in manager.orders():
+        local = order.identity
+        matched = identity.client_order_id == order.client_order_id
+        if local is not None:
+            matched |= bool(
+                identity.exchange_order_id and identity.exchange == local.exchange
+                and identity.exchange_order_id == local.exchange_order_id
+            )
+            matched |= bool(
+                identity.order_ref and (identity.front_id, identity.session_id, identity.order_ref)
+                == (local.front_id, local.session_id, local.order_ref)
+            )
+        if matched:
+            candidates[order.client_order_id] = order
+    if len(candidates) != 1:
+        raise ValueError("order identity is unknown" if not candidates else "order identities are ambiguous")
+    order = next(iter(candidates.values()))
+    if identity.account_id != order.account_id or identity.exchange != order.instrument.exchange:
+        raise ValueError("order identity belongs to another account or exchange")
+    if identity.client_order_id and identity.client_order_id != order.client_order_id:
+        raise ValueError("local and remote order identities conflict")
+    local = order.identity
+    if local is not None:
+        if (identity.exchange_order_id and local.exchange_order_id
+                and identity.exchange_order_id != local.exchange_order_id):
+            raise ValueError("registered exchange order identity conflicts with query")
+        if (identity.order_ref and local.order_ref
+                and (identity.front_id, identity.session_id, identity.order_ref)
+                != (local.front_id, local.session_id, local.order_ref)):
+            raise ValueError("registered original session identity conflicts with query")
+    return order
+
+
+def _order_query_state(order: Order) -> tuple[object, ...]:
+    return order.identity, order.status, order.cum_filled_qty, order.send_state, order.cancel_pending
 
 
 @dataclass
@@ -106,6 +149,8 @@ class RecoveryCoordinator:
         journal: JournalPort | None = None,
         trade_sink: Callable[[Trade, str | None], None] | None = None,
         funds_tolerance: Decimal = Decimal("0"),
+        expected_account_id: str | None = None,
+        query_report_sink: Callable[[OrderUpdate | Trade], None] | None = None,
     ) -> None:
         self.order_manager = order_manager
         self.position_manager = position_manager
@@ -113,6 +158,8 @@ class RecoveryCoordinator:
         # 新成交去重后交给账本入账的回调 (trade, client_order_id)
         self.trade_sink = trade_sink
         self.funds_tolerance = funds_tolerance
+        self.expected_account_id = expected_account_id
+        self.query_report_sink = query_report_sink
         self.phase: RecoveryPhase = RecoveryPhase.DISCONNECTED
         self.report = RecoveryReport(phase=self.phase)
         self.control_record: ControlRecord | None = None
@@ -225,6 +272,10 @@ class RecoveryCoordinator:
         )
         self.report.watermarks[kind] = wm
         usable = True
+        if self.expected_account_id is not None and result.batch.account_id != self.expected_account_id:
+            self._add_diff("query", f"{kind}:{result.batch.batch_id}", DiffSeverity.BLOCKING,
+                           "query belongs to another account")
+            usable = False
         if not result.complete or result.error_code is not None:
             self._add_diff(
                 "query",
@@ -256,8 +307,27 @@ class RecoveryCoordinator:
         before = len(self.report.diffs)
         usable = self._record_watermark("orders", result)
 
+        if self.expected_account_id is not None and not usable:
+            return self.report.diffs[before:]
+
         seen_local: set[str] = set()
         for remote in result.records:
+            previous = None
+            if self.expected_account_id is not None:
+                try:
+                    matched = match_registered_order(self.order_manager, remote.identity)
+                    if remote.identity.account_id != self.expected_account_id:
+                        raise ValueError("order query record belongs to another account")
+                    if (remote.instrument, remote.side, remote.offset, remote.quantity) != (
+                        matched.instrument, matched.side, matched.offset, matched.quantity
+                    ):
+                        raise ValueError("queried order terms conflict with registered intent")
+                    previous = _order_query_state(matched)
+                except ValueError as exc:
+                    self._add_diff("order", remote.identity.exchange_order_id or remote.identity.client_order_id
+                                   or str(remote.identity.order_ref), DiffSeverity.BLOCKING,
+                                   f"external or conflicting order cannot be uniquely attributed: {exc}")
+                    continue
             order = self.order_manager.process_order_update(remote)
             if order is None:
                 ident = remote.identity
@@ -270,6 +340,8 @@ class RecoveryCoordinator:
                 )
             else:
                 seen_local.add(order.client_order_id)
+                if self.query_report_sink is not None and previous != _order_query_state(order):
+                    self.query_report_sink(remote)
 
         if usable:
             for order in self.order_manager.orders():
@@ -294,9 +366,48 @@ class RecoveryCoordinator:
         """合并远端成交查询：已知成交去重跳过，新成交经归属后入账."""
         self._require_reconciling()
         before = len(self.report.diffs)
-        self._record_watermark("trades", result)
+        usable = self._record_watermark("trades", result)
+        if self.expected_account_id is not None and not usable:
+            return self.report.diffs[before:]
         for trade in result.records:
+            if self.expected_account_id is not None:
+                try:
+                    if trade.account_id != self.expected_account_id or trade.trading_day != result.batch.trading_day:
+                        raise ValueError("trade record account or trading day differs from the query scope")
+                    order = match_registered_order(self.order_manager, trade.order_identity)
+                    if (trade.instrument, trade.side, trade.offset) != (order.instrument, order.side, order.offset):
+                        raise ValueError("trade terms conflict with registered order intent")
+                    duplicate = self.order_manager.deduplicator.is_duplicate(trade)
+                    if not duplicate and order.accounted_filled_qty + trade.quantity > order.quantity:
+                        raise ValueError("queried trade fills exceed registered order quantity")
+                    for registered in self.order_manager.orders():
+                        for existing in registered.trades:
+                            if existing.deduplication_key != trade.deduplication_key:
+                                continue
+                            if registered.client_order_id != order.client_order_id:
+                                raise ValueError("duplicate trade key conflicts with its registered order attribution")
+                            if (existing.instrument, existing.side, existing.offset, existing.price, existing.quantity
+                                ) != (trade.instrument, trade.side, trade.offset, trade.price, trade.quantity):
+                                raise ValueError("duplicate trade key carries conflicting financial terms")
+                except ValueError as exc:
+                    self._add_diff("trade", trade.trade_id, DiffSeverity.BLOCKING,
+                                   f"real trade cannot be uniquely attributed: {exc}", remote_value=trade.quantity)
+                    continue
+            if self.query_report_sink is not None and not self.order_manager.deduplicator.is_duplicate(trade):
+                self.query_report_sink(trade)
             self._ingest_trade(trade)
+        if self.expected_account_id is not None:
+            for order in self.order_manager.orders():
+                if order.unaccounted_fill_qty:
+                    self._add_diff("trade", order.client_order_id, DiffSeverity.BLOCKING,
+                                   "queried cumulative order fills lack corresponding trade details",
+                                   local_value=order.accounted_filled_qty, remote_value=order.cum_filled_qty)
+                elif order.accounted_filled_qty == order.quantity:
+                    # 柜台仅返回活动委托时，完整成交明细本身足以确认本地委托已全部成交。
+                    for diff in self.report.blocking:
+                        if (diff.category == "order" and diff.identifier == order.client_order_id
+                                and diff.message.startswith("local active order missing from remote query")):
+                            self.resolve_diff(diff, "complete queried trade details establish a fully filled order")
         return self.report.diffs[before:]
 
     def reconcile_positions(

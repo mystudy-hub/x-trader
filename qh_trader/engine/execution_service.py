@@ -516,6 +516,41 @@ class ExecutionService:
             self._reported_market_drops = market_drops
             LOGGER.error("market callback queue lost data; account reconciliation required")
 
+    def drain_recovery_reports(self, *, max_events: int = 1000) -> int:
+        """恢复时只持久化回报，不取走待执行命令或行情；队列未清空不得放行。"""
+        require_int(max_events, "max_events", 1)
+        self.store.assert_owner()
+        if self.ready:
+            raise ExecutionNotReadyError("recovery report drain requires trading to be disabled")
+        self._ready = False
+        processed = 0
+        if self._pending_fact is not None:
+            self.retry_pending_fact()
+            processed += 1
+        self._check_running()
+        with self._operation():
+            self._check_ingress_health()
+            state = self.store.checkpoint().state.get(SERVICE_STATE)
+            if not isinstance(state, Mapping) or state.get("phase") != "RECONCILING":
+                try:
+                    self._commit(self._audit({"action": "recovery_reports_begin"}), {}, phase="RECONCILING")
+                except Exception:
+                    self._fail("recovery_gate_commit_failed")
+                    raise
+        while processed < max_events:
+            try:
+                event = self._trade_queue.get_nowait()
+            except Empty:
+                break
+            self._process_fact(event)
+            processed += 1
+        with self._metrics_lock:
+            self._above_high_water = self._trade_queue.qsize() >= self._high_water
+        if self._pending_fact is not None or not self._trade_queue.empty():
+            self.recovery.on_disconnected("recovery report budget exhausted; fresh reconciliation required")
+            raise ExecutionNotReadyError("recovery reports remain after the bounded drain")
+        return processed
+
     def run_once(self, *, wait: bool = False) -> int:
         self._check_running()
         with self._operation():

@@ -489,6 +489,10 @@ class LiveAccountModel:
         """首次启动写入的账户开立事实 (序号 1)."""
         return {fact_key(1): self.opening_fact()}
 
+    def view_updates(self) -> Mapping[str, object]:
+        """按已发布的真实账户内核重建只读投影；由唯一写者审计提交。"""
+        return {VIEW_KEY: self._view(self._require_kernel())}
+
     @property
     def _next_sequence(self) -> int:
         return self._base + len(self._facts) + 1

@@ -362,6 +362,22 @@ class SQLiteCommandClient:
         row = self._connection.execute("SELECT payload, sha256 FROM journal_state WHERE state_key=?", (key,)).fetchone()
         return None if row is None else _decode(row["payload"], row["sha256"])
 
+    def strategy_bootstrap(self) -> tuple[int, object | None, tuple[QueuedCommand, ...]]:
+        """首次策略绑定使用同一只读快照的 head、账户视图和全部待执行命令."""
+        self._connection.execute("BEGIN")
+        try:
+            head = self._connection.execute("SELECT head_seq FROM journal_meta WHERE singleton=1").fetchone()[0]
+            view = self.state("account_view")
+            rows = self._connection.execute(
+                "SELECT * FROM command_queue WHERE status IN ('PENDING','DISPATCHING') ORDER BY sequence"
+            ).fetchall()
+            commands = tuple(_command(row, self.account_id) for row in rows)
+            self._connection.commit()
+            return head, view, commands
+        except BaseException:
+            self._connection.rollback()
+            raise
+
     def submit(self, command: ExecutionCommand) -> QueuedCommand:
         if not isinstance(command, ExecutionCommand):
             raise TypeError("only normalized execution commands may be submitted")

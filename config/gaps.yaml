@@ -18,7 +18,7 @@ gaps:
     - 报单
     - 回报处理
   current_handling: 阻断实盘
-  handling_details: 已选定 openctp-ctp 6.7.11.0 并锁定；2026-09-25 在 SimNow 7x24 环境（182.254.243.31:40001）实测跑通终端认证、登录、结算确认、资金/持仓/报单/成交查询与一笔开仓报单回报（按原会话三元组归属），原生库哈希已记录。撤单因当天为中秋节休市日被柜台以错误码 25 拒绝，须在交易时段重测；重复登录实测不踢旧会话（不能作为隔离证据）；终端采集认证顺序与期货公司柜台兼容性仍未联调。运行证据见 runs/s0/ctp_runtime_evidence_*.json，通道为 scripts/ctp_probe.py + init_env.py --ctp-evidence。
+  handling_details: 已锁定 openctp-ctp 6.7.11.0；SimNow 已实测登录、查询与开仓回报，休市日撤单被拒。2026-09-28 openctp TTS 两个仿真环境完成登录、查询及按原会话三元组报撤单闭环，原生库按登记哈希加载；终端采集本地实现与原生库测试已完成。重复登录不踢旧会话，不能作为隔离证据；目标期货公司柜台兼容性与看穿式认证顺序仍待联调。本轮另修复装配与探针退出时的原生连接清理；此为本地回归，不能关闭柜台核验缺口。证据见 runs/s0/ctp_runtime_evidence_*.json、runs/s5/ctp_runtime_evidence_*.json 及 07 的 2026-09-28 记录。
   registered_at: '2026-09-13'
   registered_by: 开发团队
   close_condition: 完成 S0-02 联调：登录、查询持仓、报单、接收回报全流程验证并记录 DLL 哈希
@@ -44,7 +44,7 @@ gaps:
     - Bar 边界与开盘语义
     time_range: SHFE.rb2410 实际挂牌区间内的样本期间待确定
   current_handling: 阻断验收
-  handling_details: 已取得新浪 rb2410 原始日线 241 条、小时线 1023 条并保存响应哈希；两者均缺 turnover，许可、时间边界、结算发布时间及配套规则待核验。旧派生文件保留但不作为规范数据默认读取。
+  handling_details: 新浪 rb2410 日线 241 条、小时线 1023 条缺 turnover。2026-09-17 已补入 Tushare rb2410 日线 241 条，包含 turnover 与结算价并经字段校验发布；研究数据曾覆盖工程样本的问题已于 2026-09-21 修复。数据覆盖清单中的正式 verification_status、证据签署及配套规则核验仍未闭环，不能把字段校验通过当成完整 S0/S1 出口。
   registered_at: '2026-09-13'
   registered_by: 开发团队
   close_condition: 补齐数据字段和许可，依据合约目录与版本化日历核验实际边界及执行价格，再发布规范工程样本和绑定哈希的核验记录
@@ -118,7 +118,7 @@ gaps:
     - 手续费加收
     - 保证金比例
   current_handling: 阻断实盘
-  handling_details: 能力表框架已建立，但 18 项能力全部待核验
+  handling_details: 已有部分仿真证据：openctp TTS 限价报撤单、SHFE.rb2610 平今及市价成交已登记核验；SimNow 重复登录不隔离旧会话。本地10个品种的真实市场合约费率与保证金仍缺柜台口径，昨仓与分配顺序、其他交易所及期货公司柜台、部分成交与外部委托仍待联调。本轮查询成交恢复仅增加本地机制证据，不提升任何柜台能力状态；逐项状态以 broker_profiles 登记为准。
   registered_at: '2026-09-13'
   registered_by: 开发团队
   close_condition: S5 联调完成，每项能力有实测用例和脱敏证据

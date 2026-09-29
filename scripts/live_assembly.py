@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
@@ -25,8 +26,8 @@ import yaml
 
 from qh_trader.core.constants import EventKind, Exchange, MissingRuleError, PositionSide
 from qh_trader.core.event import CanonicalEvent, JournalTransaction
-from qh_trader.core.execution import CommandKind, ExecutionCommand, TakeoverRequest
-from qh_trader.core.objects import ControlEpoch, ControlRecord, InstrumentId, QueryBatch
+from qh_trader.core.execution import CommandKind, ExecutionCommand, ExecutionNotReadyError, TakeoverRequest
+from qh_trader.core.objects import ControlEpoch, ControlRecord, InstrumentId, OrderUpdate, QueryBatch, Trade
 from qh_trader.core.ports import AccountQueryPort, ExecutionIsolationPort, ExecutionPort
 from qh_trader.data.contracts import ContractResolver
 from qh_trader.data.product_registry import get_product_spec, normalize_product
@@ -408,19 +409,59 @@ class AssembledExecution:
     # ------------------------------------------------------------------ 对账与放行
     def reconcile_and_enable(self, *, expected_trading_day: date | None = None) -> None:
         day = expected_trading_day or self.spec.trading_day
-        batch = QueryBatch(
-            f"startup-{datetime.now(timezone.utc).isoformat()}", self.spec.account_id, day, datetime.now(timezone.utc)
-        )
-        # 每次对账都在按当前已发布事实重建的副本上合并查询：装配时的副本早于首次发布，且会随交易过时
-        replica = self.model.replica()
-        self.recovery.order_manager = replica.orders
-        self.recovery.position_manager = replica.positions
-        self.recovery.start_recovery(expected_trading_day=day)
-        self.recovery.begin_reconciliation()
-        self.recovery.merge_order_query(self.query.query_orders(batch))
-        self.recovery.merge_trade_query(self.query.query_trades(batch))
-        self.recovery.reconcile_positions(self.query.query_positions(batch))
-        self.recovery.reconcile_funds(self.query.query_account(batch), self.model.ledger.balance)
+        self.recovery.on_disconnected("fresh account queries requested")
+        # 查询发现的事实与回调使用同一提交/发布路径。写入后重新查询，避免拿入账前的持仓和资金放行。
+        for attempt in range(3):
+            self.service.drain_recovery_reports()
+            now = datetime.now(timezone.utc)
+            batch = QueryBatch(f"recovery-{now.isoformat()}-{attempt}", self.spec.account_id, day, now)
+            replica = self.model.replica()
+            self.recovery.order_manager = replica.orders
+            self.recovery.position_manager = replica.positions
+            self.recovery.on_disconnected("building a fresh reconciliation snapshot")
+            self.recovery.start_recovery(expected_trading_day=day)
+            self.recovery.begin_reconciliation()
+            reports: list[OrderUpdate | Trade] = []
+            self.recovery.query_report_sink = reports.append
+            try:
+                orders = self.query.query_orders(batch)
+                trades = self.query.query_trades(batch)
+                positions = self.query.query_positions(batch)
+                funds = self.query.query_account(batch)
+                self.recovery.merge_order_query(orders)
+                self.recovery.merge_trade_query(trades)
+                self.recovery.reconcile_positions(positions)
+                self.recovery.reconcile_funds(funds, self.model.ledger.balance)
+            finally:
+                self.recovery.query_report_sink = None
+            # 行情和真实回报可在查询期间到达；消费回报后必须重建查询快照，不能沿用旧副本。
+            if self.service.drain_recovery_reports():
+                continue
+            unsafe = [diff for diff in self.recovery.report.blocking if diff.category in {"query", "order", "trade"}]
+            if unsafe:
+                raise ExecutionNotReadyError("recovery query blocked: " + "; ".join(diff.message for diff in unsafe))
+            if reports:
+                for index, report in enumerate(reports):
+                    self.service.enqueue(CanonicalEvent(
+                        event_id=f"{batch.batch_id}:{index}",
+                        kind=EventKind.TRADE_REPORT if isinstance(report, Trade) else EventKind.ORDER_REPORT,
+                        event_time=report.event_time,
+                        available_at=report.available_at,
+                        sequence=0,
+                        source_id=f"recovery-query:{batch.batch_id}",
+                        payload=report,
+                    ))
+                self.service.drain_recovery_reports()
+                continue
+            if not self.recovery.can_enter_ready() or any(
+                diff.category == "funds" and not diff.resolved for diff in self.recovery.report.diffs
+            ) or len(funds.records) != 1:
+                raise ExecutionNotReadyError("complete orders, trades, positions and funds reconciliation is required")
+            break
+        else:
+            raise ExecutionNotReadyError(
+                "reconciliation did not stabilize after 3 query rounds; trading remains closed"
+            )
         # 柜台侧放行：只有会话与对账都成立才重新打开网关自己的发送门禁 (FR-REC-04)
         gateway = self.counter_gateway
         if gateway is not None and not gateway.mark_reconciled():
@@ -536,6 +577,13 @@ class AssembledExecution:
 
 
 def assemble(spec: ExecutionSpec) -> AssembledExecution:
+    if spec.journal_path.is_file():
+        # 离线恢复副本只用于校验；不得沿用备份中的旧控制代次直接接管真实账户。
+        with sqlite3.connect(spec.journal_path.resolve().as_uri() + "?mode=ro", uri=True) as restored:
+            if restored.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='qh_offline_restore_guard'"
+            ).fetchone():
+                raise AssemblyError("offline restore cannot execute: reconcile the latest control epoch first")
     stack = ExitStack()
     try:
         journal = stack.enter_context(SQLiteJournal(spec.journal_path, account_id=spec.account_id))
@@ -548,6 +596,11 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
         model = LiveAccountModel(spec.account_id, opening, economics)
         migrate_account_facts(store)
         ensure_opened(store, model)
+        model.publish(store.checkpoint())
+        if "account_view" not in store.checkpoint().state:
+            # 新账户或旧版库没有投影时从持久事实重建，不能让策略把缺失字段猜成空仓。
+            _commit_account_state(store, "account_view_rebuilt", {"account_id": spec.account_id}, model.view_updates())
+            model.publish(store.checkpoint())
         if spec.mode == "live":
             return _assemble_live(spec, stack, journal, store, client, economics, model)
         raw_gateway = SimulatedGateway(
@@ -565,7 +618,7 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
         query.trading_day = spec.trading_day
         # 对账前由 reconcile_and_enable 换成按已发布事实重建的副本
         placeholder = model.replica()
-        recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions)
+        recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions, expected_account_id=spec.account_id)
         service = ExecutionService(
             store=store, model=model, gateway=gateway, recovery=recovery, poll_interval=spec.poll_interval
         )
@@ -651,6 +704,8 @@ def _assemble_live(
             offset_mappings=ctp_setup.offset_mappings(profile),
             ref_book=ref_book,
         )
+        # 先停止原生回调线程，再释放命令连接、执行锁与 Journal；装配后续失败同样收尾。
+        stack.callback(counter.close)
         query = CtpQueryAdapter(
             account_id=spec.account_id,
             channel=counter,
@@ -672,9 +727,11 @@ def _assemble_live(
             if market_front
             else None
         )
+        if market is not None:
+            stack.callback(market.close)
         gateway = EpochFencedGateway(counter, lambda: _current_epoch(store))
         placeholder = model.replica()
-        recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions)
+        recovery = RecoveryCoordinator(placeholder.orders, placeholder.positions, expected_account_id=spec.account_id)
         service = ExecutionService(
             store=store, model=model, gateway=gateway, recovery=recovery, poll_interval=spec.poll_interval
         )
