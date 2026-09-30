@@ -23,8 +23,9 @@ from qh_trader.core.objects import (
     Trade,
     TradeKey,
 )
+from qh_trader.engine.base_engine import CommissionSchedule
 from qh_trader.engine.live_account_model import account_facts
-from scripts.live_assembly import ExecutionSpec, assemble
+from scripts.live_assembly import ExecutionSpec, assemble, economics_from_catalog, open_model_read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 DAY = date(2024, 9, 10)
@@ -77,14 +78,14 @@ class BrokerSnapshot:
         return self.result(batch, (AccountFunds(self.balance, self.balance, None, self.balance),))
 
 
-def start(tmp_path):
+def start(tmp_path, *, economics_override=None):
     spec = ExecutionSpec(
         mode="paper", account_id=ACCOUNT, journal_path=tmp_path / "journal.db",
         catalog_path=ROOT / "config/contract_catalog_s4_2024v1.json", symbols=(str(RB),),
         initial_capital=Decimal("100000"), trading_day=DAY,
         controller_id="query-executor", heartbeat_path=tmp_path / "heartbeat.json",
     )
-    assembled = assemble(spec)
+    assembled = assemble(spec, economics_override=economics_override)
     request = assembled.request_control("fixture start")
     assembled.take_over(request.command_id, assembled.isolation(operator_confirmed=True))
     assembled.reconcile_and_enable()
@@ -159,6 +160,63 @@ def test_restart_books_missing_partial_fill_once_and_retains_pending_commands(tm
         assert restarted.store.contains_trade(trade.deduplication_key)
     finally:
         restarted.close()
+
+
+def test_query_recovery_observer_retry_preserves_declared_fees_and_pending_commands(tmp_path):
+    economics = economics_from_catalog(ROOT / "config/contract_catalog_s4_2024v1.json", (str(RB),), as_of=DAY)
+    original = economics[RB]
+    fees = CommissionSchedule(
+        multiplier=original.multiplier,
+        open_money_ratio=Decimal("0.0001"), open_per_lot=Decimal("0.1"),
+        close_yesterday_money_ratio=Decimal("0.0002"), close_yesterday_per_lot=Decimal("0.2"),
+        close_today_money_ratio=Decimal("0.0003"), close_today_per_lot=Decimal("0.3"),
+        source="independent-combined-recovery-fixture",
+    )
+    economics[RB] = replace(original, commission_schedule=fees)
+    first = start(tmp_path, economics_override=economics)
+    try:
+        submit(first)
+        trade = fill(first)
+        snapshot = BrokerSnapshot(first, (trade,))
+        snapshot.balance = Decimal("99996.40")  # 3500 × 10 × 0.0001 + 0.1 = 3.60，一手开仓。
+        spec = first.spec
+    finally:
+        first.close()
+    restored = assemble(spec, economics_override=economics)
+    try:
+        restored.query = snapshot
+        pending = submit(restored, "queued-during-recovery", process=False)
+        seen = []
+
+        def observe(event):
+            if not isinstance(event.payload, Trade):
+                return
+            assert restored.store.contains_trade(trade.deduplication_key)
+            assert restored.model.ledger.total_commission == Decimal("3.60")
+            assert restored.model.ledger.balance == snapshot.balance
+            assert restored.client.state("execution_service")["phase"] == "RECONCILING"
+            seen.append(event.event_id)
+            if len(seen) == 1:
+                raise RuntimeError("observer delivery interrupted after durable booking")
+
+        restored.service.fact_observer = observe
+        with pytest.raises(RuntimeError, match="delivery interrupted"):
+            restored.reconcile_and_enable()
+        assert not restored.service.ready and len(booked(restored)) == 1
+        assert restored.store.get(pending.command_id).status == CommandStatus.PENDING
+        restored.reconcile_and_enable()
+        assert restored.service.ready and len(booked(restored)) == 1
+        assert len(seen) == 2 and seen[0] == seen[1]
+        assert restored.store.get(pending.command_id).status == CommandStatus.PENDING
+        assert restored.model.ledger.total_commission == Decimal("3.60")
+        journal, readonly = open_model_read_only(spec.journal_path, ACCOUNT, tmp_path / "no-current-catalog.json")
+        try:
+            assert readonly.ledger.balance == snapshot.balance
+            assert readonly.ledger.total_commission == Decimal("3.60")
+        finally:
+            journal.close()
+    finally:
+        restored.close()
 
 
 def test_query_order_binds_new_exchange_identity_before_missing_trade(tmp_path):

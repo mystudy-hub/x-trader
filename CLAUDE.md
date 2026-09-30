@@ -60,12 +60,16 @@ Two runtime paths use the same kernel in `qh_trader/domain/`: order, position, l
   - `scripts/ctp_setup.py` builds `CtpSettings` from `config/broker_profiles/*.yaml` (SimNow; openctp TTS is registered as a candidate). `scripts/ctp_probe.py` produces redacted login, query, order, market-data and catalog-diff evidence under `runs/s0/`.
   - Secrets come only from the environment (`QH_CTP_PASSWORD`, `QH_CTP_AUTH_CODE`). They are never written to config, logs or evidence files.
 
-  - Independent strategy runtime (S5-05): `engine/live_engine.py` consumes committed Bar/order/trade/timer events through the command client's journal subscription. `infrastructure/strategy_runtime.py` keeps a separate durable callback/outbox/cursor database. `scripts/run_strategy.py` requires an explicit controller/epoch and a progressing execution heartbeat. It cannot connect to the counter. Tick-to-Bar production, lifecycle scheduling and strategy-state migration remain pending.
+  - Independent strategy runtime (S5-05): `engine/journal_strategy_engine.py` (`LiveStrategyEngine`, compatibly re-exported from `engine/live_engine.py`) consumes committed Bar/order/trade/timer events through the command client's journal subscription. `infrastructure/strategy_runtime.py` keeps a separate durable callback/outbox/cursor database. `scripts/run_strategy.py` requires an explicit controller/epoch and a progressing execution heartbeat. It cannot connect to the counter. The session-aware Tick-to-Bar pipeline exists in `data/live_bars.py` for the SimNow entry point, but is not automatically connected to this Journal consumer. Lifecycle scheduling and strategy-state migration remain pending.
   - Recovery queries now persist uniquely attributed missing order/trade reports through the execution service, then repeat the queries before enabling. `drain_recovery_reports()` drains reports only and leaves pending commands intact. Unknown or conflicting external fills stay blocked.
   - `scripts/backup_state.py` offers `backup`, `verify` and `restore` for the whole trading database. Restore is for offline validation: an embedded `qh_offline_restore_guard` makes assembly reject it before opening a writer. Never remove that guard to bypass missing latest-control evidence.
   - `scripts/replay_events.py` checks the complete transaction/event/snapshot chain and replays recorded projections. It does not independently recompute domain accounting. Coordinated backup of the trading and strategy runtime databases is not implemented.
 
 These modules remain one-line placeholders: `engine/shadow_engine.py`, `data/recorder.py`, `analysis/execution_quality.py`. Terminal collection is implemented in `gateway/terminal_info.py`; real broker certification remains separate.
+
+The separate `LiveEngine` in `engine/live_engine.py` is the S5-05 EMA single-strategy command producer. It consumes closed bars and optional protective ticks, and writes commands through the injected client; it never calls a gateway. `scripts/run_simnow_strategy.py` defaults to observation and checks prerequisites before enabling SimNow orders. `config/strategy_validation.yaml` records the first 30-minute EMA strategy experiment; historical data readiness is still blocked.
+
+The two strategy entry points have different recovery contracts: the Journal runtime replays durable callbacks and verifies deterministic intents/outbox delivery; `LiveEngine` uses `StrategyCheckpoint` and refuses incomplete processing or positions without recoverable protection state. Do not interchange their SQLite stores or claim equivalent restart guarantees. Both submit commands to the same single execution exit; do not run competing controllers for one account. Account query recovery and stored commission/margin restoration are shared execution concerns.
 
 Design references:
 - `docs/04_系统架构设计.md`: §3 layering, §4 ports, §6 execution sequence, §12 ADRs
@@ -99,4 +103,4 @@ Design references:
 
 ## Commits
 
-The branch is `main`. The summary follows `type(scope): summary`, with type one of feat/fix/test/docs/refactor/chore/ci and a scope such as `s5`. Make one explainable change per commit, and use the body for reasons and verification results.
+Work on a dedicated integration or feature branch in an isolated worktree when other maintainers are active. Inspect the current branch and worktree before changing files; never assume `main`. Follow current user authorization for commits, pushes and pull requests; local merge authorization alone does not permit a push. The summary follows `type(scope): summary`, with type one of feat/fix/test/docs/refactor/chore/ci and a scope such as `s5`. Make one explainable change per commit, and use the body for reasons and verification results.

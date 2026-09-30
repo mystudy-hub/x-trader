@@ -36,6 +36,7 @@ from typing import Any
 
 from qh_trader.core.constants import (
     EventKind,
+    Exchange,
     JournalConflictError,
     MissingRuleError,
     Offset,
@@ -73,7 +74,7 @@ from qh_trader.domain.risk import (
     RiskViolationError,
 )
 from qh_trader.engine import account_checkpoint as checkpoints
-from qh_trader.engine.base_engine import InstrumentEconomics
+from qh_trader.engine.base_engine import CommissionSchedule, InstrumentEconomics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -156,6 +157,8 @@ def referenced_instruments(state: Mapping[str, object]) -> set[str]:
     checkpoint, _, facts = stored_account(state)
     instruments: set[str] = set()
     for fact in facts:
+        if fact.get("kind") == "opened":
+            instruments.update(fact.get("economics", {}))
         for key in ("intent", "trade", "update"):
             instrument = getattr(fact.get(key), "instrument", None)
             if instrument is not None:
@@ -164,10 +167,39 @@ def referenced_instruments(state: Mapping[str, object]) -> set[str]:
             instruments.add(str(fact["instrument"]))
     if checkpoint is not None:
         kernel = checkpoint["kernel"]
+        instruments.update(kernel.get("economics", {}))
         instruments.update(str(item["instrument"]) for item in kernel["ledger"]["instruments"])
         instruments.update(str(item["instrument"]) for item in kernel["positions"]["positions"])
         instruments.update(str(item["intent"].instrument) for item in kernel["orders"]["orders"])
     return instruments
+
+
+def stored_economics(state: Mapping[str, object]) -> dict[InstrumentId, InstrumentEconomics] | None:
+    """恢复开户事实或日终检查点中的经济参数；仅旧版未声明时返回 None。"""
+    checkpoint, _, facts = stored_account(state)
+    declaration = (
+        checkpoint["kernel"]
+        if checkpoint is not None
+        else next((fact for fact in facts if fact.get("kind") == "opened"), {})
+    )
+    if "economics" not in declaration:
+        return None
+    try:
+        values = declaration["economics"]
+        if not isinstance(values, Mapping):
+            raise TypeError("economics must be a mapping")
+        result = {}
+        for symbol, raw in values.items():
+            exchange, code = symbol.split(".", 1)
+            instrument = InstrumentId(Exchange(exchange), code)
+            fields = dict(raw)
+            schedule = fields.get("commission_schedule")
+            if schedule is not None:
+                fields["commission_schedule"] = CommissionSchedule(**dict(schedule))
+            result[instrument] = InstrumentEconomics(**fields)
+        return result
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise AccountModelCorruptionError("persisted account economics cannot be restored") from exc
 
 
 def order_facts(state: Mapping[str, object]) -> tuple[Mapping[str, Any], ...]:
@@ -274,6 +306,11 @@ class LiveAccountModel:
         self.account_id = account_id
         self._opening = opening
         self._economics = dict(economics)
+        if any(
+            not isinstance(inst, InstrumentId) or not isinstance(eco, InstrumentEconomics)
+            for inst, eco in self._economics.items()
+        ):
+            raise TypeError("live economics requires actual instruments and InstrumentEconomics")
         self._limits = limits
         self._holiday_hook = holiday_hook
         self._holiday_dates = tuple(holiday_dates)
@@ -482,6 +519,7 @@ class LiveAccountModel:
                 "kind": "opened",
                 "initial_capital": self._opening.initial_capital,
                 "trading_day": self._opening.trading_day,
+                "economics": self._economics_record(),
             }
         )
 
@@ -567,6 +605,7 @@ class LiveAccountModel:
     def _dump_kernel(self, kernel: _Kernel) -> dict[str, Any]:
         start = kernel.history_start
         return {
+            "economics": self._economics_record(),
             "opening": {"initial_capital": kernel.opening.initial_capital, "trading_day": kernel.opening.trading_day},
             "ledger": checkpoints.dump_ledger(kernel.ledger),
             "positions": checkpoints.dump_positions(kernel.positions),
@@ -590,6 +629,7 @@ class LiveAccountModel:
         }
 
     def _restore_kernel(self, data: Mapping[str, Any]) -> _Kernel:
+        self._validate_economics_record(data.get("economics"))
         opening = AccountOpening(data["opening"]["initial_capital"], data["opening"]["trading_day"])
         kernel = _Kernel(
             self.account_id,
@@ -741,6 +781,7 @@ class LiveAccountModel:
             opened = AccountOpening(fact["initial_capital"], fact["trading_day"])
             if opened != kernel.opening:
                 raise AccountModelCorruptionError("account opening fact differs from the kernel opening")
+            self._validate_economics_record(fact.get("economics"))
             return
         if kind == "intent":
             intent: OrderIntent = fact["intent"]
@@ -817,7 +858,7 @@ class LiveAccountModel:
         if not is_new:
             return
         economics = self._economics_for(trade.instrument)
-        commission = economics.commission_per_lot * Decimal(trade.quantity)
+        commission = economics.commission(trade.price, trade.quantity, trade.offset)
         client_order_id = order.client_order_id if order is not None else None
         kernel.last_trade_prices[trade.instrument] = trade.price
         kernel.ledger.on_trade(
@@ -866,6 +907,19 @@ class LiveAccountModel:
             raise AccountModelCorruptionError(f"unknown control action {action!r}")
 
     # ------------------------------------------------------------------ 估值与辅助
+    def _economics_record(self) -> Mapping[str, object]:
+        return {str(inst): eco.as_dict() for inst, eco in sorted(self._economics.items(), key=lambda row: str(row[0]))}
+
+    def _validate_economics_record(self, declared: object) -> None:
+        if declared is None:
+            if any(eco.commission_schedule is not None for eco in self._economics.values()):
+                raise AccountModelCorruptionError(
+                    "legacy account has no persisted commission schedule; explicit economics migration is required"
+                )
+            return
+        if not isinstance(declared, Mapping) or freeze_payload(declared) != freeze_payload(self._economics_record()):
+            raise AccountModelCorruptionError("configured economics differs from the persisted account declaration")
+
     def _economics_for(self, instrument: InstrumentId) -> InstrumentEconomics:
         economics = self._economics.get(instrument)
         if economics is None:
@@ -888,7 +942,7 @@ class LiveAccountModel:
         margin = Decimal("0")
         if intent.offset == Offset.OPEN:
             margin = price * economics.multiplier * Decimal(intent.quantity) * economics.margin_ratio
-        fee = economics.commission_per_lot * Decimal(intent.quantity)
+        fee = economics.commission(price, intent.quantity, intent.offset)
         return margin, fee
 
     def _valuation_prices(self, kernel: _Kernel) -> tuple[dict[InstrumentId, Decimal], tuple[InstrumentId, ...]]:

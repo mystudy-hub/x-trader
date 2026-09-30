@@ -44,6 +44,7 @@ from qh_trader.engine.live_account_model import (
     legacy_fact_migration,
     order_facts,
     referenced_instruments,
+    stored_economics,
     stored_opening,
 )
 from qh_trader.gateway.ctp_gateway import (
@@ -484,10 +485,10 @@ class AssembledExecution:
             self.service.enqueue(event)
         return len(events)
 
-    def step(self) -> int:
+    def step(self, *, process_commands: bool = True) -> int:
         self.maintain_counter_session()
         processed = self.pump_gateway()
-        processed += self.service.run_once(wait=True)
+        processed += self.service.run_once(wait=True, process_commands=process_commands)
         processed += self.pump_gateway()
         self._beat()
         return processed
@@ -569,14 +570,22 @@ class AssembledExecution:
                 "written_this_run": self.model.checkpoints_written,
                 "refused_this_run": list(self.model.checkpoint_refusals),
             },
-            "assumptions": [
-                "paper mode: simulated matching, query mirror of the same report stream; not broker evidence",
-                "commission/margin from product_registry research assumptions pending rule verification (FR-RULE-05)",
-            ],
+            "assumptions": (
+                ["paper mode: simulated matching, query mirror of the same report stream; not broker evidence"]
+                if self.spec.mode == "paper"
+                else []
+            )
+            + (
+                ["commission/margin from product_registry research assumptions pending rule verification (FR-RULE-05)"]
+                if any(value.commission_schedule is None for value in self.economics.values())
+                else []
+            ),
         }
 
 
-def assemble(spec: ExecutionSpec) -> AssembledExecution:
+def assemble(
+    spec: ExecutionSpec, *, economics_override: Mapping[InstrumentId, InstrumentEconomics] | None = None
+) -> AssembledExecution:
     if spec.journal_path.is_file():
         # 离线恢复副本只用于校验；不得沿用备份中的旧控制代次直接接管真实账户。
         with sqlite3.connect(spec.journal_path.resolve().as_uri() + "?mode=ro", uri=True) as restored:
@@ -586,12 +595,22 @@ def assemble(spec: ExecutionSpec) -> AssembledExecution:
                 raise AssemblyError("offline restore cannot execute: reconcile the latest control epoch first")
     stack = ExitStack()
     try:
+        economics = economics_from_catalog(spec.catalog_path, spec.symbols, as_of=spec.trading_day)
+        if economics_override is not None:
+            if set(economics_override) != set(economics):
+                raise AssemblyError("economics override must exactly cover the selected actual contracts")
+            for instrument, value in economics_override.items():
+                registered = economics[instrument]
+                if not isinstance(value, InstrumentEconomics) or (
+                    value.multiplier != registered.multiplier or value.price_tick != registered.price_tick
+                ):
+                    raise AssemblyError("economics override must preserve catalog multiplier and price tick")
+            economics = dict(economics_override)
         journal = stack.enter_context(SQLiteJournal(spec.journal_path, account_id=spec.account_id))
         journal.migrate()
         store = stack.enter_context(SQLiteExecutionStore(journal))
         store.migrate()
         client = stack.enter_context(SQLiteCommandClient(spec.journal_path, account_id=spec.account_id))
-        economics = economics_from_catalog(spec.catalog_path, spec.symbols, as_of=spec.trading_day)
         opening = AccountOpening(spec.initial_capital, spec.trading_day)
         model = LiveAccountModel(spec.account_id, opening, economics)
         migrate_account_facts(store)
@@ -718,7 +737,7 @@ def _assemble_live(
             source_version="ctp:" + counter.binding.version,
         )
         counter.router.queries = query
-        market_front = ctp_setup.front_addresses(profile).get("market")
+        market_front = spec.broker.get("front_market_uri") or ctp_setup.front_addresses(profile).get("market")
         market = (
             CtpMarketDataGateway(
                 settings=CtpMarketSettings.from_settings(settings, front_market=market_front),
@@ -816,22 +835,31 @@ def open_model_read_only(
     """脚本侧只读重建账户模型 (结算单比对、状态查询)；不取执行锁、不写 Journal.
 
     旧版整表 ``account_facts`` 只在内存里按迁移规则展开，库内的正式迁移仍由执行服务启动时完成。
+    已声明的费用、保证金及来源从账户事实恢复，不能用当前目录的研究假设覆盖。
     """
     journal = SQLiteJournal(journal_path, account_id=account_id)
-    checkpoint = journal.load_checkpoint()
-    migration = legacy_fact_migration(checkpoint.state)
-    if migration is not None:
-        state = {key: value for key, value in checkpoint.state.items() if key not in migration}
-        state.update({key: value for key, value in migration.items() if value is not None})
-        checkpoint = replace(checkpoint, state=state)
-    instruments: set[str] = set(symbols or ()) | referenced_instruments(checkpoint.state)
-    opening = stored_opening(checkpoint.state) or AccountOpening(
-        Decimal("0"), checkpoint.control_record.acquired_at.date() if checkpoint.control_record else date.today()
-    )
-    economics = economics_from_catalog(catalog_path, sorted(instruments)) if instruments else {}
-    model = LiveAccountModel(account_id, opening, economics)
-    model.publish(checkpoint)
-    return journal, model
+    try:
+        checkpoint = journal.load_checkpoint()
+        migration = legacy_fact_migration(checkpoint.state)
+        if migration is not None:
+            state = {key: value for key, value in checkpoint.state.items() if key not in migration}
+            state.update({key: value for key, value in migration.items() if value is not None})
+            checkpoint = replace(checkpoint, state=state)
+        instruments: set[str] = set(symbols or ()) | referenced_instruments(checkpoint.state)
+        opening = stored_opening(checkpoint.state) or AccountOpening(
+            Decimal("0"), checkpoint.control_record.acquired_at.date() if checkpoint.control_record else date.today()
+        )
+        economics = stored_economics(checkpoint.state)
+        if economics is None:
+            economics = economics_from_catalog(catalog_path, sorted(instruments)) if instruments else {}
+        elif instruments - {str(instrument) for instrument in economics}:
+            raise AssemblyError("requested instruments are absent from the persisted account economics")
+        model = LiveAccountModel(account_id, opening, economics)
+        model.publish(checkpoint)
+        return journal, model
+    except Exception:
+        journal.close()
+        raise
 
 
 def write_manifest(out_dir: Path, manifest: Mapping[str, Any]) -> Path:

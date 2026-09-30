@@ -1,0 +1,44 @@
+# 首轮：30分钟入场、同周期EMA200过滤，A/B分开比较；活跃合约由柜台预检后显式传入。
+# 2026-09-28 柜台预检选出 SHFE.rb2701；动态合约仍用 --symbol 传入，不固化主力身份。
+schema_version: 1
+symbol: null
+strategy:
+  modes: [A, B]
+  entry_interval: 30m
+  fast_period: 20
+  slow_period: 50
+  trend_period: 200
+  atr_period: 14
+  risk_fraction: '0.015'
+  max_lots: 1
+  stop_atr: '2'
+  breakeven_atr: '2'
+  trailing_atr: '2'
+  # 以下是首轮建议的定量解释，需在研究报告中保留，不作为已优化参数。
+  breakout_lookback: 20
+  structure_lookback: 5
+  confirmation_bars: 2
+  pullback_tolerance_atr: '0.25'
+  slope_lookback: 5
+  flat_threshold_atr: '0.05'
+  near_ema_atr: '0.5'
+  crossing_window: 10
+  crossing_count: 3
+data:
+  storage_dir: data_storage
+  snapshot_id: null
+  catalog_path: config/contract_catalog_2024v1.json
+  # 当前2024日历不覆盖2026活跃合约；必须补齐同合约、同交易日的版本化证据。
+  calendar_path: null
+  timings_path: null
+research:
+  # 预先声明日期；禁止按结果调整分界。两段独立空仓，样本外只用分界前历史预热。
+  split_date: null
+  initial_capital: '1000000'
+  # 以下成本是研究假设，尚不代表柜台核验的实际费率。
+  commission_per_lot: '5'
+  margin_ratio: '0.10'
+  slippage_ticks: 1
+  participation_rate: '0.10'
+  annual_trading_days: 242
+  notes: 成本敏感性和样本外收益均不构成实盘验收；Bar止损在Bar结束确认后下一可执行价退出。

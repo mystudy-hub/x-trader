@@ -91,8 +91,13 @@ def command(identifier="one", *, kind=CommandKind.SUBMIT, control=CONTROL, quant
     else:
         payload = {"reason": "fixture control"}
     return ExecutionCommand(
-        command_id=identifier, account_id=ACCOUNT, producer_id="fixture-producer",
-        control=control, kind=kind, submitted_at=NOW, payload=payload,
+        command_id=identifier,
+        account_id=ACCOUNT,
+        producer_id="fixture-producer",
+        control=control,
+        kind=kind,
+        submitted_at=NOW,
+        payload=payload,
     )
 
 
@@ -113,8 +118,13 @@ def event(identifier, *, kind=EventKind.CONTROL):
             deduplication_key=TradeKey(ACCOUNT, Exchange.SHFE, DAY, identifier),
         )
     return CanonicalEvent(
-        event_id=identifier, kind=kind, event_time=NOW, available_at=NOW,
-        sequence=0, source_id="fixture-old-gateway", payload=payload,
+        event_id=identifier,
+        kind=kind,
+        event_time=NOW,
+        available_at=NOW,
+        sequence=0,
+        source_id="fixture-old-gateway",
+        payload=payload,
     )
 
 
@@ -146,23 +156,38 @@ class StagedAccountFixture:
                 previous = intents[identity]
                 ledger.reserve_funds(identity, amount, Decimal("0"))
                 ledger.position_manager.reserve_for_order(
-                    identity, previous.instrument, previous.side, previous.offset, previous.quantity,
+                    identity,
+                    previous.instrument,
+                    previous.side,
+                    previous.offset,
+                    previous.quantity,
                 )
                 orders.create_order(previous)
             risk = RiskManager(ACCOUNT, control=request.control, trading_day=DAY)
             amount = Decimal("100") * order.quantity
             try:
                 risk.check_and_reserve(
-                    order, request.control, ledger, ledger.position_manager,
-                    list(orders.orders()), amount, Decimal("0"), DAY,
+                    order,
+                    request.control,
+                    ledger,
+                    ledger.position_manager,
+                    list(orders.orders()),
+                    amount,
+                    Decimal("0"),
+                    DAY,
                 )
             except RiskViolationError as exc:
                 return CommandPlan(approved=False, reason=str(exc))
             reservations[order.client_order_id] = amount
             intents[order.client_order_id] = order
-        return CommandPlan(approved=True, reason="fixture domain checks passed", state_updates={
-            "reservations": reservations, "intents": intents,
-        })
+        return CommandPlan(
+            approved=True,
+            reason="fixture domain checks passed",
+            state_updates={
+                "reservations": reservations,
+                "intents": intents,
+            },
+        )
 
     def stage_send_result(self, request, result):
         reservations = dict(self.state.get("reservations", {}))
@@ -179,7 +204,8 @@ class StagedAccountFixture:
             ledger.on_trade(trade, commission=Decimal("0"), multiplier=Decimal("10"))
         positions = tuple(position.to_position_snapshot() for position in ledger.position_manager.all_positions())
         return {
-            "trades": trades, "positions": positions,
+            "trades": trades,
+            "positions": positions,
             "facts": tuple(self.state.get("facts", ())) + (fact.event_id,),
         }
 
@@ -230,10 +256,15 @@ class Harness:
         self.journal.migrate()
         if self.journal.head_seq == 0:
             seed = replace(event("initial-control"), sequence=1)
-            self.journal.append(JournalTransaction(
-                transaction_id="initial-control", events=(seed,), cursor_before=0, cursor_after=1,
-                control_record=ControlRecord(CONTROL, NOW, 1),
-            ))
+            self.journal.append(
+                JournalTransaction(
+                    transaction_id="initial-control",
+                    events=(seed,),
+                    cursor_before=0,
+                    cursor_after=1,
+                    control_record=ControlRecord(CONTROL, NOW, 1),
+                )
+            )
         self.store = self.stack.enter_context(SQLiteExecutionStore(self.journal))
         self.store.migrate()
         self.client = self.stack.enter_context(SQLiteCommandClient(path, account_id=ACCOUNT))
@@ -241,8 +272,12 @@ class Harness:
         self.gateway = RecordingGateway()
         self.recovery = RecoveryCoordinator(OrderManager(), PositionManager(ACCOUNT))
         self.service = ExecutionService(
-            store=self.store, model=self.model, gateway=self.gateway,
-            recovery=self.recovery, wall_time=lambda: NOW, **service_options,
+            store=self.store,
+            model=self.model,
+            gateway=self.gateway,
+            recovery=self.recovery,
+            wall_time=lambda: NOW,
+            **service_options,
         )
 
     def __enter__(self):
@@ -262,8 +297,11 @@ class Harness:
 
     def query(self, kind, records=(), **changes):
         return QueryResult(
-            batch=QueryBatch(kind, ACCOUNT, DAY, NOW), records=records,
-            available_at=NOW, source_id="fixture-broker", source_version="1",
+            batch=QueryBatch(kind, ACCOUNT, DAY, NOW),
+            records=records,
+            available_at=NOW,
+            source_id="fixture-broker",
+            source_version="1",
             **({"complete": True} | changes),
         )
 
@@ -286,6 +324,43 @@ def harness(tmp_path):
 def ready_harness(harness):
     harness.make_ready()
     return harness
+
+
+def test_strategy_observer_only_sees_committed_and_published_facts(ready_harness):
+    h = ready_harness
+    seen = []
+
+    def observe(fact):
+        assert not h.journal.connection.in_transaction
+        assert h.store.event(fact.event_id) is not None
+        assert fact.event_id in h.model.state["facts"]
+        seen.append(fact.event_id)
+
+    h.service.fact_observer = observe
+    h.service.enqueue(event("strategy-observer"))
+    h.service.run_once()
+    assert seen == ["strategy-observer"]
+
+
+def test_strategy_observer_failure_keeps_durable_fact_and_closes_gate(ready_harness):
+    h = ready_harness
+
+    def broken(_fact):
+        raise RuntimeError("strategy notification queue unavailable")
+
+    h.service.fact_observer = broken
+    h.service.enqueue(event("observer-failed"))
+    with pytest.raises(RuntimeError, match="notification queue"):
+        h.service.run_once()
+    assert h.store.event("observer-failed") is not None
+    assert not h.service.ready
+    assert h.service.pending_fact.event_id == "observer-failed"
+    seen = []
+    h.service.fact_observer = lambda fact: seen.append(fact.event_id)
+    h.service.retry_pending_fact()
+    assert seen == ["observer-failed"]
+    assert h.model.state["facts"].count("observer-failed") == 1
+    assert not h.service.ready
 
 
 def test_command_contracts_codec_and_injected_ports(harness):
@@ -403,11 +478,15 @@ def test_persisted_epoch_is_checked_again_immediately_before_network_call(ready_
         if h.client.get("one").status != CommandStatus.DISPATCHING:
             return
         h.model.after_publish = None
-        h.journal.append(JournalTransaction(
-            transaction_id="injected-control-change", events=(),
-            cursor_before=checkpoint.cursor, cursor_after=checkpoint.cursor,
-            control_record=ControlRecord(ControlEpoch("replacement", 2), NOW, checkpoint.journal_seq + 1),
-        ))
+        h.journal.append(
+            JournalTransaction(
+                transaction_id="injected-control-change",
+                events=(),
+                cursor_before=checkpoint.cursor,
+                cursor_after=checkpoint.cursor,
+                control_record=ControlRecord(ControlEpoch("replacement", 2), NOW, checkpoint.journal_seq + 1),
+            )
+        )
 
     h.model.after_publish = change_control
     h.service.process_next_command()
@@ -419,7 +498,8 @@ def test_persisted_epoch_is_checked_again_immediately_before_network_call(ready_
 
 @pytest.mark.parametrize("kind", [kind for kind in CommandKind if kind != CommandKind.TAKEOVER_REQUEST])
 @pytest.mark.parametrize(
-    "control", [ControlEpoch("strategy-controller", 0), ControlEpoch("other", 1), ControlEpoch("x", 2)],
+    "control",
+    [ControlEpoch("strategy-controller", 0), ControlEpoch("other", 1), ControlEpoch("x", 2)],
 )
 def test_every_ordinary_command_rejects_wrong_controller_or_epoch(harness, kind, control):
     h = harness
@@ -610,7 +690,11 @@ with SQLiteJournal(sys.argv[1], account_id=sys.argv[2]) as journal:
 """
     result = subprocess.run(
         [sys.executable, "-c", code, str(harness.path), ACCOUNT],
-        cwd=ROOT, capture_output=True, text=True, timeout=15, creationflags=PROCESS_FLAGS,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        creationflags=PROCESS_FLAGS,
     )
     assert result.returncode == 0, result.stderr
 
@@ -635,9 +719,20 @@ with fixture["Harness"](Path(sys.argv[2])) as h:
     h.service.process_next_command()
 """
     result = subprocess.run(
-        [sys.executable, "-c", code, str(Path(__file__).resolve()), str(path), str(remote_marker),
-         "yes" if record_remote_side_effect else "no"],
-        cwd=ROOT, capture_output=True, text=True, timeout=20, creationflags=PROCESS_FLAGS,
+        [
+            sys.executable,
+            "-c",
+            code,
+            str(Path(__file__).resolve()),
+            str(path),
+            str(remote_marker),
+            "yes" if record_remote_side_effect else "no",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        creationflags=PROCESS_FLAGS,
     )
     assert result.returncode == 37, result.stderr
     assert remote_marker.exists() == record_remote_side_effect
@@ -663,8 +758,12 @@ with SQLiteCommandClient(sys.argv[1], account_id=request.account_id) as client:
 """
     processes = [
         subprocess.Popen(
-            [sys.executable, "-c", code, str(harness.path), str(payload)], cwd=ROOT,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=PROCESS_FLAGS,
+            [sys.executable, "-c", code, str(harness.path), str(payload)],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            creationflags=PROCESS_FLAGS,
         )
         for _ in range(3)
     ]
@@ -732,7 +831,8 @@ def test_market_loss_is_audited_and_blocks_new_commands_before_polling(tmp_path,
         assert "lost data" in caplog.text
         assert any(
             fact.payload.get("action") == "market_data_loss"
-            for fact in h.journal.replay_from(0) if fact.kind == EventKind.CONTROL
+            for fact in h.journal.replay_from(0)
+            if fact.kind == EventKind.CONTROL
         )
 
 
@@ -784,7 +884,8 @@ def test_cross_account_trade_is_rejected_before_persistence(harness):
     h = harness
     original = event("foreign-trade", kind=EventKind.TRADE_REPORT)
     foreign = replace(
-        original.payload, account_id="foreign-account",
+        original.payload,
+        account_id="foreign-account",
         deduplication_key=replace(original.payload.deduplication_key, account_id="foreign-account"),
     )
     before = h.store.checkpoint()
@@ -801,16 +902,20 @@ def test_atomic_ack_retry_is_idempotent_and_stale_ack_cannot_add_history(harness
     before = h.store.checkpoint()
     fact = replace(event("ack"), sequence=h.store.next_ingress_sequence())
     tx = JournalTransaction(
-        transaction_id="ack-tx", events=(fact,), cursor_before=before.cursor,
+        transaction_id="ack-tx",
+        events=(fact,),
+        cursor_before=before.cursor,
         cursor_after=before.cursor + 1,
     )
     first_seq = h.store.commit(tx, expected_control=CONTROL, command=queued, status=CommandStatus.COMPLETED)
     assert h.store.commit(tx, expected_control=CONTROL, command=queued, status=CommandStatus.COMPLETED) == first_seq
     after = h.store.checkpoint()
     stale = replace(
-        tx, transaction_id="different-ack",
+        tx,
+        transaction_id="different-ack",
         events=(replace(fact, event_id="second-ack", sequence=h.store.next_ingress_sequence()),),
-        cursor_before=after.cursor, cursor_after=after.cursor + 1,
+        cursor_before=after.cursor,
+        cursor_after=after.cursor + 1,
     )
     with pytest.raises(JournalConflictError, match="already been processed"):
         h.store.commit(stale, expected_control=CONTROL, command=queued, status=CommandStatus.COMPLETED)
@@ -832,6 +937,28 @@ def test_takeover_commit_failure_does_not_leave_a_half_advanced_epoch(harness):
     assert h.store.checkpoint() == before
     assert h.store.control().epoch == CONTROL
     assert not h.service.ready
+
+
+def test_facts_only_step_publishes_market_before_explicit_command_dispatch(ready_harness):
+    h = ready_harness
+    h.client.submit(command())
+    observed = []
+
+    def observe(fact):
+        assert fact.event_id in h.model.state["facts"]
+        assert h.client.get("one").status == CommandStatus.PENDING
+        assert h.gateway.calls == []
+        observed.append(fact.event_id)
+
+    h.service.fact_observer = observe
+    h.service.enqueue(event("trade-fact", kind=EventKind.TRADE_REPORT))
+    h.service.enqueue(event("market-fact", kind=EventKind.MARKET_DATA))
+    assert h.service.run_once(process_commands=False) == 2
+    assert observed == ["trade-fact", "market-fact"]
+    assert h.client.get("one").status == CommandStatus.PENDING
+    assert h.service.process_next_command()
+    assert h.client.get("one").status == CommandStatus.SENT_UNKNOWN
+    assert len(h.gateway.calls) == 1
 
 
 def test_monotonic_budget_limits_trade_batch_even_if_wall_clock_moves_backwards(tmp_path):
@@ -944,3 +1071,54 @@ def test_recovery_drain_retries_a_committed_report_after_publication_failure(har
 def test_recovery_drain_refuses_a_ready_execution_service(ready_harness):
     with pytest.raises(ExecutionNotReadyError, match="disabled"):
         ready_harness.service.drain_recovery_reports()
+
+
+def test_recovery_drain_retries_committed_observer_failure_without_booking_twice_or_consuming_commands(harness):
+    h = harness
+    pending = h.client.submit(command())
+    recovered = event("observer-recovery", kind=EventKind.TRADE_REPORT)
+    h.service.enqueue(recovered)
+    h.service.enqueue(event("later-quote", kind=EventKind.MARKET_DATA))
+    seen = []
+
+    def observer(fact):
+        assert not h.journal.connection.in_transaction
+        assert h.store.event(fact.event_id) is not None
+        assert h.model.state["facts"].count(fact.event_id) == 1
+        assert h.client.state("execution_service")["phase"] == "RECONCILING"
+        seen.append(fact.event_id)
+        if len(seen) == 1:
+            raise RuntimeError("observer retry fixture")
+
+    h.service.fact_observer = observer
+    with pytest.raises(RuntimeError, match="observer retry"):
+        h.service.drain_recovery_reports()
+    assert h.service.pending_fact == recovered
+    assert h.store.contains_trade(recovered.payload.deduplication_key)
+    assert h.client.get("one") == pending
+    assert h.service.drain_recovery_reports() == 1
+    assert seen == ["observer-recovery", "observer-recovery"]
+    assert len(h.model.state["trades"]) == 1
+    assert h.client.get("one") == pending
+    assert h.service.metrics["market_queue_depth"] == 1
+    assert h.gateway.calls == [] and not h.service.ready
+
+
+def test_recovery_retry_publishes_gate_before_notifying_failed_ready_observer(ready_harness):
+    h = ready_harness
+    h.client.submit(command())
+    h.service.enqueue(event("ready-observer-failure"))
+
+    def broken(fact):
+        raise RuntimeError("observer interrupted")
+
+    h.service.fact_observer = broken
+    with pytest.raises(RuntimeError, match="interrupted"):
+        h.service.run_once(process_commands=False)
+    assert h.client.state("execution_service")["phase"] == "READY"
+    seen = []
+    h.service.fact_observer = lambda fact: seen.append(h.client.state("execution_service")["phase"])
+    assert h.service.drain_recovery_reports() == 1
+    assert seen == ["RECONCILING"]
+    assert h.client.get("one").status == CommandStatus.PENDING
+    assert h.gateway.calls == []

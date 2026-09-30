@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -514,6 +514,7 @@ def run_position_probe(
     probe_all_close_flags: bool = False,
     cross_ticks: int = 2,
     allow_non_trading_day: bool = False,
+    expected_trading_day: date | None = None,
 ) -> tuple[dict[str, object], int]:
     """执行一次持仓 / 开平 / 市价探测；返回 ``(证据, 退出码)``."""
     steps: list[dict[str, object]] = []
@@ -538,7 +539,15 @@ def run_position_probe(
     }
 
     local_date = datetime.now(timezone(timedelta(hours=8))).date()
-    if gateway.trading_day is not None and gateway.trading_day != local_date and not allow_non_trading_day:
+    if expected_trading_day is not None and gateway.trading_day != expected_trading_day:
+        detail["error"] = "counter trading day differs from explicitly expected trading day; send is disabled"
+        return detail, 2
+    if (
+        expected_trading_day is None
+        and gateway.trading_day is not None
+        and gateway.trading_day != local_date
+        and not allow_non_trading_day
+    ):
         # 会成交的探测必须落在柜台的交易时段：休市或环境滞后时成交与平仓都不可解释
         detail["error"] = (
             f"counter trading day {gateway.trading_day.isoformat()} differs from the local date "

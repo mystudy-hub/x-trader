@@ -71,6 +71,7 @@ class ExecutionService:
         trade_high_water: int = 10000,
         wall_time: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         monotonic: Callable[[], float] = time.monotonic,
+        fact_observer: Callable[[CanonicalEvent], None] | None = None,
     ) -> None:
         if not 0.05 <= poll_interval <= 0.2:
             raise ValueError("command poll interval must be between 50 and 200 ms")
@@ -89,6 +90,7 @@ class ExecutionService:
         self.trade_batch_size = trade_batch_size
         self._wall_time = wall_time
         self._monotonic = monotonic
+        self.fact_observer = fact_observer
         self._trade_queue: Queue[CanonicalEvent] = Queue()
         self._market_queue: Queue[CanonicalEvent] = Queue(maxsize=market_capacity)
         self._high_water = trade_high_water
@@ -130,7 +132,9 @@ class ExecutionService:
                 and self._counts["callback_failures"] <= self._acknowledged_callback_failures
             )
         return (
-            self._ready and self._fault is None and current is not None
+            self._ready
+            and self._fault is None
+            and current is not None
             and self.recovery.phase == RecoveryPhase.READY
             and current.epoch == self._authority
             and ingress_healthy
@@ -175,7 +179,8 @@ class ExecutionService:
     @staticmethod
     def _callback_failed(event: CanonicalEvent) -> bool:
         return (
-            event.kind == EventKind.CONTROL and isinstance(event.payload, Mapping)
+            event.kind == EventKind.CONTROL
+            and isinstance(event.payload, Mapping)
             and event.payload.get("callback_failure") is True
         )
 
@@ -258,8 +263,7 @@ class ExecutionService:
                 "trade_batch_size": self.trade_batch_size,
             }
         control_record = (
-            None if new_control is None
-            else ControlRecord(new_control, event.available_at, checkpoint.journal_seq + 1)
+            None if new_control is None else ControlRecord(new_control, event.available_at, checkpoint.journal_seq + 1)
         )
         keys = (event.payload.deduplication_key,) if isinstance(event.payload, Trade) else ()
         transaction = JournalTransaction(
@@ -296,9 +300,7 @@ class ExecutionService:
         assert isinstance(request.payload, TakeoverRequest)
         previous = self.store.control()
         observed = None if previous is None else previous.epoch
-        if (previous is None and request.control.epoch != 0) or (
-            previous is not None and request.control != observed
-        ):
+        if (previous is None and request.control.epoch != 0) or (previous is not None and request.control != observed):
             self._reject(queued, CommandStatus.REJECTED_STALE, "takeover observation no longer matches current control")
             raise ExecutionNotReadyError("obsolete takeover application must be reviewed again")
         if isolation.isolate(previous, request) is not True:
@@ -310,14 +312,16 @@ class ExecutionService:
         new_control = ControlEpoch(request.payload.controller_id, 1 if previous is None else previous.epoch.epoch + 1)
         try:
             self._commit(
-                self._audit({
-                    "action": "takeover",
-                    "command_id": request.command_id,
-                    "previous_control": observed,
-                    "new_control": new_control,
-                    "isolation_confirmed": True,
-                    "reason": request.payload.reason,
-                }),
+                self._audit(
+                    {
+                        "action": "takeover",
+                        "command_id": request.command_id,
+                        "previous_control": observed,
+                        "new_control": new_control,
+                        "isolation_confirmed": True,
+                        "reason": request.payload.reason,
+                    }
+                ),
                 {},
                 command=queued,
                 status=CommandStatus.COMPLETED,
@@ -349,7 +353,10 @@ class ExecutionService:
             self.recovery.phase != RecoveryPhase.RECONCILING
             or self.recovery.expected_trading_day is None
             or not self.recovery.can_enter_ready()
-            or funds is None or not funds.complete or funds.error_code is not None or funds.record_count != 1
+            or funds is None
+            or not funds.complete
+            or funds.error_code is not None
+            or funds.record_count != 1
             or any(diff.category == "funds" and not diff.resolved for diff in report.diffs)
         ):
             raise ExecutionNotReadyError("complete orders, trades, positions and funds reconciliation is required")
@@ -366,7 +373,9 @@ class ExecutionService:
     def _reject(self, command: QueuedCommand, status: CommandStatus, reason: str) -> None:
         self._commit(
             self._audit({"action": "command_rejected", "command": command.command, "reason": reason}),
-            {}, command=command, status=status,
+            {},
+            command=command,
+            status=status,
         )
 
     def process_next_command(self) -> bool:
@@ -462,10 +471,14 @@ class ExecutionService:
             elif isinstance(event.payload, Trade) and self.store.contains_trade(event.payload.deduplication_key):
                 # Deduplication belongs to the account sequence, never callbacks.
                 self._commit(
-                    self._audit({
-                        "action": "duplicate_trade", "source_event_id": event.event_id,
-                        "trade_key": event.payload.deduplication_key,
-                    }), {},
+                    self._audit(
+                        {
+                            "action": "duplicate_trade",
+                            "source_event_id": event.event_id,
+                            "trade_key": event.payload.deduplication_key,
+                        }
+                    ),
+                    {},
                 )
                 with self._metrics_lock:
                     self._counts["duplicate_facts"] += 1
@@ -478,6 +491,10 @@ class ExecutionService:
                 with self._metrics_lock:
                     self._acknowledged_callback_failures += 1
                 LOGGER.error("callback conversion failed; account reconciliation required")
+            if self.fact_observer is not None and not callback_failed:
+                # 观察者只排队；策略消费必须发生在账户事务及本次操作结束之后。
+                # 持久化重试可能再次通知，消费者仍须按事实标识去重。
+                self.fact_observer(event)
             self._pending_fact = None
         except Exception:
             self._fail("fact_persistence_or_projection_failed")
@@ -508,7 +525,8 @@ class ExecutionService:
             try:
                 self._commit(
                     self._audit({"action": "market_data_loss", "dropped": market_drops}),
-                    {}, phase="RECONCILING",
+                    {},
+                    phase="RECONCILING",
                 )
             except Exception:
                 self._fail("market_data_loss_audit_failed")
@@ -524,11 +542,8 @@ class ExecutionService:
             raise ExecutionNotReadyError("recovery report drain requires trading to be disabled")
         self._ready = False
         processed = 0
-        if self._pending_fact is not None:
-            self.retry_pending_fact()
-            processed += 1
-        self._check_running()
-        with self._operation():
+        # 待重投观察者也必须先看到已持久化的恢复门禁，不能沿用故障前遗留的 READY 投影。
+        with self._operation(repair=self._pending_fact is not None):
             self._check_ingress_health()
             state = self.store.checkpoint().state.get(SERVICE_STATE)
             if not isinstance(state, Mapping) or state.get("phase") != "RECONCILING":
@@ -537,6 +552,10 @@ class ExecutionService:
                 except Exception:
                     self._fail("recovery_gate_commit_failed")
                     raise
+        if self._pending_fact is not None:
+            self.retry_pending_fact()
+            processed += 1
+        self._check_running()
         while processed < max_events:
             try:
                 event = self._trade_queue.get_nowait()
@@ -551,7 +570,8 @@ class ExecutionService:
             raise ExecutionNotReadyError("recovery reports remain after the bounded drain")
         return processed
 
-    def run_once(self, *, wait: bool = False) -> int:
+    def run_once(self, *, wait: bool = False, process_commands: bool = True) -> int:
+        """处理有界回报批次；策略装配可延后命令处理，先检查已发布的行情。"""
         self._check_running()
         with self._operation():
             self._check_ingress_health()
@@ -570,7 +590,8 @@ class ExecutionService:
         with self._metrics_lock:
             self._above_high_water = self._trade_queue.qsize() >= self._high_water
         # Poll after every bounded batch, not only when get() times out.
-        processed += int(self.process_next_command())
+        if process_commands:
+            processed += int(self.process_next_command())
         if self._trade_queue.empty():
             try:
                 market = self._market_queue.get_nowait()

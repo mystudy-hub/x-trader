@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 from qh_trader.core.constants import Exchange  # noqa: E402
 from qh_trader.core.execution import CommandKind, ExecutionNotReadyError  # noqa: E402
 from qh_trader.core.objects import ControlEpoch, InstrumentId  # noqa: E402
-from qh_trader.engine.live_engine import LiveStrategyEngine  # noqa: E402
+from qh_trader.engine.journal_strategy_engine import LiveStrategyEngine  # noqa: E402
 from qh_trader.infrastructure.command_queue import SQLiteCommandClient  # noqa: E402
 from qh_trader.infrastructure.strategy_runtime import SQLiteStrategyRuntimeStore  # noqa: E402
 from qh_trader.monitor.heartbeat import HeartbeatFile, read_heartbeat  # noqa: E402
@@ -77,10 +77,19 @@ class ExecutionLivenessGate:
         self._progress = None
 
     def __call__(self) -> bool:
-        try:
-            beat = read_heartbeat(self.path)
-        except (OSError, ValueError, KeyError, TypeError):
-            return False
+        # Windows 原子替换期间可能短暂不可读；仅做有界重读，持续失败仍立即阻断。
+        for attempt in range(5):
+            try:
+                beat = read_heartbeat(self.path)
+                if beat is not None:
+                    break
+            except OSError:
+                pass
+            except (ValueError, KeyError, TypeError):
+                return False
+            if attempt == 4:
+                return False
+            time.sleep(0.01)
         if (
             beat is None
             or beat.role != "execution"

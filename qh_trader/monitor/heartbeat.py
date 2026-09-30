@@ -100,9 +100,20 @@ class HeartbeatFile:
 def read_heartbeat(path: Path | str) -> Heartbeat | None:
     """读取心跳；文件缺失返回 None，内容损坏明确报错 (不把损坏当作存活)."""
     file = Path(path)
-    if not file.exists():
-        return None
-    data = json.loads(file.read_text(encoding="utf-8"))
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            if not file.exists():
+                return None
+            payload = file.read_text(encoding="utf-8")
+            break
+        except FileNotFoundError:
+            return None
+        except PermissionError:
+            # Windows 原子替换和读句柄争用：与写方使用相同的有界重试。
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(REPLACE_RETRY_SECONDS)
+    data = json.loads(payload)
     return Heartbeat(
         role=str(data["role"]),
         instance_id=str(data["instance_id"]),

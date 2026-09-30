@@ -38,6 +38,7 @@ from qh_trader.core.ports import StrategyContextPort, StrategyJournalPort, Strat
 from qh_trader.domain.recovery import RecoveryCoordinator
 from qh_trader.engine.base_engine import InstrumentEconomics
 from qh_trader.engine.execution_service import ExecutionService
+from qh_trader.engine.journal_strategy_engine import LiveStrategyEngine as JournalStrategyEngine
 from qh_trader.engine.live_account_model import AccountOpening, LiveAccountModel
 from qh_trader.engine.live_engine import LiveStrategyEngine, StrategyReplayError
 from qh_trader.infrastructure.command_queue import SQLiteCommandClient, SQLiteExecutionStore
@@ -47,6 +48,42 @@ from qh_trader.monitor.heartbeat import HeartbeatFile, read_heartbeat
 from qh_trader.strategy.base import StrategyBase
 from qh_trader.strategy.examples.async_trend_following import AsyncDualMovingAverageStrategy
 from scripts.run_strategy import ExecutionLivenessGate, main, runtime_paths
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["sharing-violation", "replace-window"])
+def test_heartbeat_read_retry_is_bounded_and_never_approves_persistent_failure(tmp_path, monkeypatch, missing):
+    from scripts import run_strategy
+
+    writer = HeartbeatFile(tmp_path / "execution.json", role="execution", instance_id=CONTROL.controller_id)
+    gate = ExecutionLivenessGate(writer.path, 1, 5, controller_id=CONTROL.controller_id)
+    writer.beat(control_epoch=1, ready=True)
+    assert not gate()
+    writer.beat(control_epoch=1, ready=True)
+    assert gate()
+    read = run_strategy.read_heartbeat
+    attempts = []
+
+    def transient(path):
+        attempts.append(path)
+        if len(attempts) == 1:
+            if missing:
+                return None
+            raise PermissionError("fixture replace contention")
+        return read(path)
+
+    monkeypatch.setattr(run_strategy, "read_heartbeat", transient)
+    assert gate() and len(attempts) == 2
+    attempts.clear()
+
+    def persistent(path):
+        attempts.append(path)
+        if missing:
+            return None
+        raise PermissionError("fixture persistent failure")
+
+    monkeypatch.setattr(run_strategy, "read_heartbeat", persistent)
+    assert not gate() and len(attempts) == 5
+
 
 NOW = datetime(2024, 9, 10, 1, 1, tzinfo=timezone.utc)
 DAY = date(2024, 9, 10)
@@ -199,8 +236,8 @@ class Buyer(StrategyBase):
         self.trades.append(trade)
 
 
-def engine_for(paper, runtime, **kwargs):
-    engine = LiveStrategyEngine(journal=paper.client, runtime=runtime, **kwargs)
+def engine_for(paper, runtime, *, engine_type=LiveStrategyEngine, **kwargs):
+    engine = engine_type(journal=paper.client, runtime=runtime, **kwargs)
     strategy = Buyer(engine)
     engine.start(strategy)
     return engine, strategy
@@ -235,9 +272,10 @@ def wait_for(predicate, timeout=8):
     pytest.fail("timed out waiting for child strategy progress")
 
 
-def test_strategy_journal_command_risk_and_trade_round_trip(paper):
+@pytest.mark.parametrize("engine_type", [JournalStrategyEngine, LiveStrategyEngine], ids=["journal", "legacy-import"])
+def test_strategy_journal_command_risk_and_trade_round_trip(paper, engine_type):
     with SQLiteStrategyRuntimeStore(paper.state, metadata=paper.metadata) as runtime:
-        engine, strategy = engine_for(paper, runtime)
+        engine, strategy = engine_for(paper, runtime, engine_type=engine_type)
         assert isinstance(engine, StrategyContextPort)
         assert isinstance(runtime, StrategyRuntimeStorePort)
         assert isinstance(paper.client, StrategyJournalPort)
@@ -312,7 +350,7 @@ def test_strategy_journal_command_risk_and_trade_round_trip(paper):
         assert not engine.is_order_active(strategy.ids[0])
         engine.stop()
     with SQLiteStrategyRuntimeStore(paper.state, metadata=paper.metadata) as runtime:
-        resumed, replayed = engine_for(paper, runtime)
+        resumed, replayed = engine_for(paper, runtime, engine_type=engine_type)
         assert replayed.ids == strategy.ids and resumed.get_position(RB) == 1
         assert resumed.run_once() == 0 and len(paper.client.commands()) == 1
 
