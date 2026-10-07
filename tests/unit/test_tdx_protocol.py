@@ -84,6 +84,20 @@ def test_zero_count_with_nonzero_placeholder_is_rejected(monkeypatch):
         client.get_instrument_bars(4, 30, "RB2701", 0, 1)
 
 
+def test_recorded_end_of_history_empty_page(monkeypatch):
+    # 2026-10-06 APL9 历史末页的原始 payload；与请求匹配且占位全零。
+    payload = bytes.fromhex(
+        "1c41504c390000000000040001005008000000000000000000000000000000000000000000000000000000000000000000000000"
+    )
+    client = TdxExHqClient()
+    monkeypatch.setattr(client, "_request", lambda *args, **kwargs: payload)
+    assert client.get_instrument_bars(4, 28, "APL9", 2128, 700) == []
+    with pytest.raises(DataFormatError):
+        client.get_instrument_bars(4, 28, "APL9", 2129, 700)
+    with pytest.raises(DataFormatError):
+        client.get_instrument_bars(4, 28, "SRL9", 2128, 700)
+
+
 def envelope(payload: bytes, *, compressed: bool = False) -> bytes:
     encoded = zlib.compress(payload) if compressed else payload
     return struct.pack("<IIIHH", 0, 0, 0, len(encoded), len(payload)) + encoded
@@ -91,7 +105,8 @@ def envelope(payload: bytes, *, compressed: bool = False) -> bytes:
 
 def bar_payload(*, date_bytes: bytes = struct.pack("<I", 20260930), open_price: float = 3111.0) -> bytes:
     return (
-        INSTRUMENT + b"\0" * 8
+        INSTRUMENT
+        + b"\0" * 8
         + struct.pack("<H", 1)
         + date_bytes
         + struct.pack("<ffffIIf", open_price, 3131.0, 3108.0, 3112.0, 0xFFFFFFFF, 638932, 3116.0)

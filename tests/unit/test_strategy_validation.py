@@ -222,6 +222,15 @@ def test_bad_split_writes_blocked_report_without_backtest(fixture_dataset, tmp_p
     assert Path(report["artifacts"][0]).is_file()
 
 
+def test_research_assumptions_do_not_relax_live_warmup(fixture_dataset, tmp_path):
+    config, _, bars, storage = fixture_dataset
+    config["research"]["assumptions"] = ["allow missing turnover for offline research"]
+    flagged = [replace(bar, meta=replace(bar.meta, quality_flags=QualityFlag.TURNOVER_UNAVAILABLE)) for bar in bars]
+    storage.save_bars(flagged, bars[0].instrument, "30m")
+    with pytest.raises(ValueError, match="data_quality"):
+        load_warmup_bars(config, root=tmp_path, known_at=bars[-1].bar_end)
+
+
 @pytest.mark.parametrize("delayed_index", [50, 59])
 def test_warmup_requires_latest_completed_window_without_skipping_unavailable_bars(
     fixture_dataset, tmp_path, delayed_index

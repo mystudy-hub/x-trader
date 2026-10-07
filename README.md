@@ -6,6 +6,8 @@
 
 ## 当前进度
 
+2026-10-08 增量：新增[历史行情工作台](docs/guides/market_viewer.md)，支持本地加权指数日线/30分钟浏览、EMA、成交量/持仓量、自选、日期定位，以及趋势线、射线、平行通道、度量和绘图保存。新增[全品种/指定品种历史下载与显式假设的 EMA 研究回测](docs/guides/tdx_exhq_quickstart.md)。行情、研究报告和浏览器绘图保留在本机；严格策略验证与实盘预热门禁不变。
+
 2026-10-07 通达信交付收尾：明确实际合约入口、原始采样与既有加权归档的覆盖边界；85 个加权序列共 221,506 根日线已在本地归档，其中 3 根 OHLC 异常，全部缺成交额。修复短页提前终止及 K 线响应合约归属校验，研究发布不放宽 EMA 验证或实盘预热门禁。完整范围及限制见 [通达信接入说明](docs/guides/tdx_exhq_quickstart.md)。
 
 2026-10-06 数据源增量：[S1-12 通达信扩展行情](docs/06_开发计划.md#s1-12-tdx-exhq) 接入标准库协议客户端、实际合约研究下载、1m 会话聚合及只读探测证据。成交额缺失保留 `TURNOVER_UNAVAILABLE`，默认精确发布拒绝；研究发布须显式 `--research --publish` 并提供目录、日历和时间证据。日线均价代理不作为官方结算价，主连只供底层观察，不能直接发布或交易；S0 数据采购缺口与 S5 正式出口保持原状态。使用方法见 [接入说明](docs/guides/tdx_exhq_quickstart.md)。
@@ -111,6 +113,16 @@ uv run --no-sync python scripts/check_s0_exit.py --json
 环境报告写入 `runs/s0/environment.json`，只执行离线依赖、文件级 SQLite 参数和 SDK 归档检查。出口检查区分已验证、允许登记的缺口、待完成和无效证据；尚无真实样本时返回非零是预期结果，不影响独立核心模块的单元测试。
 
 ## 数据接入与研究演示
+
+### 历史行情图表
+
+已新增 TradingView Lightweight Charts 风格的本地历史行情工作台，支持已归档的85个加权序列、日线/30分钟、EMA、成交量/持仓量、搜索、自选与日期定位：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/serve_market_viewer.py
+```
+
+浏览器打开 http://127.0.0.1:8765 。完整操作与夜盘时间口径见 [行情工作台说明](docs/guides/market_viewer.md)。
 
 默认只归档原始观察数据，包含响应内容、采集时间及 SHA-256；PowerShell 中的周期列表须加引号：
 

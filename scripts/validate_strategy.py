@@ -203,8 +203,20 @@ def split_samples(bars: tuple[Bar, ...], split_day: date, warmup_bars: int) -> d
 
 
 def run_partition(
-    config: dict, mode: str, warmup, measured, *, root: Path, symbol: str, snapshot_id: str, output: Path
+    config: dict,
+    mode: str,
+    warmup,
+    measured,
+    *,
+    root: Path,
+    symbol: str,
+    snapshot_id: str,
+    output: Path,
+    research_assumptions: tuple[str, ...] = (),
+    use_official_settlement: bool = True,
 ):
+    if not use_official_settlement and not research_assumptions:
+        raise ValueError("close-price settlement requires explicit research assumptions")
     data, research = config["data"], config["research"]
     params = parameters_from_config(config, mode)
     spec = BacktestSpec(
@@ -221,7 +233,7 @@ def run_partition(
         participation_rate=Decimal(str(research["participation_rate"])),
         strict_execution_reference=True,
         strict_data_quality=True,
-        use_official_settlement=True,
+        use_official_settlement=use_official_settlement,
         annual_trading_days=int(research["annual_trading_days"]),
     )
     assembled = assemble(spec, root=root, bars=measured)
@@ -263,6 +275,7 @@ def run_partition(
             "independent_flat_start": True,
             "stop_execution": "bar observation then next executable price; no guaranteed stop fill",
             "cost_status": "research assumptions; counter rates not verified",
+            "research_assumptions": research_assumptions,
         },
     )
     # 参数与预热也参与实验身份，避免不同策略共用原装配的相同 run_id。
@@ -272,7 +285,12 @@ def run_partition(
     manifest["input_digest"], manifest["run_id"] = digest, digest[:16]
     path = write_run_artifacts(output, manifest, result, format_performance_summary(metrics))
     (path / "decisions.json").write_text(report_json(strategy.decisions), encoding="utf-8")
-    return {"path": str(path), "summary": manifest["outputs"]["summary"], "canonical_hashes": result.canonical_hashes()}
+    return {
+        "path": str(path),
+        "summary": manifest["outputs"]["summary"],
+        "canonical_hashes": result.canonical_hashes(),
+        "open_position": engine.get_position(assembled.instrument),
+    }
 
 
 def validate_strategy(config_path: Path, output_dir: Path, *, root: Path = ROOT, symbol: str | None = None) -> dict:

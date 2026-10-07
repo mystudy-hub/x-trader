@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>QH Trader · 行情工作台</title><link rel="stylesheet" href="/style.css">
+  <script defer src="/vendor/lightweight-charts.js"></script><script defer src="/drawings.js"></script><script defer src="/app.js"></script>
+</head>
+<body>
+<svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.4-5.7-3-5.7 3 1.1-6.4-4.6-4.5 6.4-.9Z"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M8 6 9.5 3h5L16 6h5v14H3V6Z"/><circle cx="12" cy="12.5" r="3.5"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 3v18m7-18v18m7-18v18"/><path d="M3 7h4v6H3zm7 4h4v6h-4zm7-6h4v7h-4z"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 5 7 7-7 7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-11v2"/></symbol>
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="m5 3 14 10-7 1-3 7Z"/></symbol>
+  <symbol id="i-line" viewBox="0 0 24 24"><path d="m5 19 14-14"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></symbol>
+  <symbol id="i-ray" viewBox="0 0 24 24"><circle cx="4" cy="19" r="2"/><path d="M6 17 21 3m-6 0h6v6"/></symbol>
+  <symbol id="i-channel" viewBox="0 0 24 24"><path d="M3 15 18 3M6 21 21 9"/><circle cx="7" cy="12" r="1.6"/><circle cx="16" cy="13" r="1.6"/></symbol>
+  <symbol id="i-measure" viewBox="0 0 24 24"><path d="m3 16 13-13 5 5L8 21Zm5-4 2 2m1-5 2 2m1-5 2 2"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 5 3 10l5 5M3 10h10a7 7 0 0 1 7 7v3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m16 5 5 5-5 5m5-5H11a7 7 0 0 0-7 7v3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+</defs></svg>
+<header class="app-header">
+  <a class="brand" href="/" aria-label="QH Trader 首页"><span class="brand-mark">Q<span>H</span></span><span>QH <b>TRADER</b></span></a>
+  <span class="header-separator"></span><span class="workspace-name">行情工作台</span>
+  <span class="header-tag">MARKET EXPLORER</span>
+  <div class="header-right"><span class="connection"><i></i>本地历史数据</span><button id="screenshot" class="text-button" title="导出当前图表 PNG"><svg><use href="#i-camera"/></svg>导出图表</button></div>
+</header>
+<main class="workspace">
+  <section class="market" aria-label="行情图表">
+    <div class="toolbar">
+      <button id="symbol-trigger" class="symbol-picker" title="搜索品种 /"><svg><use href="#i-search"/></svg><strong id="toolbar-code">RBL9</strong><span>⌄</span></button>
+      <div class="intervals" role="group" aria-label="K线周期"><button data-interval="1d">日线</button><button data-interval="30m" class="active">30分钟</button></div>
+      <span class="divider"></span><span class="chart-type"><svg><use href="#i-chart"/></svg>K线</span>
+      <div class="toolbar-spacer"></div><button id="color-mode" class="quiet-button" title="切换涨跌配色">绿涨红跌</button>
+      <button id="fullscreen" class="icon-button" title="全屏图表" aria-label="全屏图表"><svg><use href="#i-expand"/></svg></button>
+    </div>
+    <div class="quote-header">
+      <div class="instrument-title"><h1 id="instrument-name">螺纹加权</h1><span id="exchange-badge" class="exchange-badge">SHFE</span><span class="weighted-badge">加权指数</span><button id="favorite-current" class="icon-button" aria-label="加入自选"><svg><use href="#i-star"/></svg></button></div>
+      <div class="quote-line"><strong id="last-price">—</strong><span id="price-change">—</span><span class="quote-note">最后日线收盘 · <span id="last-date">—</span></span></div>
+      <div id="ohlc" class="ohlc"><span>加载历史行情…</span></div>
+    </div>
+    <div class="chart-board">
+      <nav id="drawing-toolbar" class="drawing-toolbar" aria-label="绘图工具">
+        <button data-draw-tool="select" class="active" aria-label="选择绘图" title="选择 / 移动画线 (V)"><svg><use href="#i-cursor"/></svg></button>
+        <span class="drawing-divider"></span>
+        <button data-draw-tool="line" aria-label="趋势线" title="趋势线：点击两个点 (T)"><svg><use href="#i-line"/></svg></button>
+        <button data-draw-tool="ray" aria-label="射线" title="射线：起点与方向点 (R)"><svg><use href="#i-ray"/></svg></button>
+        <button data-draw-tool="channel" aria-label="平行通道" title="平行通道：基线两点，再定宽度 (P)"><svg><use href="#i-channel"/></svg></button>
+        <button data-draw-tool="measure" aria-label="度量" title="度量：点击起点和终点 (M)"><svg><use href="#i-measure"/></svg></button>
+        <label class="drawing-color" title="绘图颜色"><input type="color" value="#83acff" aria-label="绘图颜色"></label>
+        <span class="drawing-divider"></span>
+        <button data-draw-action="undo" aria-label="撤销绘图" title="撤销 (Ctrl+Z)" disabled><svg><use href="#i-undo"/></svg></button>
+        <button data-draw-action="redo" aria-label="重做绘图" title="重做 (Ctrl+Shift+Z)" disabled><svg><use href="#i-redo"/></svg></button>
+        <button data-draw-action="hide" aria-label="隐藏或显示绘图" title="隐藏 / 显示所有绘图"><svg><use href="#i-eye"/></svg></button>
+        <button data-draw-action="delete" aria-label="删除选中绘图" title="删除选中绘图 (Delete)" disabled><svg><use href="#i-trash"/></svg></button>
+      </nav>
+    <div class="chart-shell">
+      <div class="indicator-legend"><button class="on" data-indicator="ema20"><i class="ema20"></i>EMA 20 <b id="ema20-value">—</b></button><button class="on" data-indicator="ema50"><i class="ema50"></i>EMA 50 <b id="ema50-value">—</b></button><button class="on" data-indicator="ema200"><i class="ema200"></i>EMA 200 <b id="ema200-value">—</b></button></div>
+      <div id="chart" aria-label="可缩放的K线、成交量和持仓量图表"></div>
+      <div id="drawing-hint" class="drawing-hint hidden" role="status"></div>
+      <div id="loading" class="chart-overlay"><div class="spinner"></div><span>正在载入行情</span></div>
+      <div id="chart-error" class="chart-overlay hidden"><strong>行情暂时无法显示</strong><span id="error-message"></span><button id="retry" class="primary-button">重试</button></div>
+      <div class="chart-watermark">QH <span>TRADER</span></div>
+      <div id="volume-label" class="pane-label">成交量 <b id="volume-value">—</b></div><div id="oi-label" class="pane-label">持仓量 <b id="oi-value">—</b></div>
+    </div>
+    </div>
+    <div class="chart-bottom">
+      <div class="range-buttons" role="group" aria-label="图表显示范围"><button data-range="1">1个月</button><button data-range="3">3个月</button><button data-range="6">6个月</button><button data-range="12">1年</button><button data-range="all">全部</button><button id="reset-chart" title="回到最近行情"><svg><use href="#i-reset"/></svg></button></div>
+      <span class="visible-range" id="visible-range">—</span><span class="timezone">UTC+8</span>
+    </div>
+    <div class="date-range"><span>交易日范围</span><input id="start-date" type="date" aria-label="开始交易日"><span>—</span><input id="end-date" type="date" aria-label="结束交易日"><button id="apply-dates">定位</button><span id="date-error" role="status"></span><span class="source-label">图表由 <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView Lightweight Charts™</a> 提供</span></div>
+  </section>
+  <aside class="watchlist" aria-label="品种列表">
+    <div class="watchlist-title"><h2>品种列表 <span id="symbol-count">85</span></h2><button id="toggle-details" class="icon-button" aria-label="显示数据说明" title="数据说明"><svg><use href="#i-info"/></svg></button></div>
+    <div class="list-tabs"><button id="all-tab" class="active">全部品种</button><button id="favorites-tab">我的自选 <span id="favorites-count"></span></button></div>
+    <label class="search-box"><svg><use href="#i-search"/></svg><input id="search" placeholder="搜索名称或代码" autocomplete="off" aria-label="搜索品种"><kbd>/</kbd></label>
+    <div class="exchange-filter"><select id="exchange-filter" aria-label="按交易所筛选"><option value="">全部交易所</option><option value="SHFE">上期所 SHFE</option><option value="DCE">大商所 DCE</option><option value="CZCE">郑商所 CZCE</option><option value="CFFEX">中金所 CFFEX</option><option value="INE">能源中心 INE</option><option value="GFEX">广期所 GFEX</option></select><span id="filtered-count">85 个序列</span></div>
+    <div class="list-columns"><span>品种</span><span>日线收盘</span><button id="sort-change" title="按日涨跌幅排序">涨跌幅 ⇅</button></div>
+    <div id="symbol-list" class="symbol-list"></div>
+    <div class="archive-card"><div class="archive-heading"><i></i><span>历史行情快照</span><span id="snapshot-date">2026-09-30</span></div><p>85 个加权序列 · 日线 / 30分钟</p><p id="archive-coverage">2021.10 — 2026.09</p><div class="archive-note">加权指数仅供行情研究，不能直接交易。</div></div>
+  </aside>
+</main>
+<footer class="status-bar"><span><i></i><span id="status">连接本地数据服务</span></span><span id="bar-count">—</span><button id="data-info">数据与时间口径 <svg><use href="#i-chevron"/></svg></button></footer>
+<dialog id="info-dialog"><div class="dialog-heading"><h2>数据与时间口径</h2><button id="close-info" aria-label="关闭">×</button></div><p>本页面展示通达信原始加权指数历史数据，不是实时行情，也不提供下单功能。</p><dl><dt>30分钟时间</dt><dd id="time-policy">夜盘按来源交易日序列映射自然日期；跨午夜接续同一夜盘。此映射用于历史浏览，尚非独立核验的交易所日历。</dd><dt>周期与指标</dt><dd>30分钟使用通达信原生分桶，可能跨小休；EMA 使用全部已加载历史计算，前 N 根均值初始化，范围缩放不会重置指标。</dd><dt>数据限制</dt><dd>缺少成交额和官方结算价；菜籽、胶板、线材有部分日线日期未返回分钟线。来源加权算法未独立核验。</dd><dt>当前序列</dt><dd id="current-quality">—</dd></dl><button id="confirm-info" class="primary-button">知道了</button></dialog>
+<div id="toast" role="status" class="toast hidden"></div>
+<template id="chart-attribution">TradingView Lightweight Charts™<br>Copyright (с) 2025 TradingView, Inc. <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">https://www.tradingview.com/</a></template>
+</body></html>

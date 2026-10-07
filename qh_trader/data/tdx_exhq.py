@@ -325,9 +325,10 @@ class TdxExHqClient:
         _integer(count, "count", 1, MAX_BAR_COUNT)
         body = b"\xff\x23" + instrument + struct.pack("<HHIH", category, 1, start, count)
         payload = self._request("bars", 0x6A08, 1, body)
-        # 2026-10-06 实录 RB2410：无记录也保留一个全零 32 字节占位，
-        # 且 instrument 后的 42 字节全部为零。只接纳此已核实的精确布局。
-        if len(payload) == 52 and payload[10:] == b"\0" * 42:
+        # 空页保留全零 32 字节占位：过期合约头部全零，历史末页则回显
+        # category / adjustment / start。只接纳这两种已录制布局。
+        empty_headers = (b"\0" * 8, struct.pack("<HHI", category, 1, start))
+        if len(payload) == 52 and payload[10:18] in empty_headers and payload[18:] == b"\0" * 34:
             self._identity(payload, market, code)
             return []
         ret_count, records = _records(payload, 18, 32, max_count=count)
