@@ -32,11 +32,26 @@ def generate_markdown_report(manifest: dict, sensitivity: dict | None = None) ->
     conventions = outputs.get("metric_conventions", {})
     hashes = outputs.get("canonical_hashes", {})
     code = inputs.get("code", {})
+    quality = execution.get("data_quality", {})
+    quality_notices = []
+    if any(
+        count and "TURNOVER_UNAVAILABLE" in label.split("|") for label, count in quality.get("flag_counts", {}).items()
+    ):
+        quality_notices.append(
+            "> **数据质量警告：TURNOVER_UNAVAILABLE**。来源缺少真实成交额，本报告仅供研究，不能用于精确核算。"
+        )
+    if "tdx_exhq" in data.get("source_ids", []):
+        quality_notices.append(
+            "> **通达信扩展行情（研究级）**：不提供真实成交额或交易所官方结算价；"
+            "日线 price 仅为自算代理，不能用于结算核验。"
+        )
     lines = [
         f"# 回测绩效与实验报告: {manifest.get('instrument', 'Unknown')}",
         "",
         f"- run_id: `{manifest.get('run_id')}`；输入摘要 `{manifest.get('input_digest', '')[:16]}`；生成于 {manifest.get('created_at')}",
         "",
+        *quality_notices,
+        *([""] if quality_notices else []),
         "## 一、实验元数据",
         f"- **代码提交**: `{code.get('commit')}`（工作区有未提交改动: {code.get('dirty')}）",
         f"- **Python / 平台**: `{inputs.get('environment', {}).get('python_version')}` / {inputs.get('environment', {}).get('platform')}",

@@ -127,6 +127,10 @@ def validate_raw_archive(path: Path | str, *, expected_sha256: str | None = None
         document = json.loads(path.read_text(encoding="utf-8"))
         if document.get("schema_version") != 1 or document.get("status") != "raw_observation":
             raise ValueError("not a successful raw observation archive")
+        source_metadata = document.get("source_metadata", {})
+        if not isinstance(source_metadata, dict):
+            raise ValueError("raw source metadata must be an object")
+        summary["source_metadata"] = source_metadata
         symbol = document["instrument"]
         from qh_trader.core.constants import Exchange
 
@@ -146,11 +150,26 @@ def validate_raw_archive(path: Path | str, *, expected_sha256: str | None = None
         for issue in quality.issues:
             issues.append(DataIssue(issue.issue_type, issue.message, record_index=issue.index))
         for capture in document.get("captures", ()):
-            body = capture["body"].encode(capture.get("encoding", "utf-8"))
-            if hashlib.sha256(body).hexdigest() != capture["sha256"]:
-                issues.append(
-                    DataIssue("response_hash_mismatch", "archived provider response has a different checksum")
-                )
+            binary_fields = {"request_hex", "response_hex", "request_sha256", "response_sha256"}
+            if binary_fields.intersection(capture):
+                # TDX 留存完整请求/响应帧；混用文本格式或只存一侧都不能视为已核验。
+                if not binary_fields.issubset(capture) or {"body", "sha256", "encoding"}.intersection(capture):
+                    raise ValueError("binary capture must contain both frames and hashes without text capture fields")
+                for direction in ("request", "response"):
+                    frame = bytes.fromhex(capture[f"{direction}_hex"])
+                    if hashlib.sha256(frame).hexdigest() != capture[f"{direction}_sha256"]:
+                        issues.append(
+                            DataIssue(
+                                f"{direction}_hash_mismatch",
+                                f"archived provider {direction} has a different checksum",
+                            )
+                        )
+            else:
+                body = capture["body"].encode(capture.get("encoding", "utf-8"))
+                if hashlib.sha256(body).hexdigest() != capture["sha256"]:
+                    issues.append(
+                        DataIssue("response_hash_mismatch", "archived provider response has a different checksum")
+                    )
         summary.update(
             instrument=str(instrument),
             interval=interval,

@@ -81,6 +81,7 @@ class _BarImportOptions(TypedDict):
     source_id: str
     source_version: str
     ingested_at: datetime
+    require_turnover: bool
 
 
 def load_import_metadata(path: Path | str) -> tuple[dict[str, BarTiming], dict[str, SettlementPublication]]:
@@ -117,8 +118,16 @@ class FuturesDataDownloader:
         timings: Mapping[str, BarTiming] | None = None,
         publications: Mapping[str, SettlementPublication] | None = None,
         metadata_refs: Mapping[str, Any] | None = None,
+        require_turnover: bool = True,
     ) -> None:
-        self.data_source = create_data_source(data_source) if isinstance(data_source, str) else data_source
+        if not isinstance(require_turnover, bool):
+            raise TypeError("require_turnover must be a bool")
+        self.require_turnover = require_turnover
+        if isinstance(data_source, str):
+            options = {"calendar": calendar} if data_source.strip().lower() in {"tdx", "tdx_exhq"} else {}
+            self.data_source = create_data_source(data_source, **options)
+        else:
+            self.data_source = data_source
         self.storage = (
             storage if isinstance(storage, ParquetDataStorage) else ParquetDataStorage(storage or "data_storage")
         )
@@ -177,6 +186,7 @@ class FuturesDataDownloader:
             "source_timezone": self.data_source.source_timezone,
             "ingested_at": imported,
             "status": "raw_observation",
+            "source_metadata": dict(getattr(self.data_source, "research_metadata", {})),
             "records": [],
         }
         try:
@@ -201,6 +211,7 @@ class FuturesDataDownloader:
             strict=False,
             instrument=inst,
             source_timezone=self.data_source.source_timezone,
+            require_turnover=self.require_turnover,
         )
         return RawDownload(path, digest, tuple(records), imported, quality)
 
@@ -219,7 +230,7 @@ class FuturesDataDownloader:
         if not raw.records:
             raise ValueError("source returned no observations")
         # Even diagnostic/lenient validation cannot label invalid records as canonical OK data.
-        if not raw.quality.is_clean:
+        if raw.quality.has_critical_errors:
             raise DataValidationError(raw.quality)
         first = parse_day(start_date) if start_date is not None else None
         inst = parse_instrument(instrument, resolver=self.resolver, as_of=first)
@@ -230,6 +241,17 @@ class FuturesDataDownloader:
             if key not in self.timings:
                 raise MissingRuleError(f"source timing evidence missing for {key}")
             timing = self.timings[key]
+            if self.data_source.source_id == "tdx_exhq" and interval != "1d":
+                # 自聚合边界是数据的一部分，外部时间证据不能把桶改回跨休市的来源口径。
+                for name in ("bar_start", "bar_end"):
+                    if record.get(name) is not None and parse_time(
+                        record[name], self.data_source.source_timezone
+                    ) != getattr(timing, name):
+                        raise ValueError(f"TDX aggregation and source timing disagree on {name}")
+                if record.get("trading_day") is not None and parse_day(record["trading_day"]) != timing.trading_day:
+                    raise ValueError("TDX aggregation and source timing disagree on trading_day")
+                if record.get("session_id") is not None and record["session_id"] != timing.session_id:
+                    raise ValueError("TDX aggregation and source timing disagree on session_id")
             resolved = self.resolver.resolve(str(inst), as_of=timing.trading_day)[0]
             if resolved != inst:
                 raise ValueError("source record falls outside the actual contract lifetime")
@@ -240,6 +262,7 @@ class FuturesDataDownloader:
             source_id=self.data_source.source_id,
             source_version=raw.source_version,
             ingested_at=raw.ingested_at,
+            require_turnover=self.require_turnover,
         )
         if interval == "1d":
             bars = convert_daily_records_to_bars(raw.records, inst, **kwargs)
@@ -262,6 +285,10 @@ class FuturesDataDownloader:
             settlements = []
         references = derive_execution_references(bars, {item.bar_start: item for item in selected_timings.values()})
         provenance = {
+            "source_id": self.data_source.source_id,
+            "source_metadata": dict(getattr(self.data_source, "research_metadata", {})),
+            "require_turnover": self.require_turnover,
+            "quality_warnings": sorted({issue.issue_type for issue in raw.quality.issues}),
             "raw": {"path": raw.path.relative_to(self.storage.root_dir).as_posix(), "sha256": raw.source_version},
             "catalog_version": self.resolver.catalog_version,
             "calendar_version": self.calendar.version,

@@ -108,6 +108,68 @@ data_sources:
       path: runs/sample_validation/report-b5102633145f63acacc2ef1cc05427d9dd98bd97c979af427af2132d4532fcec.json
       sha256: b5102633145f63acacc2ef1cc05427d9dd98bd97c979af427af2132d4532fcec
     notes: 2026-09-17 经 Tushare Pro 官方接口取得；完整包含 turnover 与结算价，经 validate_data.py 校验通过并原子发布至不可变 Parquet。
+- source_id: tdx_exhq
+  source_name: 通达信扩展行情（自研标准库协议接入；仅研究补充，字段及授权待核验）
+  delivery_scope:
+    as_of: '2026-10-07'
+    actual_contract_exchanges: [CZCE, DCE, SHFE, CFFEX, GFEX]
+    intervals: [1d, 1m, 5m, 15m, 30m, 1h]
+    canonical_30m_published: false
+    strategy_ready: false
+    notes: 多分钟线由 1m 按显式日历聚合；INE 默认拒绝。EMA 验证与实时预热仍拒绝 TURNOVER_UNAVAILABLE；不放宽策略门禁。L9 批量下载不在正式 CLI 范围。
+  weighted_raw_observation:
+    path: data_storage/raw/tdx_weighted/20261006_daily/summary.json
+    sha256: f8134b6e0913b44db2fd8eb8532f5feed2b7783980a005851db7866c8efb22c3
+    inventory_path: runs/s0/tdx_weighted_inventory_20261006.json
+    inventory_sha256: 6152540fe2807fbc643484b5ed9fd5a270f405c9fbadd501d68588b2f711f9ba
+    series_count: 85
+    record_count: 221506
+    date_envelope: {start_date: '2000-01-04', end_date: '2026-09-30'}
+    invalid_ohlc_count: 3
+    missing_fields: [turnover, settlement_price]
+    canonical_published: false
+    notes: 既有一次性采集结果；逐序列翻到空页并复读最新页，落盘核验记录为 449 个分页与 85 个 CSV 哈希、总记录数一致。各序列起点不同，只覆盖该节点可得加权历史，不是逐合约执行数据；3 根异常保留 INVALID。市场30含INE加权；目录实枚举106836与声明106855相差19。原始数据和临时采集脚本不提交Git。
+  probe_observation:
+    path: runs/s0/tdx_runtime_evidence_20261006_final.json
+    sha256: 885f4a929d0a358b6f5df155abdd39b2ab1c312039af55eed08cff6b45c3ea48
+    notes: 2026-10-06 公开节点握手 110ms；52 个市场；目录采样 1000/106855 条；RBL8/RB2701 的 1d/1m/原生30m 各取 64 条，全部有界截断；RB2410 日线返回空。未执行完整历史与三方量仓核验，采样记录不代表规范数据集已发布。
+  datasets:
+  - dataset_id: rb_main_1d_raw
+    dataset_type: bar
+    period: 1d
+    available_fields: [date, open, high, low, close, volume, open_interest]
+    missing_fields: [turnover, settlement_price]
+    time_range: {start_date: null, end_date: null}
+    record_count: null
+    update_delay: 待核验
+    historical_revision: 待核验
+    license: {scope: null, local_storage: null}
+    open_semantic: 主连未复权拼接；换月价格及持仓断点；只作原始归档，不作为实际合约成交价格
+    auction_inclusion: null
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02, GAP-S0-03, GAP-S0-04, GAP-TDX-01]
+    notes: 方案历史根数仅是外部实测摘要，不冒充本次下载覆盖；实际深度见 runs/s0/tdx_runtime_evidence_*.json。日线 price 仅作自算均价代理原值留存，官方 settlement_price 及 turnover 始终缺失；不能关闭工程样本或逐合约历史缺口。
+  - dataset_id: listed_contract_30m_research
+    dataset_type: bar
+    period: 30m
+    available_fields: [datetime, open, high, low, close, volume, open_interest]
+    missing_fields: [turnover, settlement_price]
+    time_range: {start_date: null, end_date: null}
+    record_count: null
+    update_delay: 待核验
+    historical_revision: 待核验
+    license: {scope: null, local_storage: null}
+    open_semantic: 原生 1m 按显式版本化交易日历的小节聚合 30m；不跨小休，丢弃残桶；原生 30m 只用于探测
+    auction_inclusion: null
+    verification_status: 登记缺口
+    verified_at: null
+    verified_by: null
+    evidence: null
+    gap_ids: [GAP-S0-02, GAP-S0-03, GAP-S0-04, GAP-TDX-01]
+    notes: 已到期合约可能为空；require_turnover=True 时拒绝。发布必须具备 catalog/calendar/timings，原始下载与规范发布分开。
 data_source_template:
   source_id: null
   source_name: null

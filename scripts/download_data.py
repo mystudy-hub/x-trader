@@ -33,6 +33,8 @@ def _run(args: argparse.Namespace, metrics) -> int:
     from qh_trader.data.calendar import TradingCalendar
     from qh_trader.data.contracts import ContractResolver
     from qh_trader.data.downloader import FuturesDataDownloader, load_import_metadata
+    from qh_trader.data.sources import TdxExHqDataSource
+    from qh_trader.data.tdx_exhq import load_tdx_servers
     from qh_trader.infrastructure.observability import log_context
 
     try:
@@ -56,19 +58,33 @@ def _run(args: argparse.Namespace, metrics) -> int:
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 }
         timings, publications = load_import_metadata(args.timings) if args.timings is not None else ({}, {})
+        calendar = TradingCalendar.from_file(args.calendar) if args.calendar is not None else None
+        source = args.source
+        if args.source == "tdx":
+            source = TdxExHqDataSource(
+                calendar=calendar,
+                servers=load_tdx_servers(args.tdx_servers),
+                max_pages=args.tdx_max_pages,
+            )
         downloader = FuturesDataDownloader(
-            args.source,
+            source,
             ROOT / args.storage_dir,
             resolver=ContractResolver.from_file(args.catalog) if args.catalog is not None else None,
-            calendar=TradingCalendar.from_file(args.calendar) if args.calendar is not None else None,
+            calendar=calendar,
             timings=timings,
             publications=publications,
             metadata_refs=metadata,
+            require_turnover=not args.research,
         )
     except (OSError, ValueError, KeyError, ImportError) as exc:
         metrics.increment("data.initialization_failures")
         logger.error("数据接入未启动：%s", exc)
         return 1
+    if args.source == "tdx":
+        logger.warning(
+            "通达信仅供研究：成交额缺失，日线 settlement_proxy 为自算均价而非官方结算价；"
+            "不提供主连规范发布或已到期合约历史保证。"
+        )
     failures = 0
     for symbol in symbols:
         for interval in intervals:
@@ -119,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbols")
     parser.add_argument("--intervals", default="1d,1h")
-    parser.add_argument("--source", choices=["sina", "akshare", "tushare"], default="sina")
+    parser.add_argument("--source", choices=["sina", "akshare", "tushare", "tdx"], default="sina")
     parser.add_argument("--storage-dir", type=Path, default=Path("data_storage"))
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")
@@ -130,9 +146,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--catalog", type=Path)
     parser.add_argument("--calendar", type=Path)
     parser.add_argument("--timings", type=Path)
+    parser.add_argument(
+        "--tdx-servers", type=Path, default=ROOT / "config/tdx_exhq_servers.yaml", help="TDX server configuration file"
+    )
+    parser.add_argument(
+        "--tdx-max-pages", type=int, default=1000, help="bounded TDX pagination; truncation fails explicitly"
+    )
+    parser.add_argument(
+        "--research", action="store_true", help="allow missing turnover with TURNOVER_UNAVAILABLE quality flags"
+    )
     args = parser.parse_args(argv)
     if args.publish and not all((args.catalog, args.calendar, args.timings)):
         parser.error("--publish requires --catalog, --calendar and --timings")
+    if args.publish and args.source == "tdx" and not args.research:
+        parser.error("TDX --publish requires --research because actual turnover is unavailable")
     try:
         with configure_logging(file=args.log_file, context={"component": "download_data"}, path_root=ROOT):
             metrics = MetricsRegistry()

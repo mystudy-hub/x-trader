@@ -206,6 +206,25 @@ class TradingCalendar:
         """Compatibility name: return registered sessions, never manufacture a default template."""
         return self.sessions_for_day(instrument, trading_day)
 
+    def sessions_in_window(self, instrument: InstrumentId, start: datetime, end: datetime) -> tuple[Session, ...]:
+        """返回与半开时间窗口相交的已登记会话，不补造缺失日期或合约时段 (S1-12)。"""
+        opening, closing = utc_timestamp(start), utc_timestamp(end)
+        if opening >= closing:
+            raise ValueError("session query window must have start before end")
+        sessions = tuple(
+            sorted(
+                (
+                    row
+                    for row in self._sessions
+                    if row.instrument == instrument and row.end > opening and row.start < closing
+                ),
+                key=lambda row: row.start,
+            )
+        )
+        for session in sessions:
+            self._require_coverage(session.trading_day)
+        return sessions
+
     def get_trading_day(
         self,
         timestamp: datetime,

@@ -147,6 +147,22 @@ gaps:
   closed_at: null
   notes: 09 文档 §6.1, §9.6；S1 Sessions 实现时接入
   close_evidence: null
+- gap_id: GAP-TDX-01
+  related_requirements: [FR-DATA-10, FR-CAL-10]
+  item: 通达信扩展行情授权与字段时序语义核验
+  gap_type: 待核验
+  affected_scope:
+    components: [qh_trader/data/tdx_exhq.py, qh_trader/data/tdx_aggregate.py, qh_trader/data/sources.py]
+    capabilities: [使用授权, 结算价代理口径, 分钟线分桶语义, 服务器连接稳定性, 已到期合约覆盖]
+  current_handling: 仅用于研究模式与本地回测原型，严禁进入精确核算与实盘下单
+  handling_details: 原始成交额与官方结算价缺失，turnover/settlement_price 保持 null。主连禁止充当实际合约执行价；1m 聚合必须使用版本化日历，原生 30m 不直接发布。探测证据仅保存于 runs/s0，经 init_env.py --tdx-evidence 引用，不自动关闭任何缺口。
+  registered_at: '2026-10-06'
+  registered_by: 开发团队
+  close_condition: 取得合法数据授权；与交易所官方日线结算价完成全样本对拍；明确并核验分钟分桶及成交量口径和节点稳定性
+  status: 未关闭
+  closed_at: null
+  close_evidence: null
+  notes: S1-12 研究补充源；不能替代 GAP-S0-02 工程样本或 GAP-S0-03 长历史逐合约采购。
 principles:
 - 缺口未关闭前对应能力不得作为生产默认
 - 研究模式使用假设的须在报告中列出影响

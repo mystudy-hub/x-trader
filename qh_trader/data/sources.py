@@ -15,9 +15,11 @@ from datetime import time as day_time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from qh_trader.core.constants import Exchange
+from qh_trader.core.constants import Exchange, MarketPhase
 from qh_trader.core.objects import InstrumentId
+from qh_trader.data.calendar import CHINA_TZ, TradingCalendar
 from qh_trader.data.schemas import integer_value, parse_day, parse_time
+from qh_trader.data.tdx_aggregate import aggregate_tdx_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -524,6 +526,275 @@ class TushareFuturesDataSource(BaseDataSource):
         return df.to_dict(orient="records")
 
 
+class TdxPaginationError(ValueError):
+    """已到分页安全上限或分页不再向历史推进，禁止静默发布截断历史。"""
+
+
+class TdxExHqDataSource(BaseDataSource):
+    """[Data 层] 通达信扩展行情研究数据源 (S1-12, FR-DATA-02, FR-DATA-08)。
+
+    只接受已解析的实际合约；主连仅可通过底层协议探测。注入的 client 由调用方
+    管理连接，默认客户端每次完整抓取后关闭。超过 1m 的周期均从 1m 显式会话聚合。
+    """
+
+    source_timezone = "Asia/Shanghai"
+    MARKET_MAP = {
+        Exchange.CZCE: 28,
+        Exchange.DCE: 29,
+        Exchange.SHFE: 30,
+        Exchange.CFFEX: 47,
+        Exchange.GFEX: 66,
+    }
+
+    def __init__(
+        self,
+        *,
+        client: Any = None,
+        calendar: TradingCalendar | None = None,
+        servers=None,
+        timeout: float = 5.0,
+        page_size: int = 700,
+        max_pages: int = 1000,
+        market_overrides: dict[Exchange, int] | None = None,
+    ) -> None:
+        if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 700:
+            raise ValueError("TDX page_size must be between 1 and 700")
+        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= 10000:
+            raise ValueError("TDX max_pages must be between 1 and 10000")
+        self.client = client
+        self.calendar = calendar
+        self.servers = servers
+        self.timeout = timeout
+        self.page_size = page_size
+        self.max_pages = max_pages
+        self.captures: list[dict[str, Any]] = []
+        self.market_map = dict(self.MARKET_MAP)
+        for exchange, market in (market_overrides or {}).items():
+            if not isinstance(exchange, Exchange) or isinstance(market, bool) or not isinstance(market, int):
+                raise TypeError("TDX market overrides require Exchange keys and integer market IDs")
+            if not 0 <= market <= 255:
+                raise ValueError("TDX market ID must fit uint8")
+            self.market_map[exchange] = market
+
+    @property
+    def source_id(self) -> str:
+        return "tdx_exhq"
+
+    @property
+    def source_name(self) -> str:
+        return "通达信扩展行情（研究补充；缺成交额和官方结算价）"
+
+    @property
+    def research_metadata(self) -> dict[str, Any]:
+        return {
+            "research_only": True,
+            "missing_fields": ["turnover", "official_settlement_price"],
+            "settlement_semantics": "settlement_proxy is TDX calculated average; never official Settlement",
+            "continuous_series": "rejected by data source; unadjusted L8 only available through protocol/probe",
+            "expired_contracts": "not guaranteed; empty response cannot establish historical coverage",
+            "minute_timestamp": "end of one-minute interval, Asia/Shanghai",
+            "aggregation": "1m only; explicit continuous sessions; incomplete and short tail buckets discarded",
+            "live_alignment": "same session-anchored full windows; unlike live aggregation, short tails are dropped",
+            "date_filter": "explicit session trading days" if self.calendar is not None else "local calendar dates",
+            "calendar_version": self.calendar.version if self.calendar is not None else None,
+            "market_mapping": {exchange.value: market for exchange, market in self.market_map.items()},
+            "max_pages": self.max_pages,
+            "page_size": self.page_size,
+        }
+
+    def to_tdx_code(self, instrument: InstrumentId | str) -> tuple[int, str]:
+        """已解析郑商所四位年月在协议端改为三位；不从短码或品种猜交易所。"""
+        symbol, exchange_name = normalize_instrument_to_symbol(instrument)
+        if exchange_name is None:
+            raise ValueError("TDX requires an explicit exchange and resolved actual contract")
+        exchange = Exchange(exchange_name)
+        if exchange not in self.market_map:
+            raise ValueError(f"TDX market for {exchange.value} is unverified; supply an evidence-based market override")
+        if not 1 <= int(symbol[-2:]) <= 12:
+            raise ValueError("actual contract delivery month must be between 01 and 12")
+        symbol = symbol.upper()
+        if exchange == Exchange.CZCE:
+            symbol = symbol[:-4] + symbol[-3:]
+        return self.market_map[exchange], symbol
+
+    def _new_client(self):
+        from qh_trader.data.tdx_exhq import TdxExHqClient
+
+        options = {"timeout": self.timeout, "capture_callback": self.captures.append}
+        if self.servers is not None:
+            options["servers"] = self.servers
+        return TdxExHqClient(**options)
+
+    @staticmethod
+    def _is_day(value: date | datetime | str | None) -> bool:
+        is_date = isinstance(value, date) and not isinstance(value, datetime)
+        return is_date or (isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None)
+
+    @classmethod
+    def _boundary(cls, value: date | datetime | str | None, *, end: bool = False) -> datetime | None:
+        if value is None:
+            return None
+        if cls._is_day(value):
+            day = parse_day(value) + (timedelta(days=1) if end else timedelta())
+            stamp = parse_time(datetime.combine(day, day_time()), "Asia/Shanghai")
+            return stamp - timedelta(microseconds=1) if end else stamp
+        return parse_time(value, "Asia/Shanghai")
+
+    def _fetch_pages(self, instrument, category: int, lower: datetime | None) -> list[dict[str, Any]]:
+        market, code = self.to_tdx_code(instrument)
+        client = self.client if self.client is not None else self._new_client()
+        owned = self.client is None
+        records: dict[datetime, dict[str, Any]] = {}
+        previous_oldest: datetime | None = None
+        offset = 0
+        try:
+            if owned:
+                client.connect()
+            for _ in range(self.max_pages):
+                response = client.get_instrument_bars(category, market, code, offset, self.page_size)
+                if len(response) > self.page_size:
+                    raise ValueError("TDX server returned more rows than requested")
+                if not response:
+                    break
+                page_stamps = []
+                for raw in response:
+                    row = dict(raw)
+                    stamp = parse_time(row["datetime"], self.source_timezone)
+                    row["datetime"] = stamp
+                    if stamp in records and records[stamp] != row:
+                        raise ValueError(f"conflicting TDX observations at {stamp.isoformat()}")
+                    records[stamp] = row
+                    page_stamps.append(stamp)
+                oldest = min(page_stamps)
+                if previous_oldest is not None and oldest >= previous_oldest:
+                    raise TdxPaginationError("TDX pagination stopped advancing; historical completeness is unknown")
+                if lower is not None and oldest <= lower:
+                    break
+                # 短页不能证明已到底；按实际返回数推进，直到空页或覆盖请求起点。
+                offset += len(response)
+                previous_oldest = oldest
+            else:
+                raise TdxPaginationError(
+                    f"TDX history truncated at {self.max_pages} pages; narrow the date range or increase max_pages"
+                )
+        finally:
+            if owned:
+                client.close()
+        return [records[stamp] for stamp in sorted(records)]
+
+    def fetch_daily_bars(self, instrument, start_date=None, end_date=None) -> list[dict[str, Any]]:
+        if start_date is not None and end_date is not None and parse_day(start_date) > parse_day(end_date):
+            raise ValueError("requested dates are reversed")
+        records = []
+        for raw in self._fetch_pages(instrument, 4, self._boundary(start_date)):
+            day = raw["datetime"].astimezone(CHINA_TZ).date().isoformat()
+            if not _within_day(day, start_date, end_date):
+                continue
+            records.append(
+                {
+                    "date": day,
+                    **{name: raw[name] for name in ("open", "high", "low", "close", "volume", "open_interest")},
+                    "turnover": None,
+                    "settlement_price": None,
+                    "settlement_proxy": raw.get("price"),
+                }
+            )
+        return records
+
+    def fetch_minute_bars(self, instrument, period="60", start_time=None, end_time=None) -> list[dict[str, Any]]:
+        normalized = str(period).removesuffix("m")
+        normalized = "60" if normalized == "1h" else normalized
+        if normalized not in {"1", "5", "15", "30", "60"}:
+            raise ValueError("unsupported TDX minute period")
+        minutes = int(normalized)
+        if minutes > 1 and self.calendar is None:
+            raise ValueError("TDX minute aggregation requires --calendar; download raw 1m without a calendar")
+        lower, upper = self._boundary(start_time), self._boundary(end_time, end=True)
+        symbol, exchange = normalize_instrument_to_symbol(instrument)
+        if exchange is None:
+            raise ValueError("TDX requires an explicit exchange and resolved actual contract")
+        inst = instrument if isinstance(instrument, InstrumentId) else InstrumentId(Exchange(exchange), symbol)
+        first_day = parse_day(start_time) if self._is_day(start_time) and self.calendar is not None else None
+        last_day = parse_day(end_time) if self._is_day(end_time) and self.calendar is not None else None
+        if first_day is not None and last_day is not None and first_day > last_day:
+            raise ValueError("requested times are reversed")
+        if self.calendar is not None:
+            # 日期参数指交易日：周一夜盘可能始于周五，不能使用自然午夜截掉这段记录。
+            for day in (first_day, last_day):
+                if day is not None:
+                    self.calendar.is_trading_day(day)  # 同时检查版本和覆盖边界。
+            if first_day is not None or last_day is not None:
+                days = sorted(
+                    day
+                    for day in self.calendar.trading_days
+                    if (first_day is None or day >= first_day) and (last_day is None or day <= last_day)
+                )
+                if not days:
+                    return []
+                if first_day is not None:
+                    lower = min(
+                        session.start
+                        for session in self.calendar.sessions_for_day(inst, days[0])
+                        if session.phase == MarketPhase.CONTINUOUS and session.permissions.match
+                    )
+                if last_day is not None:
+                    upper = max(
+                        session.end
+                        for session in self.calendar.sessions_for_day(inst, days[-1])
+                        if session.phase == MarketPhase.CONTINUOUS and session.permissions.match
+                    )
+        if lower is not None and upper is not None and lower > upper:
+            raise ValueError("requested times are reversed")
+        # 多取一个周期，让 datetime 起点落在桶中部时仍有完整的首桶输入。
+        fetch_lower = lower - timedelta(minutes=minutes) if lower is not None and minutes > 1 else lower
+        if first_day is not None:
+            fetch_lower = lower + timedelta(minutes=1)
+        rows = []
+        for raw in self._fetch_pages(instrument, 7, fetch_lower):
+            stamp = raw["datetime"]
+            if (fetch_lower is not None and stamp < fetch_lower) or (upper is not None and stamp > upper):
+                continue
+            rows.append(
+                {
+                    "datetime": stamp,
+                    "bar_start": stamp - timedelta(minutes=1),
+                    "bar_end": stamp,
+                    **{name: raw[name] for name in ("open", "high", "low", "close", "volume", "open_interest")},
+                    "turnover": None,
+                    "settlement_price": None,
+                }
+            )
+        if self.calendar is not None:
+            rows = aggregate_tdx_minutes(rows, instrument=inst, calendar=self.calendar, period=minutes)
+        return [
+            row
+            for row in rows
+            if (lower is None or row["datetime"] >= lower)
+            and (first_day is None or row["trading_day"] >= first_day)
+            and (last_day is None or row["trading_day"] <= last_day)
+        ]
+
+    def fetch_latest_tick(self, instrument) -> dict[str, Any] | None:
+        market, code = self.to_tdx_code(instrument)
+        client = self.client if self.client is not None else self._new_client()
+        owned = self.client is None
+        try:
+            if owned:
+                client.connect()
+            quotes = client.get_instrument_quote(market, code)
+            if not quotes:
+                return None
+            if len(quotes) != 1:
+                raise ValueError("TDX quote response must identify exactly one requested contract")
+            quote = dict(quotes[0])
+            quote.update(turnover=None, settlement_price=None, source_id=self.source_id, research_only=True)
+            quote["last_price"] = quote["price"]
+            return quote
+        finally:
+            if owned:
+                client.close()
+
+
 def create_data_source(source_type: str = "sina", **kwargs: Any) -> BaseDataSource:
     st = source_type.lower().strip()
     if st in {"sina", "sina_futures"}:
@@ -534,4 +805,6 @@ def create_data_source(source_type: str = "sina", **kwargs: Any) -> BaseDataSour
         return AkShareDataSource()
     if st == "tushare":
         return TushareFuturesDataSource(**kwargs)
+    if st in {"tdx", "tdx_exhq"}:
+        return TdxExHqDataSource(**kwargs)
     raise ValueError(f"unknown data source type: {source_type}")

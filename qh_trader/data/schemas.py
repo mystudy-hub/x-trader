@@ -87,7 +87,7 @@ class DataQualityReport:
 
     @property
     def has_critical_errors(self) -> bool:
-        return bool(self.issues)
+        return any(issue.issue_type != "TURNOVER_UNAVAILABLE" for issue in self.issues)
 
 
 class DataValidationError(ValueError):
@@ -152,14 +152,14 @@ def validate_ohlc_records(
             if decimal_value(record.get("turnover"), "turnover") < 0:
                 raise ValueError("negative turnover")
         except ValueError:
-            if require_turnover:
+            if require_turnover or record.get("turnover") is not None:
                 issue("turnover", "INVALID_TURNOVER", "actual turnover is required; missing values cannot become zero")
             else:
                 # 研究模式: 来源确实不提供成交额, 记录为非阻塞质量标记而非零值 (FR-DATA-08).
                 issue("turnover", "TURNOVER_UNAVAILABLE", "source does not establish actual turnover")
-        valid += len(issues) == before
+        valid += all(item.issue_type == "TURNOVER_UNAVAILABLE" for item in issues[before:])
     report = DataQualityReport(len(records), valid, tuple(issues))
-    if strict and not report.is_clean:
+    if strict and report.has_critical_errors:
         raise DataValidationError(report)
     return report
 
@@ -237,7 +237,7 @@ def _convert_bars(
     validate_ohlc_records(
         records,
         time_key,
-        strict=require_turnover,
+        strict=True,
         instrument=instrument,
         source_timezone=source_timezone,
         require_turnover=require_turnover,
@@ -277,11 +277,7 @@ def _convert_bars(
             schema_version=SCHEMA_VERSION,
             quality_flags=(
                 (QualityFlag.SYNTHETIC if timing.time_assumption else QualityFlag.OK)
-                | (
-                    QualityFlag.OK
-                    if record.get("turnover") is not None
-                    else QualityFlag.TURNOVER_UNAVAILABLE
-                )
+                | (QualityFlag.OK if record.get("turnover") is not None else QualityFlag.TURNOVER_UNAVAILABLE)
             ),
         )
         bar = Bar(
@@ -296,9 +292,7 @@ def _convert_bars(
             close=decimal_value(record["close"], "close"),
             volume=integer_value(record["volume"], "volume"),
             turnover=(
-                decimal_value(record["turnover"], "turnover")
-                if record.get("turnover") is not None
-                else Decimal(0)
+                decimal_value(record["turnover"], "turnover") if record.get("turnover") is not None else Decimal(0)
             ),
             open_interest=integer_value(record["open_interest"], "open_interest"),
             open_time=timing.open_time,
@@ -474,6 +468,8 @@ def convert_daily_records_to_settlements(
     for sequence, record in enumerate(records, 1):
         if record.get("settlement_price") is None:
             continue
+        if source_id in {"tdx", "tdx_exhq"}:
+            raise ValueError("TDX settlement proxy is not an official settlement; publication refused")
         day = parse_day(record["date"])
         if day.isoformat() not in publications:
             raise ValueError("settlement needs actual publication time/status or a separately declared assumption")

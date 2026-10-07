@@ -255,6 +255,7 @@ def build_manifest(
             "start_time": assembled.bars[0].bar_start.isoformat(),
             "end_time": assembled.bars[-1].bar_end.isoformat(),
             "source_versions": sorted({b.meta.source_version for b in assembled.bars}),
+            "source_ids": sorted({b.meta.source_id for b in assembled.bars}),
             "settlement_source": result.settlement_source,
             "settlement_days": len(assembled.settlement_prices),
         },

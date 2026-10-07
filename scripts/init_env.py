@@ -161,7 +161,34 @@ def inspect_sdk_archives(root=ROOT):
     return archives
 
 
-def build_report(root=ROOT, ctp_evidence=None):
+def tdx_evidence_reference(root, evidence_path):
+    """仅挂接 runs/s0 内的 TDX 探测记录，不把采样结果转成验收通过。"""
+    root = Path(root).resolve()
+    evidence = (root / evidence_path).resolve()
+    evidence_root = root / "runs" / "s0"
+    if not evidence.is_relative_to(evidence_root) or not evidence.is_file():
+        raise ValueError("TDX 证据必须是项目 runs/s0 内的已存在 JSON 文件")
+    data = json.loads(evidence.read_text(encoding="utf-8-sig"))
+    if (
+        not isinstance(data, dict)
+        or data.get("kind") != "tdx_runtime_probe"
+        or type(data.get("schema_version")) is not int
+        or data["schema_version"] != 1
+        or data.get("source_id") != "tdx_exhq"
+        or not isinstance(data.get("generated_at"), str)
+        or not isinstance(data.get("checks"), dict)
+        or data.get("scope") != "research_only"
+    ):
+        raise ValueError("TDX 证据类型或版本不匹配")
+    return {
+        **file_reference(root, evidence),
+        "kind": data["kind"],
+        "scope": data["scope"],
+        "closes_gaps": False,
+    }
+
+
+def build_report(root=ROOT, ctp_evidence=None, tdx_evidence=None):
     root = Path(root).resolve()
     dependencies = check_core_dependencies(root)
     report = {
@@ -184,6 +211,8 @@ def build_report(root=ROOT, ctp_evidence=None):
         if not evidence.is_relative_to(root) or not evidence.is_file():
             raise ValueError("CTP 联调证据必须是项目内的已存在文件")
         report["ctp_runtime_evidence"] = file_reference(root, evidence)
+    if tdx_evidence:
+        report["tdx_runtime_evidence"] = tdx_evidence_reference(root, tdx_evidence)
     return report
 
 
@@ -192,12 +221,13 @@ def main(argv=None):
     parser.add_argument("--output", default="runs/s0/environment.json")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--ctp-evidence", help="Attach an existing redacted CTP verification record; does not run it")
+    parser.add_argument("--tdx-evidence", help="挂接 runs/s0 内已有 TDX 研究探测 JSON；不联网，不关闭数据缺口")
     args = parser.parse_args(argv)
     target = (ROOT / args.output).resolve()
     if not target.is_relative_to(ROOT / "runs"):
         parser.error("环境证据须写入项目 runs/，避免将机器相关信息提交到 Git")
     try:
-        report = build_report(ctp_evidence=args.ctp_evidence)
+        report = build_report(ctp_evidence=args.ctp_evidence, tdx_evidence=args.tdx_evidence)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, ValueError, sqlite3.Error) as exc:
