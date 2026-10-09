@@ -33,5 +33,10 @@ jobs:
       - name: Install Python and locked dependencies
         run: uv sync --locked --group dev
 
+      - name: Install Node.js for chart tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Run project checks
         run: uv run --no-sync python scripts/check_ci.py

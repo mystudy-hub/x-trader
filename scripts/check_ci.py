@@ -1,4 +1,4 @@
-"""Run architecture, unit, smoke, documentation and Python syntax/name checks."""
+"""Run architecture, unit, smoke, documentation and Python/JavaScript checks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CHECKS = (
+PYTHON_CHECKS = (
     ("Architecture tests", ("-m", "pytest", "tests/architecture", "-q")),
     ("Unit tests", ("-m", "pytest", "tests/unit", "-q")),
     ("Smoke check", ("scripts/smoke.py",)),
@@ -17,13 +17,22 @@ CHECKS = (
         ("-m", "ruff", "check", "--select", "E9,F63,F7,F82,F401,F841", "qh_trader", "scripts", "tests"),
     ),
 )
+CHECKS = tuple((name, (sys.executable, *arguments)) for name, arguments in PYTHON_CHECKS) + (
+    ("Chart drawing tests", ("node", "--test", "tests/unit/test_chart_drawings.cjs")),
+    ("Web app syntax", ("node", "--check", "web/app.js")),
+)
 
 
 def main() -> int:
     failures = []
-    for name, arguments in CHECKS:
+    for name, command in CHECKS:
         print(f"\n=== {name} ===", flush=True)
-        result = subprocess.run([sys.executable, *arguments], cwd=ROOT, check=False)
+        try:
+            result = subprocess.run(list(command), cwd=ROOT, check=False)
+        except OSError as exc:
+            print(f"Could not start {name}: {exc}", file=sys.stderr, flush=True)
+            failures.append((name, 127))
+            continue
         if result.returncode != 0:
             failures.append((name, result.returncode))
 

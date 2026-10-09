@@ -42,20 +42,32 @@ def test_success_runs_all_required_checks_with_the_current_interpreter(ci_runner
             "scripts",
             "tests",
         ],
+        ["node", "--test", "tests/unit/test_chart_drawings.cjs"],
+        ["node", "--check", "web/app.js"],
     ]
     assert all(call.kwargs["cwd"] == ROOT for call in run.call_args_list)
     assert "PASS: All CI checks passed." in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("failed_check", range(5))
+@pytest.mark.parametrize("failed_check", range(7))
 def test_any_failed_check_fails_the_run_without_skipping_other_checks(ci_runner, monkeypatch, capsys, failed_check):
-    statuses = [0, 0, 0, 0, 0]
+    statuses = [0] * len(ci_runner.CHECKS)
     statuses[failed_check] = 5
     run = Mock(side_effect=[subprocess.CompletedProcess([], status) for status in statuses])
     monkeypatch.setattr(ci_runner.subprocess, "run", run)
 
     assert ci_runner.main() == 1
-    assert run.call_count == 5
+    assert run.call_count == len(ci_runner.CHECKS)
     output = capsys.readouterr()
     assert "PASS: All CI checks passed." not in output.out
     assert f"FAIL: {ci_runner.CHECKS[failed_check][0]} (exit 5)" in output.err
+
+
+def test_missing_node_fails_without_skipping_following_checks(ci_runner, monkeypatch, capsys):
+    outcomes = [subprocess.CompletedProcess([], 0) for _ in range(5)]
+    outcomes += [FileNotFoundError("node missing"), subprocess.CompletedProcess([], 0)]
+    run = Mock(side_effect=outcomes)
+    monkeypatch.setattr(ci_runner.subprocess, "run", run)
+    assert ci_runner.main() == 1
+    assert run.call_count == len(ci_runner.CHECKS)
+    assert "FAIL: Chart drawing tests (exit 127)" in capsys.readouterr().err

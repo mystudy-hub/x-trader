@@ -87,7 +87,7 @@ python scripts/check_docs.py --check
 
 ## 开发检查与 CI
 
-使用 `uv` 在仓库根目录按 `.python-version` 和 `uv.lock` 准备环境，再运行统一检查：
+开发检查需要 Python 锁定环境和 Node.js 22 LTS。Node 仅用于前端检查，本地看盘服务仍由 Python 启动。使用 `uv` 在仓库根目录按 `.python-version` 和 `uv.lock` 准备环境，再运行统一检查：
 
 ```powershell
 uv sync --locked --group dev
@@ -95,7 +95,7 @@ uv run --no-sync python scripts/install_hooks.py
 uv run --no-sync python scripts/check_ci.py
 ```
 
-[统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke、只读文档校验，以及覆盖源码和测试的 Ruff 语法/未定义名称检查。各项检查都会执行，任一子检查失败时整体返回非零退出码。入口复用当前 Python 解释器，并固定在仓库根目录执行，便于本地与 CI 使用同一套检查。
+[统一检查入口](scripts/check_ci.py) 依次运行架构测试、单元测试、smoke、只读文档校验、Ruff 语法/未定义名称检查，以及 Node 绘图测试和前端入口语法检查。各项检查都会执行，任一子检查失败或缺少运行工具时整体返回非零退出码。Python 检查复用当前解释器，所有检查固定在仓库根目录执行，本地提交钩子与 CI 使用同一入口。
 
 [安装脚本](scripts/install_hooks.py) 为当前仓库启用 [.githooks/pre-commit](.githooks/pre-commit)。每次 `git commit` 都由 [暂存区检查脚本](scripts/pre_commit.py) 导出准备提交的文件并运行统一检查；未暂存的修改会保留，不能遮盖暂存内容中的失败。被强制暂存的凭证或运行文件若匹配忽略规则，也会阻止提交。新克隆的仓库须运行一次安装命令；已有自定义 hooks 会保留并提示人工整合。使用其他虚拟环境时，可通过 `QH_TRADER_PYTHON` 指定 Python 可执行文件。
 
