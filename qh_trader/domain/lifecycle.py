@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
@@ -221,7 +221,7 @@ class DailyLifecycleManager:
             previous_trading_day=self.current_trading_day,
             new_trading_day=new_trading_day,
             settlement_version=version,
-            confirmed_at=confirmed_at or datetime.now().astimezone(),
+            confirmed_at=confirmed_at or datetime.now(timezone.utc),
         )
         self.run_once("advance", self.current_trading_day, version, lambda: convert(event) if convert else None)
         self.events.append(event)
