@@ -1159,6 +1159,20 @@ class CtpTraderGateway(ExecutionPort):
             self._request_id += 1
             return self._request_id
 
+    def _count(self, key: str) -> int:
+        """诊断计数加一；回调线程与账户线程都会写入，统一在锁内完成. 返回加一后的值."""
+        with self._lock:
+            self.counts[key] += 1
+            return self.counts[key]
+
+    def _record_rejection(self, evidence: str) -> None:
+        with self._lock:
+            self.rejections.append(evidence)
+
+    def _record_cancel_locator(self, locator: str, request_id: int, order_ref: str) -> None:
+        with self._lock:
+            self._cancel_locators.append({"locator": locator, "request_id": request_id, "order_ref": order_ref})
+
     # 查询适配器只通过下面三个方法转发请求；它们不做任何业务判断 (ADR-01)。
     def next_request_id(self) -> int:
         return self._next_request_id()
@@ -1186,7 +1200,7 @@ class CtpTraderGateway(ExecutionPort):
         """
         binding = self._require_binding()
         started = self._monotonic()
-        self.counts["connect_attempts"] += 1
+        self._count("connect_attempts")
         flow = Path(self.settings.flow_dir)
         flow.mkdir(parents=True, exist_ok=True)
         self._front_ready.clear()
@@ -1336,7 +1350,7 @@ class CtpTraderGateway(ExecutionPort):
     # ------------------------------------------------------------------ 回调侧状态
     def _on_notification(self, action: str, payload: Mapping[str, object]) -> None:
         if action == "front_connected":
-            self.counts["front_connected"] += 1
+            self._count("front_connected")
             self._connected = True
             self._fault = None
             self._front_ready.set()
@@ -1348,7 +1362,7 @@ class CtpTraderGateway(ExecutionPort):
                 self._needs_reconciliation = True
             return
         if action == "front_disconnected":
-            self.counts["front_disconnected"] += 1
+            self._count("front_disconnected")
             self._connected = False
             self._logged_in = False
             self._settlement_confirmed = False
@@ -1361,7 +1375,7 @@ class CtpTraderGateway(ExecutionPort):
             LOGGER.warning("CTP front disconnected (reason %s); new trading risk is closed", payload.get("reason_code"))
             return
         if action == "heartbeat_warning":
-            self.counts["heartbeat_warnings"] += 1
+            self._count("heartbeat_warnings")
             LOGGER.warning("CTP heartbeat warning after %s s without a message", payload.get("time_lapse_s"))
             return
         if action == "rsp_authenticate":
@@ -1393,7 +1407,7 @@ class CtpTraderGateway(ExecutionPort):
             self._ref_book.open_session(self._front_id, self._session_id, self._max_order_ref)
             self._logged_in = True
             self._last_error = None
-            self.counts["logins"] += 1
+            self._count("logins")
             self._login_ready.set()
             return
         if action == "rsp_settlement_confirm":
@@ -1408,7 +1422,7 @@ class CtpTraderGateway(ExecutionPort):
             self._settlement_ready.set()
             return
         if action == "rsp_user_logout":
-            self.counts["logouts"] += 1
+            self._count("logouts")
             self._logged_in = False
             self._settlement_confirmed = False
             self._needs_reconciliation = True
@@ -1425,7 +1439,7 @@ class CtpTraderGateway(ExecutionPort):
             raise TypeError("gateway calls require a ControlEpoch")
         current = self._authority()
         if current is None or current != epoch:
-            self.counts["fenced_calls"] += 1
+            self._count("fenced_calls")
             return LocalSendResult(SendState.NOT_SENT, CODE_FENCED, "control epoch fence at the CTP API call")
         return None
 
@@ -1450,18 +1464,18 @@ class CtpTraderGateway(ExecutionPort):
             # 开仓标志由 API 头文件唯一定义 (THOST_FTDC_OF_Open='0')，与交易所无关，因此开仓不依赖
             # 柜台能力核验；平仓因今昨仓制度而别，未核验即禁用 (GAP-S0-05)。
             if instrument.exchange not in self._offsets:
-                self.counts["open_without_registration"] += 1
+                self._count("open_without_registration")
             return OFFSET_OPEN
         mapping = self._offsets.get(instrument.exchange)
         if mapping is None:
-            self.counts["unsupported_capability"] += 1
+            self._count("unsupported_capability")
             raise _LocalRejectionError(
                 CODE_UNSUPPORTED_CAPABILITY,
                 f"no registered open/close mapping for {instrument.exchange.value}; "
                 "close flags stay disabled rather than guessed",
             )
         if not mapping.verified:
-            self.counts["unsupported_capability"] += 1
+            self._count("unsupported_capability")
             raise _LocalRejectionError(
                 CODE_UNSUPPORTED_CAPABILITY,
                 f"open/close mapping for {instrument.exchange.value} is registered but not verified "
@@ -1469,7 +1483,7 @@ class CtpTraderGateway(ExecutionPort):
             )
         flag = mapping.flags.get(offset)
         if flag is None:
-            self.counts["unsupported_capability"] += 1
+            self._count("unsupported_capability")
             raise _LocalRejectionError(
                 CODE_UNSUPPORTED_CAPABILITY,
                 f"verified mapping for {instrument.exchange.value} has no flag for {offset.value}",
@@ -1479,7 +1493,7 @@ class CtpTraderGateway(ExecutionPort):
     def _order_price(self, order: OrderIntent) -> Decimal | None:
         if order.order_type == OrderType.MARKET:
             if not self._capability("order_types.market_order"):
-                self.counts["unsupported_capability"] += 1
+                self._count("unsupported_capability")
                 raise _LocalRejectionError(
                     CODE_UNSUPPORTED_CAPABILITY,
                     "market orders are not verified for this counter (GAP-S0-05); send a limit price instead",
@@ -1530,15 +1544,15 @@ class CtpTraderGateway(ExecutionPort):
             self._dispatchable()
             plan = self.plan_order(order)
         except _LocalRejectionError as rejection:
-            self.counts["submit_refused_local"] += 1
-            self.rejections.append(rejection.evidence)
+            self._count("submit_refused_local")
+            self._record_rejection(rejection.evidence)
             return LocalSendResult(SendState.NOT_SENT, rejection.code, rejection.evidence)
         except Exception as exc:
             # 规划阶段只读本地状态：这里能证明"没有发送"，因此返回 NOT_SENT，而不是让执行服务把
             # 本地失败记成"可能已发出"的 SENT_UNKNOWN。
-            self.counts["submit_refused_local"] += 1
+            self._count("submit_refused_local")
             evidence = f"order planning failed before any counter call ({type(exc).__name__})"
-            self.rejections.append(evidence)
+            self._record_rejection(evidence)
             return LocalSendResult(SendState.NOT_SENT, CODE_PLAN_REJECTED, evidence)
         try:
             ref = self._ref_book.allocate(order.client_order_id, order.instrument)
@@ -1552,9 +1566,9 @@ class CtpTraderGateway(ExecutionPort):
             )
         except (CtpHandshakeError, ValueError, TypeError) as exc:
             # 本地无法形成可归属标识：没有调用柜台，因此是 NOT_SENT 而不是未知发送
-            self.counts["submit_refused_local"] += 1
+            self._count("submit_refused_local")
             evidence = f"no attributable local order reference could be assigned ({type(exc).__name__})"
-            self.rejections.append(evidence)
+            self._record_rejection(evidence)
             return LocalSendResult(SendState.NOT_SENT, CODE_NOT_READY, evidence)
         # 最后一次复核紧贴实际 API 调用 (ADR-X1)；不一致绝不调用柜台
         fenced = self._fence(epoch)
@@ -1570,9 +1584,9 @@ class CtpTraderGateway(ExecutionPort):
             for name, value in plan.items():
                 setattr(field, name, value)
         except (CtpBindingUnavailableError, AttributeError, TypeError, ValueError) as exc:
-            self.counts["submit_refused_local"] += 1
+            self._count("submit_refused_local")
             evidence = f"order cannot be translated to a CTP request ({type(exc).__name__}); nothing was sent"
-            self.rejections.append(evidence)
+            self._record_rejection(evidence)
             return LocalSendResult(SendState.NOT_SENT, CODE_NOT_READY, evidence)
         try:
             code = int(self._require_api().ReqOrderInsert(field, request_id))  # type: ignore[attr-defined]
@@ -1595,8 +1609,8 @@ class CtpTraderGateway(ExecutionPort):
         try:
             self._dispatchable()
         except _LocalRejectionError as rejection:
-            self.counts["cancel_refused_local"] += 1
-            self.rejections.append(rejection.evidence)
+            self._count("cancel_refused_local")
+            self._record_rejection(rejection.evidence)
             return LocalSendResult(SendState.NOT_SENT, rejection.code, rejection.evidence)
         if not isinstance(ref, OrderIdentity):
             raise TypeError("cancellation requires a normalized order identity")
@@ -1624,7 +1638,7 @@ class CtpTraderGateway(ExecutionPort):
                 "an order placed in a former session can only be cancelled by its exchange order id",
             )
         locator = "session" if same_session else "exchange"
-        self.counts["cancel_action_ref"] += 1
+        action_ref = self._count("cancel_action_ref")
         request_id = self._next_request_id()
         try:
             field: Any = self._require_binding().field("CThostFtdcInputOrderActionField")
@@ -1634,7 +1648,7 @@ class CtpTraderGateway(ExecutionPort):
             field.ActionFlag = ACTION_DELETE
             field.ExchangeID = ref.exchange.value
             field.InstrumentID = instrument.symbol
-            field.OrderActionRef = self.counts["cancel_action_ref"]
+            field.OrderActionRef = action_ref
             if same_session and triple is not None:
                 field.OrderRef = str(triple[2])
                 field.FrontID = int(triple[0])
@@ -1654,37 +1668,32 @@ class CtpTraderGateway(ExecutionPort):
             code = int(self._require_api().ReqOrderAction(field, request_id))  # type: ignore[attr-defined]
         finally:
             self._release(field)
-        # 证据里的三元组按实际情况取：同会话用原会话三元组，否则用柜台的交易所单号标识
-        evidence_ref = (
-            CtpOrderRef(*triple)
-            if triple is not None
-            else CtpOrderRef(
-                int(getattr(field, "FrontID", 0) or 0),
-                int(getattr(field, "SessionID", 0) or 0),
-                str(getattr(field, "OrderRef", "") or "0"),
-            )
-        )
-        self._cancel_locators.append(
-            {"locator": locator, "request_id": request_id, "order_ref": evidence_ref.order_ref}
-        )
+        # 证据里的三元组按实际情况取：同会话用原会话三元组，否则不伪造本地三元组
+        # (交易所单号定位的撤单不会生成可被 restore_order_refs 误登记的 ctp-order-ref 证据)。
+        evidence_ref = CtpOrderRef(*triple) if triple is not None else None
+        locator_ref = evidence_ref.order_ref if evidence_ref is not None else (ref.exchange_order_id or "")
+        self._record_cancel_locator(locator, request_id, locator_ref)
         return self._send_result(code, request_id, f"ReqOrderAction({locator})", evidence_ref, ref)
 
     def _refuse_cancel(self, code: int, evidence: str) -> LocalSendResult:
-        self.counts["cancel_refused_local"] += 1
-        self.rejections.append(evidence)
+        self._count("cancel_refused_local")
+        self._record_rejection(evidence)
         return LocalSendResult(SendState.NOT_SENT, code, evidence)
 
     def _send_result(
-        self, code: int, request_id: int, action: str, ref: CtpOrderRef, identity: OrderIdentity
+        self, code: int, request_id: int, action: str, ref: CtpOrderRef | None, identity: OrderIdentity
     ) -> LocalSendResult:
         """本地返回 0 只说明请求被 API 受理；非零返回在没有柜台实测前不假定为"未发送"."""
-        prefix = order_ref_evidence(ref) + "; "
+        if ref is None:
+            prefix = f"ctp-cancel-by-exchange exchange_order_id={identity.exchange_order_id}; "
+        else:
+            prefix = order_ref_evidence(ref) + "; "
         if code == 0:
             if action == "ReqOrderInsert":
-                self.counts["submit_accepted"] += 1
+                self._count("submit_accepted")
             else:
-                self.counts["cancel_accepted"] += 1
-                self.counts["cancel_by_session" if "(session)" in action else "cancel_by_exchange_id"] += 1
+                self._count("cancel_accepted")
+                self._count("cancel_by_session" if "(session)" in action else "cancel_by_exchange_id")
             return LocalSendResult(
                 SendState.SENT_UNKNOWN,
                 0,
@@ -1692,14 +1701,14 @@ class CtpTraderGateway(ExecutionPort):
                 identity,
             )
         if code in self.settings.local_reject_codes:
-            self.counts["submit_refused_local" if action == "ReqOrderInsert" else "cancel_refused_local"] += 1
+            self._count("submit_refused_local" if action == "ReqOrderInsert" else "cancel_refused_local")
             return LocalSendResult(
                 SendState.NOT_SENT,
                 code,
                 f"{prefix}{action} rejected locally by the API (code={code}, request_id={request_id})",
                 identity,
             )
-        self.counts["send_unknown"] += 1
+        self._count("send_unknown")
         return LocalSendResult(
             SendState.SENT_UNKNOWN,
             code,
@@ -1720,6 +1729,10 @@ class CtpTraderGateway(ExecutionPort):
 
     def status(self) -> Mapping[str, object]:
         """脱敏运行状态；给清单、看门狗脚本与证据使用，不含口令 / AuthCode."""
+        with self._lock:
+            counts = dict(self.counts)
+            last_local_rejections = list(self.rejections[-5:])
+            cancel_locators = [dict(item) for item in self._cancel_locators[-5:]]
         return {
             "binding": self._binding.name,
             "binding_version": self._binding.version,
@@ -1739,8 +1752,8 @@ class CtpTraderGateway(ExecutionPort):
             "session_id": self._session_id,
             "order_refs_allocated": self._ref_book.allocated,
             "order_refs_restored": self._ref_book.restored,
-            "counts": dict(self.counts),
+            "counts": counts,
             "callbacks": dict(self.router.counts),
-            "last_local_rejections": self.rejections[-5:],
-            "cancel_locators": [dict(item) for item in self._cancel_locators[-5:]],
+            "last_local_rejections": last_local_rejections,
+            "cancel_locators": cancel_locators,
         }
